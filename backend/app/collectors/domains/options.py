@@ -3,8 +3,8 @@
 Derives normalized option-chain features — PCR, max pain, ATM IV, IV skew,
 OI concentration, buildup classification, writing intensity, and exposure
 proxies — instead of publishing raw chain rows. The chain itself comes from
-an injectable ``OptionsChainSource``; the default source is unconfigured and
-fails loudly so market data is never fabricated.
+an injectable ``OptionsChainSource``; the default is the public NSE
+option-chain feed (``NseOptionChainSource``).
 """
 
 from abc import ABC, abstractmethod
@@ -146,8 +146,17 @@ class OptionsIntelligenceCollector(BaseCollector):
 
     def __init__(self, source: OptionsChainSource | None = None) -> None:
         super().__init__()
-        self.chain_source: OptionsChainSource = source or UnconfiguredOptionsSource()
+        if source is None:
+            from app.collectors.sources.nse_options import NseOptionChainSource
+
+            source = NseOptionChainSource()
+        self.chain_source: OptionsChainSource = source
         self.symbols: list[str] = get_settings().watchlist
+
+    async def cleanup(self) -> None:
+        closer = getattr(self.chain_source, "close", None)
+        if closer is not None:
+            await closer()
 
     async def collect(self) -> list[CollectorOutput]:
         records: list[CollectorOutput] = []

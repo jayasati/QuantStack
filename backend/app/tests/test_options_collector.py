@@ -113,7 +113,15 @@ async def test_no_greeks_means_no_exposure_records() -> None:
     assert "delta_exposure" not in features
 
 
-async def test_unconfigured_default_source_raises() -> None:
-    collector = OptionsIntelligenceCollector()
+async def test_unconfigured_source_raises() -> None:
+    from app.collectors.domains.options import UnconfiguredOptionsSource
+
+    collector = OptionsIntelligenceCollector(source=UnconfiguredOptionsSource())
     with pytest.raises(CollectionError, match="options chain source not configured"):
         await collector.collect()
+
+
+def test_default_source_is_nse() -> None:
+    from app.collectors.sources.nse_options import NseOptionChainSource
+
+    assert isinstance(OptionsIntelligenceCollector().chain_source, NseOptionChainSource)
