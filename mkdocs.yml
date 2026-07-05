@@ -4,9 +4,9 @@ site_description: >-
   Architecture specification for an institutional-grade AI trading signal
   system (Angel One SmartAPI, ensemble ML, LLM explainability, Telegram delivery).
 site_author: QuantStack
-# Update these two after creating the GitHub repository:
-# site_url: https://<your-github-username>.github.io/QuantStack/
-# repo_url: https://github.com/<your-github-username>/QuantStack
+site_url: https://jayasati.github.io/QuantStack/
+repo_url: https://github.com/jayasati/QuantStack
+repo_name: jayasati/QuantStack
 
 theme:
   name: material
