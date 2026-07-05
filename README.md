@@ -6,9 +6,39 @@ QuantStack is the complete architecture specification for an enterprise-grade qu
 
 > **This is not an automated trading bot.** The platform behaves like an institutional research desk: deterministic quantitative logic makes every decision, the LLM only explains, and the final decision always remains with the trader.
 
+## Repository layout
+
+This repository contains both the **platform implementation** and its **documentation site**:
+
+| Path | Contents |
+|------|----------|
+| `backend/` | FastAPI application (Volume 1 foundation: config, logging, DI, event bus, broker abstraction, scheduler, Alembic migrations) |
+| `configs/` | Layered configuration (`default.yaml` < `.env` < environment variables) |
+| `docker/`, `docker-compose.yml` | One-command local stack: PostgreSQL 16, Redis 7, backend |
+| `docs/`, `mkdocs.yml` | Architecture specification site (MkDocs Material) |
+| `.github/workflows/` | CI (lint, type check, migrations, tests, Docker build) and docs deployment |
+
+## Quickstart — run the platform
+
+```bash
+cp .env.example .env          # fill in secrets as needed
+docker compose up -d --build  # postgres + redis + backend, migrations run automatically
+curl http://localhost:8000/health/ready
+```
+
+For local development without Docker:
+
+```bash
+pip install -e "backend[dev]"
+cd backend
+alembic upgrade head          # requires DATABASE_URL pointing at a running PostgreSQL
+uvicorn app.main:app --reload
+pytest                        # run the test suite
+```
+
 ## Documentation
 
-This repository is an [MkDocs](https://www.mkdocs.org/) site using the [Material](https://squidfunk.github.io/mkdocs-material/) theme with Mermaid diagrams.
+The `docs/` folder is an [MkDocs](https://www.mkdocs.org/) site using the [Material](https://squidfunk.github.io/mkdocs-material/) theme with Mermaid diagrams.
 
 ```bash
 # install

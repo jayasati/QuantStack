@@ -1,0 +1,15 @@
+# Default configuration — lowest priority.
+# Overridden by .env, which is overridden by real environment variables.
+app_name: QuantStack
+environment: development
+database_url: postgresql+asyncpg://quantstack:quantstack@localhost:5432/quantstack
+redis_url: redis://localhost:6379/0
+log_level: INFO
+max_retry: 3
+cache_timeout: 300
+rate_limits:
+  angel_one_per_second: 3
+  telegram_per_minute: 20
+
+# Secrets have no defaults on purpose — set them in .env or the environment:
+# angel_one_api_key, angel_one_client_id, angel_one_pin, telegram_token, openai_key

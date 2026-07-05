@@ -1,0 +1,48 @@
+"""Dependency injection container.
+
+Services never instantiate concrete classes directly. They ask the container
+for an interface, so implementations (e.g. the broker adapter) can be swapped
+without touching business logic.
+"""
+
+from collections.abc import Callable
+from typing import Any, TypeVar
+
+T = TypeVar("T")
+
+
+class Container:
+    """Minimal service registry: register factories, resolve singletons."""
+
+    def __init__(self) -> None:
+        self._factories: dict[type, Callable[[], Any]] = {}
+        self._instances: dict[type, Any] = {}
+
+    def register(self, interface: type[T], factory: Callable[[], T]) -> None:
+        self._factories[interface] = factory
+        self._instances.pop(interface, None)
+
+    def resolve(self, interface: type[T]) -> T:
+        if interface not in self._instances:
+            if interface not in self._factories:
+                raise KeyError(f"No factory registered for {interface.__name__}")
+            self._instances[interface] = self._factories[interface]()
+        return self._instances[interface]
+
+    def reset(self) -> None:
+        self._instances.clear()
+
+
+container = Container()
+
+
+def wire_default_services() -> None:
+    """Register production implementations. Called once at application startup."""
+    from app.core.config import get_settings
+    from app.events.bus import EventBus
+    from app.market.angel_one import AngelOneAdapter
+    from app.market.broker import BrokerInterface
+
+    settings = get_settings()
+    container.register(EventBus, EventBus)
+    container.register(BrokerInterface, lambda: AngelOneAdapter(settings))

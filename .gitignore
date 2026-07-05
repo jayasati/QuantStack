@@ -6,6 +6,23 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets — never commit credentials
+.env
+
+# Runtime artifacts (directories tracked via .gitkeep only)
+logs/*
+!logs/.gitkeep
+data/*
+!data/.gitkeep
+models/*
+!models/.gitkeep
+feature_store/*
+!feature_store/.gitkeep
 
 # OS / editor
 .DS_Store
