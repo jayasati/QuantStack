@@ -91,6 +91,7 @@ class SectorRotationCollector(BaseCollector):
     source = "sector_source"
     interval_seconds = 60
     priority = 15
+    market_hours_only = True  # index candles do not update off-hours
 
     def __init__(self, sector_source: SectorSource | None = None) -> None:
         super().__init__()

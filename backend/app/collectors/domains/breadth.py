@@ -61,6 +61,7 @@ class MarketBreadthCollector(BaseCollector):
     source = "breadth_universe"
     interval_seconds = 60
     priority = 15
+    market_hours_only = True  # constituent quotes do not update off-hours
 
     def __init__(self, breadth_source: BreadthSource | None = None) -> None:
         super().__init__()
@@ -69,7 +70,44 @@ class MarketBreadthCollector(BaseCollector):
 
             breadth_source = NseBreadthSource()
         self._breadth_source = breadth_source
-        self._ad_line = 0.0  # cumulative advance-decline line across runs
+        self._ad_line = 0.0  # cumulative; restored from storage in initialize()
+
+    async def initialize(self) -> None:
+        """Restore the cumulative advance-decline line from the last stored run.
+
+        The AD line is meaningful only as a running series — without this it
+        would silently reset to zero on every process restart.
+        """
+        self._ad_line = await self._load_last_ad_line()
+
+    async def _load_last_ad_line(self) -> float:
+        try:
+            from sqlalchemy import text
+
+            from app.database.session import get_session_factory
+
+            sessions = get_session_factory()
+            async with sessions() as session:
+                result = await session.execute(
+                    text(
+                        "SELECT (data->'metadata'->>'ad_line')::float FROM market_events "
+                        "WHERE event_type = 'breadth.observation' "
+                        "AND data->'metadata'->>'ad_line' IS NOT NULL "
+                        "ORDER BY id DESC LIMIT 1"
+                    )
+                )
+                value = result.scalar()
+            if value is not None:
+                self.logger.info(
+                    "restored cumulative ad line", extra={"ad_line": value}
+                )
+                return float(value)
+        except Exception as exc:
+            self.logger.warning(
+                "could not restore ad line; starting from zero",
+                extra={"error": str(exc)},
+            )
+        return 0.0
 
     async def cleanup(self) -> None:
         closer = getattr(self._breadth_source, "close", None)
