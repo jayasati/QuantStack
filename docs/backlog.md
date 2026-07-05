@@ -13,8 +13,6 @@ The seven domain collectors are fully implemented and tested against injectable 
 
 | Collector | Source interface (file) | Real feed candidates |
 |-----------|------------------------|---------------------|
-| Market breadth | `BreadthSource` (`app/collectors/domains/breadth.py`) | Broker quotes for the NIFTY 500 universe (compute EMAs from our own `ohlcv_candles`) |
-| Sector rotation | `SectorSource` (`app/collectors/domains/sector.py`) | NSE sectoral index quotes (broker tokens exist in scrip master) |
 | Macro intelligence | `MacroSource` (`app/collectors/domains/macro.py`) | Yahoo Finance / FRED / broker MCX+CDS quotes |
 | Event calendar | `EventCalendarSource` (`app/collectors/domains/events.py`) | NSE corporate actions + RBI/Fed calendars (scrape or static schedule seed) |
 | News intelligence | `NewsSource` (`app/collectors/domains/news.py`) | RSS: Moneycontrol, Economic Times markets, Business Standard, Reuters India |
@@ -22,6 +20,8 @@ The seven domain collectors are fully implemented and tested against injectable 
 
 ### Other Volume 2 items
 
+- **Breadth universe size** — the breadth source tracks NIFTY 50 constituents (configurable `index` parameter). Expanding to NIFTY 500 needs ~500 daily-candle fetches for the EMA cache (~3 minutes once a day at broker rate limits) — decide whether the extra coverage is worth it.
+- **Sector volume ratio** — NSE index candles carry zero traded volume, so `volume_ratio` is a neutral 1.0 constant. A real ratio needs constituent-level volume aggregation per sector.
 - **Options: Greeks and IV percentile** — NSE's chain carries no Greeks, so gamma/delta exposure only emits if a Greeks-bearing source is added (Angel One's optionGreek endpoint is a candidate). IV percentile needs an ATM-IV history window — derivable from our own stored `atm_iv` market events once enough days accumulate.
 - **FinBERT sentiment** — `SentimentProvider` in `app/collectors/domains/news.py` currently uses a lexicon. Swap in FinBERT (or another finance model) behind the same interface. Unblocked by: deciding on the inference dependency (transformers/onnx) and its container size cost.
 - **Market depth over WebSocket (20-level)** — the feed parses LTP and Quote modes (51/123 bytes); Snap Quote mode (379 bytes, includes 5-level depth) is not parsed yet. `app/market/angel_ws.py`.
@@ -42,6 +42,8 @@ Volumes 3 (Feature Store), 4 (Market Intelligence), 5 (Prediction & Conviction) 
 
 | Item | Resolution |
 |------|-----------|
+| Market breadth real feed (Prompt 2.5) | `app/collectors/sources/nse_breadth.py` — NIFTY 50 constituents + live quotes from NSE `equity-stock-indices`; EMAs (20/50/100/200) computed from broker daily candles with a daily cache. Verified live: 16 breadth metrics from 50 real constituents. |
+| Sector rotation real feed (Prompt 2.6) | `app/collectors/sources/broker_sectors.py` — twelve NSE sectoral indices via broker daily candles (4h cache). Sector list adjusted to indices that actually exist (PSU Bank / Private Bank replace Capital Goods / Defence, which have no NSE index in the broker universe). Verified live: 13 records. |
 | Options intelligence real feed (Prompt 2.4) | `app/collectors/sources/nse_options.py` — NSE option-chain v3 API (cookie handshake, expiry from contract-info, 30s fetch throttle); previous-day spot for buildup classification comes from our own daily candles. Verified live: 16 features derived for NIFTY + BANKNIFTY. |
 | SmartAPI WebSocket streaming (Prompt 2.2) | Implemented in `app/market/angel_ws.py` — binary LTP/Quote parsing, heartbeat, reconnect with backoff, per-symbol REST fallback in `LiveMarketCollector`. Verified against the live feed (auth + real packets). |
 | Instrument lookup (Prompt 2.1) | `app/market/instruments.py` — index token map + scrip master download with daily cache. |

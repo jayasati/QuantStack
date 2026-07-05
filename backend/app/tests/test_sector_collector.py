@@ -7,6 +7,7 @@ from app.collectors.domains.sector import (
     NSE_SECTORS,
     SectorRotationCollector,
     SectorSource,
+    UnconfiguredSectorSource,
 )
 from app.collectors.schema import CollectorCategory, Direction
 
@@ -86,19 +87,25 @@ async def test_leader_relative_strength_is_positive_and_bullish() -> None:
     assert laggard.direction is Direction.BEARISH
 
 
-async def test_unconfigured_default_source_raises() -> None:
-    collector = SectorRotationCollector()
+async def test_unconfigured_source_raises() -> None:
+    collector = SectorRotationCollector(sector_source=UnconfiguredSectorSource())
     with pytest.raises(CollectionError, match="sector source not configured"):
         await collector.collect()
+
+
+def test_default_source_is_broker_backed() -> None:
+    from app.collectors.sources.broker_sectors import BrokerSectorSource
+
+    assert isinstance(SectorRotationCollector()._source, BrokerSectorSource)
 
 
 async def test_incomplete_payload_is_rejected_not_fabricated() -> None:
     class MissingSectorSource(SectorSource):
         async def fetch_sectors(self) -> dict:
             payload = await FakeSectorSource().fetch_sectors()
-            del payload["sectors"]["Defence"]
+            del payload["sectors"]["Private Bank"]
             return payload
 
     collector = SectorRotationCollector(sector_source=MissingSectorSource())
-    with pytest.raises(CollectionError, match="Defence"):
+    with pytest.raises(CollectionError, match="Private Bank"):
         await collector.collect()

@@ -64,7 +64,17 @@ class MarketBreadthCollector(BaseCollector):
 
     def __init__(self, breadth_source: BreadthSource | None = None) -> None:
         super().__init__()
-        self._breadth_source = breadth_source or UnconfiguredBreadthSource()
+        if breadth_source is None:
+            from app.collectors.sources.nse_breadth import NseBreadthSource
+
+            breadth_source = NseBreadthSource()
+        self._breadth_source = breadth_source
+        self._ad_line = 0.0  # cumulative advance-decline line across runs
+
+    async def cleanup(self) -> None:
+        closer = getattr(self._breadth_source, "close", None)
+        if closer is not None:
+            await closer()
         self._ad_line = 0.0  # cumulative advance-decline line across runs
 
     async def collect(self) -> list[CollectorOutput]:

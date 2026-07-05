@@ -17,6 +17,10 @@ from typing import Any
 from app.collectors.base import BaseCollector, CollectionError
 from app.collectors.schema import CollectorCategory, CollectorOutput, Direction
 
+# The twelve tracked sectors, each backed by a real NSE sectoral index
+# available through the broker (see sources/broker_sectors.py). NSE publishes
+# no Capital Goods or Defence index in the broker universe, so PSU Bank and
+# Private Bank complete the twelve instead.
 NSE_SECTORS: tuple[str, ...] = (
     "Banking",
     "IT",
@@ -25,11 +29,11 @@ NSE_SECTORS: tuple[str, ...] = (
     "Pharma",
     "FMCG",
     "PSU",
+    "PSU Bank",
+    "Private Bank",
     "Realty",
     "Metal",
-    "Capital Goods",
     "Infrastructure",
-    "Defence",
 )
 
 _REQUIRED_FIELDS: tuple[str, ...] = ("return_1d", "return_5d", "return_20d", "volume_ratio")
@@ -90,7 +94,11 @@ class SectorRotationCollector(BaseCollector):
 
     def __init__(self, sector_source: SectorSource | None = None) -> None:
         super().__init__()
-        self._source: SectorSource = sector_source or UnconfiguredSectorSource()
+        if sector_source is None:
+            from app.collectors.sources.broker_sectors import BrokerSectorSource
+
+            sector_source = BrokerSectorSource()
+        self._source: SectorSource = sector_source
 
     async def collect(self) -> list[CollectorOutput]:
         payload = await self._source.fetch_sectors()

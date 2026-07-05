@@ -110,6 +110,14 @@ async def test_every_record_targets_market_instrument() -> None:
 
 
 async def test_unconfigured_source_raises() -> None:
-    collector = MarketBreadthCollector()
+    from app.collectors.domains.breadth import UnconfiguredBreadthSource
+
+    collector = MarketBreadthCollector(breadth_source=UnconfiguredBreadthSource())
     with pytest.raises(CollectionError, match="breadth source not configured"):
         await collector.collect()
+
+
+def test_default_source_is_nse() -> None:
+    from app.collectors.sources.nse_breadth import NseBreadthSource
+
+    assert isinstance(MarketBreadthCollector()._breadth_source, NseBreadthSource)
