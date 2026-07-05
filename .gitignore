@@ -1,0 +1,12 @@
+# MkDocs build output (built by CI, never committed)
+site/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db

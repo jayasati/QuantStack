@@ -1,0 +1,94 @@
+site_name: QuantStack
+site_description: >-
+  QuantStack — an enterprise quantitative intelligence platform.
+  Architecture specification for an institutional-grade AI trading signal
+  system (Angel One SmartAPI, ensemble ML, LLM explainability, Telegram delivery).
+site_author: QuantStack
+# Update these two after creating the GitHub repository:
+# site_url: https://<your-github-username>.github.io/QuantStack/
+# repo_url: https://github.com/<your-github-username>/QuantStack
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Overview:
+      - Architecture Review: overview/architecture-review.md
+      - Master Blueprint: overview/master-blueprint.md
+  - Architecture: architecture.md
+  - Volumes:
+      - "Volume 1 — Foundation & System Architecture": volumes/volume-1.md
+      - "Volume 2 — Data Collection & Market Intelligence": volumes/volume-2.md
+      - "Volume 3 — Feature Store & Data Quality": volumes/volume-3.md
+      - "Volume 4 — Market Intelligence & Regime Analysis": volumes/volume-4.md
+      - "Volume 5 — Opportunity Detection & Conviction": volumes/volume-5.md
+      - "Volume 5.5 — Alpha Research Engine": volumes/volume-5-5.md
+      - "Volume 5.75 — Opportunity Portfolio Intelligence (OPIE)": volumes/volume-5-75.md
+      - "Volume 5.9 — Decision Intelligence & Meta-Orchestrator": volumes/volume-5-9.md
+      - "Volume 5.95 — Simulation & Digital Twin Engine": volumes/volume-5-95.md
+      - "Volume 5.99 — Signal Orchestration (SOEFE)": volumes/volume-5-99.md
+      - "Volume 5.999 — Enterprise Plugin SDK": volumes/volume-5-999.md
+      - "Volume 6 — Risk & Trade Construction": volumes/volume-6.md
+      - "Volume 6.1 — Dual Risk Intelligence": volumes/volume-6-1.md
+      - "Volume 6.5 — Trade Lifecycle Management": volumes/volume-6-5.md
+      - "Volume 7 — AI Intelligence & Explainability": volumes/volume-7.md
+      - "Volume 8 — Workspace & User Experience": volumes/volume-8.md
+      - "Volume 9 — Evaluation & Continuous Learning": volumes/volume-9.md
+      - "Volume 10 — Enterprise Infrastructure": volumes/volume-10.md
+  - Implementation Guide: implementation-guide.md
+  - Roadmap: roadmap.md
+  - Glossary: glossary.md
