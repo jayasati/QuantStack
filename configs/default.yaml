@@ -16,3 +16,4 @@ rate_limits:
 watchlist:
   - NIFTY
   - BANKNIFTY
+enable_websocket: true

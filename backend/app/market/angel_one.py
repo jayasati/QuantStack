@@ -118,6 +118,17 @@ class AngelOneAdapter(BrokerInterface):
     async def is_connected(self) -> bool:
         return self._jwt_token is not None
 
+    def stream_credentials(self) -> dict[str, str] | None:
+        """Credentials for the SmartAPI WebSocket feed (None until connected)."""
+        if not (self._jwt_token and self._feed_token and self._settings.angel_one_api_key):
+            return None
+        return {
+            "jwt_token": self._jwt_token,
+            "api_key": self._settings.angel_one_api_key,
+            "client_code": self._settings.angel_one_client_id or "",
+            "feed_token": self._feed_token,
+        }
+
     # --- transport with retry / backoff / token refresh ---------------------------
 
     async def _request(

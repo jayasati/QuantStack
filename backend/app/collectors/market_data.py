@@ -1,13 +1,18 @@
 """Market data collectors (Volume 2, Prompts 2.2 and 2.3).
 
-LiveMarketCollector polls full quotes through the broker interface (REST
-polling today; the SmartAPI WebSocket feed plugs into the same collector
-later) and persists raw ticks separately from aggregated candles. The
+LiveMarketCollector streams quotes over the SmartAPI WebSocket feed and
+falls back to REST polling per symbol whenever the stream is disconnected
+or stale; raw ticks are persisted separately from aggregated candles. The
 HistoricalCandleCollector backfills OHLCV candles for all seven timeframes,
 resuming from the last stored bar, with dedup and continuity validation.
 """
 
+import time
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.market.angel_ws import AngelWebSocketFeed
 
 from sqlalchemy import func, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -77,7 +82,11 @@ class _BrokerBackedCollector(BaseCollector):
 
 
 class LiveMarketCollector(_BrokerBackedCollector):
-    """LTP/OHLC/volume/VWAP/bid/ask/depth for the watchlist, plus raw ticks."""
+    """LTP/OHLC/volume/VWAP/bid/ask/depth for the watchlist, plus raw ticks.
+
+    Streams via the SmartAPI WebSocket feed when enabled and connected;
+    any symbol whose stream is missing or stale falls back to REST polling.
+    """
 
     name = "live_market"
     category = CollectorCategory.MARKET_DATA
@@ -86,13 +95,95 @@ class LiveMarketCollector(_BrokerBackedCollector):
     priority = 1
     requires_auth = True
 
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._feed: AngelWebSocketFeed | None = None
+
+    async def authenticate(self) -> None:
+        await super().authenticate()
+        if get_settings().enable_websocket and self._feed is None:
+            await self._start_feed()
+
+    async def _start_feed(self) -> None:
+        credentials = getattr(self.broker, "stream_credentials", lambda: None)()
+        if not credentials:
+            self.logger.warning("websocket enabled but stream credentials unavailable")
+            return
+        from app.market.angel_ws import AngelWebSocketFeed
+
+        feed = AngelWebSocketFeed(**credentials)
+        for token, exchange, _ in self._tokens.values():
+            feed.subscribe(exchange, token)
+        await feed.start()
+        self._feed = feed
+        self.logger.info("websocket feed started")
+
+    async def cleanup(self) -> None:
+        if self._feed is not None:
+            await self._feed.stop()
+            self._feed = None
+
+    def _record_from_stream(
+        self, symbol: str, token: str, exchange: str, trading_symbol: str
+    ) -> tuple[CollectorOutput, dict] | None:
+        if self._feed is None or not self._feed.connected:
+            return None
+        tick = self._feed.latest(token, max_age_seconds=self.interval_seconds * 2)
+        if tick is None or "close" not in tick:
+            return None
+        ltp = tick["ltp"]
+        close = tick.get("close") or None
+        direction = Direction.NEUTRAL
+        if close:
+            direction = Direction.BULLISH if ltp >= close else Direction.BEARISH
+        record = CollectorOutput(
+            collector_name=self.name,
+            collector_category=self.category,
+            source="angel_one_ws",
+            instrument=symbol,
+            exchange=exchange,
+            raw_value=ltp,
+            normalized_value=ltp,
+            direction=direction,
+            confidence=0.95,
+            freshness_seconds=max(0.0, time.time() - tick["received_at"]),
+            metadata={
+                "transport": "websocket",
+                "trading_symbol": trading_symbol,
+                "open": tick.get("open"),
+                "high": tick.get("high"),
+                "low": tick.get("low"),
+                "close": close,
+                "volume": tick.get("volume"),
+                "vwap": tick.get("avg_traded_price"),
+                "total_buy_qty": tick.get("total_buy_quantity"),
+                "total_sell_qty": tick.get("total_sell_quantity"),
+                "sequence": tick.get("sequence"),
+            },
+        )
+        raw_tick = {
+            "symbol": symbol,
+            "ts": datetime.now(UTC),
+            "ltp": ltp,
+            "data": {"volume": tick.get("volume"), "transport": "websocket"},
+        }
+        return record, raw_tick
+
     async def collect(self) -> list[CollectorOutput]:
         if not self._tokens:
             raise CollectionError("no instruments resolved for watchlist")
         records: list[CollectorOutput] = []
         ticks: list[dict] = []
         dropped = 0
+        streamed = 0
         for symbol, (token, exchange, trading_symbol) in self._tokens.items():
+            from_stream = self._record_from_stream(symbol, token, exchange, trading_symbol)
+            if from_stream is not None:
+                record, raw_tick = from_stream
+                records.append(record)
+                ticks.append(raw_tick)
+                streamed += 1
+                continue
             try:
                 quote = await self.broker.get_quote(token, exchange=exchange)
             except Exception as exc:
@@ -151,6 +242,11 @@ class LiveMarketCollector(_BrokerBackedCollector):
         self.health.extras["dropped_packets"] = (
             self.health.extras.get("dropped_packets", 0) + dropped
         )
+        self.health.extras["streamed_symbols"] = streamed
+        if self._feed is not None:
+            self.health.extras["ws_connected"] = self._feed.connected
+            self.health.extras["ws_packets"] = self._feed.metrics.packets
+            self.health.extras["ws_reconnects"] = self._feed.metrics.reconnects
         await self._persist_ticks(ticks)
         if not records:
             raise CollectionError(f"all {len(self._tokens)} quote fetches failed")

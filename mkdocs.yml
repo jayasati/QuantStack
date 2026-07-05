@@ -90,5 +90,6 @@ nav:
       - "Volume 9 — Evaluation & Continuous Learning": volumes/volume-9.md
       - "Volume 10 — Enterprise Infrastructure": volumes/volume-10.md
   - Implementation Guide: implementation-guide.md
+  - Backlog: backlog.md
   - Roadmap: roadmap.md
   - Glossary: glossary.md

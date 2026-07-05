@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     cache_timeout: int = 300
     rate_limits: RateLimits = Field(default_factory=RateLimits)
     watchlist: list[str] = Field(default_factory=lambda: ["NIFTY", "BANKNIFTY"])
+    # SmartAPI WebSocket streaming for live quotes (REST polling remains the fallback).
+    enable_websocket: bool = False
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None
