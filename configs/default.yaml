@@ -2,7 +2,7 @@
 # Overridden by .env, which is overridden by real environment variables.
 app_name: QuantStack
 environment: development
-database_url: postgresql+asyncpg://quantstack:quantstack@localhost:5432/quantstack
+database_url: postgresql+asyncpg://quantstack:quantstack@localhost:5433/quantstack
 redis_url: redis://localhost:6379/0
 log_level: INFO
 max_retry: 3

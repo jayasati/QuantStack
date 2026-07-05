@@ -5,10 +5,11 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: quantstack
-      POSTGRES_PASSWORD: quantstack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quantstack}
       POSTGRES_DB: quantstack
     ports:
-      - "5432:5432"
+      # Host port 5433: many machines run a native PostgreSQL on 5432.
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -31,10 +32,15 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
+    env_file:
+      - path: .env
+        required: false
     environment:
-      DATABASE_URL: postgresql+asyncpg://quantstack:quantstack@postgres:5432/quantstack
+      DATABASE_URL: postgresql+asyncpg://quantstack:${POSTGRES_PASSWORD:-quantstack}@postgres:5432/quantstack
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: development
+    volumes:
+      - ./data:/repo/data
     ports:
       - "8000:8000"
     depends_on:
