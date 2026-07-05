@@ -13,3 +13,6 @@ rate_limits:
 
 # Secrets have no defaults on purpose — set them in .env or the environment:
 # angel_one_api_key, angel_one_client_id, angel_one_pin, telegram_token, openai_key
+watchlist:
+  - NIFTY
+  - BANKNIFTY

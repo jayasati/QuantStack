@@ -2,12 +2,18 @@
 
 Business logic never knows which broker is used. All broker access goes
 through this interface; concrete adapters (Angel One today, Zerodha or
-Interactive Brokers later) implement it.
+Interactive Brokers later) implement it. Only the adapter may know
+SDK/HTTP specifics.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
+
+
+class BrokerError(Exception):
+    """Structured broker failure — the only exception adapters may raise."""
 
 
 @dataclass(frozen=True)
@@ -16,6 +22,17 @@ class Quote:
     exchange: str
     last_price: float
     timestamp: datetime
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+    close: float | None = None
+    volume: int = 0
+    vwap: float | None = None
+    bid: float | None = None
+    ask: float | None = None
+    bid_qty: int = 0
+    ask_qty: int = 0
+    depth: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

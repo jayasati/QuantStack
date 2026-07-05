@@ -38,7 +38,11 @@ container = Container()
 
 def wire_default_services() -> None:
     """Register production implementations. Called once at application startup."""
+    from app.collectors.pipeline import DefaultCollectorPipeline
+    from app.collectors.registry import CollectorRegistry
+    from app.core.cache import CacheService
     from app.core.config import get_settings
+    from app.database.session import get_session_factory
     from app.events.bus import EventBus
     from app.market.angel_one import AngelOneAdapter
     from app.market.broker import BrokerInterface
@@ -46,3 +50,13 @@ def wire_default_services() -> None:
     settings = get_settings()
     container.register(EventBus, EventBus)
     container.register(BrokerInterface, lambda: AngelOneAdapter(settings))
+    container.register(CacheService, CacheService)
+    container.register(
+        CollectorRegistry,
+        lambda: CollectorRegistry(
+            DefaultCollectorPipeline(
+                bus=container.resolve(EventBus),
+                session_factory=get_session_factory(),
+            )
+        ),
+    )

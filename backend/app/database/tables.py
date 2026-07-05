@@ -9,7 +9,7 @@ added by later volumes through Alembic migrations — never by editing history.
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, MetaData, String, func
+from sqlalchemy import BigInteger, DateTime, MetaData, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -154,3 +154,27 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
     actor: Mapped[str | None] = mapped_column(String(100), nullable=True)
     action: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+
+# --- Market data time series (Volume 2) ---------------------------------------
+
+class OhlcvCandle(Base):
+    __tablename__ = "ohlcv_candles"
+    __table_args__ = (
+        UniqueConstraint("symbol", "timeframe", "ts", name="uq_ohlcv_symbol_tf_ts"),
+    )
+    symbol: Mapped[str] = mapped_column(String(50), index=True)
+    timeframe: Mapped[str] = mapped_column(String(10))
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    open: Mapped[float] = mapped_column()
+    high: Mapped[float] = mapped_column()
+    low: Mapped[float] = mapped_column()
+    close: Mapped[float] = mapped_column()
+    volume: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class RawTick(Base):
+    __tablename__ = "raw_ticks"
+    symbol: Mapped[str] = mapped_column(String(50), index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ltp: Mapped[float] = mapped_column()

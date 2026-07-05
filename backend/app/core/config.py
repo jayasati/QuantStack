@@ -45,11 +45,13 @@ class Settings(BaseSettings):
     max_retry: int = 3
     cache_timeout: int = 300
     rate_limits: RateLimits = Field(default_factory=RateLimits)
+    watchlist: list[str] = Field(default_factory=lambda: ["NIFTY", "BANKNIFTY"])
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None
     angel_one_client_id: str | None = None
     angel_one_pin: str | None = None
+    angel_one_totp_secret: str | None = None
     telegram_token: str | None = None
     openai_key: str | None = None
 

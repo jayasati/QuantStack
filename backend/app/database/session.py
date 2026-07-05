@@ -23,6 +23,12 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    get_engine()
+    assert _session_factory is not None
+    return _session_factory
+
+
 async def get_session() -> AsyncIterator[AsyncSession]:
     get_engine()
     assert _session_factory is not None
