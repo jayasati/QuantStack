@@ -16,7 +16,6 @@ This repository contains both the **platform implementation** and its **document
 | `configs/` | Layered configuration (`default.yaml` < `.env` < environment variables) |
 | `docker/`, `docker-compose.yml` | One-command local stack: PostgreSQL 16, Redis 7, backend |
 | `docs/`, `mkdocs.yml` | Architecture specification site (MkDocs Material) |
-| `.github/workflows/` | CI (lint, type check, migrations, tests, Docker build) and docs deployment |
 
 ## Quickstart — run the platform
 

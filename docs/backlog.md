@@ -31,7 +31,7 @@ The seven domain collectors are fully implemented and tested against injectable 
 
 ## Volume 1 — Foundation
 
-- **GitHub Actions billing lock** — CI (`.github/workflows/ci.yml`) and docs deploy (`deploy-docs.yml`) are ready but cannot run: the GitHub account is billing-locked. Fix at github.com/settings/billing, then switch Pages source to "GitHub Actions". Until then docs deploy via local `mkdocs gh-deploy`.
+- **CI / automated checks** — GitHub Actions workflows were removed by choice (account billing lock; owner opted for plain git version control). The last version of the CI workflow (ruff, mypy, migration up/down/up, pytest against live Postgres/Redis, Docker build) and the Pages deploy workflow live in git history at commit `02275cc` — restore them from there if CI is ever wanted again. Until then: run `pytest`, `ruff check app`, and `mypy app` locally before pushing, and publish docs with `mkdocs gh-deploy --force --no-history`.
 - **`develop` branch discipline** — the branch exists; day-to-day work is still landing on `main`. Adopt feature branches once more than one person works on the repo.
 
 ## Volume 3+ — Not started
