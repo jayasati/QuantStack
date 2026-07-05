@@ -23,6 +23,7 @@ LOGIN_PATH = "/rest/auth/angelbroking/user/v1/loginByPassword"
 REFRESH_PATH = "/rest/auth/angelbroking/jwt/v1/generateTokens"
 QUOTE_PATH = "/rest/secure/angelbroking/market/v1/quote/"
 CANDLE_PATH = "/rest/secure/angelbroking/historical/v1/getCandleData"
+GREEKS_PATH = "/rest/secure/angelbroking/marketData/v1/optionGreek"
 
 INTERVAL_MAP = {
     "1m": "ONE_MINUTE",
@@ -201,6 +202,42 @@ class AngelOneAdapter(BrokerInterface):
             depth=depth,
             timestamp=datetime.now().astimezone(),
         )
+
+    async def get_option_greeks(
+        self, name: str, expiry: str
+    ) -> dict[tuple[float, str], dict[str, float]]:
+        """Per-strike option Greeks keyed by (strike, "CE"/"PE").
+
+        ``expiry`` uses SmartAPI's DDMMMYYYY format (e.g. 07JUL2026). Returns
+        an empty mapping when the endpoint has no data (e.g. off-market) —
+        callers must treat Greeks as optional.
+        """
+        try:
+            data = await self._request(
+                "POST", GREEKS_PATH, json={"name": name, "expirydate": expiry}
+            )
+        except BrokerError as exc:
+            if "AB9019" in str(exc) or "No Data" in str(exc):
+                return {}
+            raise
+        greeks: dict[tuple[float, str], dict[str, float]] = {}
+        for row in data.get("data") or []:
+            try:
+                strike = float(row["strikePrice"])
+                side = str(row["optionType"]).upper()
+            except (KeyError, TypeError, ValueError):
+                continue
+            entry: dict[str, float] = {}
+            for key in ("delta", "gamma", "theta", "vega", "impliedVolatility"):
+                value = row.get(key)
+                if value is not None:
+                    try:
+                        entry[key] = float(value)
+                    except (TypeError, ValueError):
+                        pass
+            if entry:
+                greeks[(strike, side)] = entry
+        return greeks
 
     async def get_historical(
         self,

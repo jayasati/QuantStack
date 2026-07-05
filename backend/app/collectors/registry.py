@@ -90,11 +90,11 @@ class CollectorRegistry:
             self._collectors[name].health.enabled = False
             self._collectors[name].health.status = "disabled"
 
-    async def run_collector(self, name: str) -> None:
+    async def run_collector(self, name: str, force: bool = False) -> None:
         collector = self._collectors.get(name)
         if collector is None or name in self._disabled:
             return
-        await collector.run_once(self._pipeline)
+        await collector.run_once(self._pipeline, force=force)
 
     def schedule_all(self, scheduler: AsyncIOScheduler) -> int:
         """Wire every registered collector onto its own interval schedule."""

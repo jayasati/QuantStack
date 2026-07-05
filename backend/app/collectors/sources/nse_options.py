@@ -96,9 +96,47 @@ class NseOptionChainSource(OptionsChainSource):
         )
         chain = map_nse_chain(payload, expiry=nearest_expiry)
         chain["prev_spot"] = await self._prev_close(symbol)
+        await self._enrich_with_greeks(symbol, nearest_expiry, chain)
         self._last_fetch[symbol] = now
         self._last_chain[symbol] = chain
         return chain
+
+    async def _enrich_with_greeks(
+        self, symbol: str, expiry: str, chain: dict[str, Any]
+    ) -> None:
+        """Merge broker option Greeks into chain legs (optional enrichment).
+
+        The broker endpoint only serves data during market hours; failures or
+        empty responses simply leave the legs without Greeks.
+        """
+        try:
+            from app.core.container import container
+            from app.market.broker import BrokerInterface
+
+            broker = container.resolve(BrokerInterface)
+            fetch = getattr(broker, "get_option_greeks", None)
+            if fetch is None:
+                return
+            greeks = await fetch(symbol, _smartapi_expiry(expiry))
+        except Exception as exc:
+            logger.debug(
+                "greeks enrichment unavailable",
+                extra={"symbol": symbol, "error": str(exc)},
+            )
+            return
+        if not greeks:
+            return
+        enriched = 0
+        for strike_row in chain["strikes"]:
+            strike = float(strike_row["strike"])
+            for side, leg_key in (("CE", "call"), ("PE", "put")):
+                entry = greeks.get((strike, side))
+                if entry:
+                    strike_row[leg_key].update(
+                        {k: v for k, v in entry.items() if k in ("delta", "gamma")}
+                    )
+                    enriched += 1
+        chain["greeks_enriched_legs"] = enriched
 
     async def _prev_close(self, symbol: str) -> float | None:
         """Previous daily close from our own candle store (None if unavailable)."""
@@ -175,3 +213,16 @@ def _map_leg(leg: dict[str, Any] | None) -> dict[str, Any]:
         "volume": leg.get("totalTradedVolume") or 0,
         "ltp": leg.get("lastPrice") or None,
     }
+
+
+_MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+           "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
+
+
+def _smartapi_expiry(nse_expiry: str) -> str:
+    """Convert an NSE expiry (07-Jul-2026) to SmartAPI format (07JUL2026)."""
+    day, month, year = nse_expiry.split("-")
+    month_upper = month.upper()[:3]
+    if month_upper not in _MONTHS:
+        raise ValueError(f"unrecognized expiry month: {nse_expiry}")
+    return f"{day}{month_upper}{year}"

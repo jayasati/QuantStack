@@ -54,5 +54,5 @@ async def run_collector_now(name: str) -> dict:
     collector = registry.get(name)
     if collector is None:
         raise HTTPException(status_code=404, detail=f"unknown collector: {name}")
-    await registry.run_collector(name)
+    await registry.run_collector(name, force=True)
     return registry.health_of(name) or {}

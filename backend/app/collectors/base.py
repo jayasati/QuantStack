@@ -14,9 +14,21 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from app.collectors.schema import CollectorCategory, CollectorOutput
 from app.core.logging import get_logger
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def is_nse_market_open(now: datetime | None = None) -> bool:
+    """NSE equity/derivatives session: Mon-Fri 09:15-15:35 IST (incl. close prints)."""
+    current = (now or datetime.now(UTC)).astimezone(IST)
+    if current.weekday() >= 5:
+        return False
+    minutes = current.hour * 60 + current.minute
+    return 9 * 60 + 15 <= minutes <= 15 * 60 + 35
 
 
 class CollectorError(Exception):
@@ -70,6 +82,7 @@ class BaseCollector(ABC):
     interval_seconds: int = 60
     priority: int = 100  # lower runs earlier when schedules collide
     requires_auth: bool = False
+    market_hours_only: bool = False  # scheduled runs skip outside NSE hours
 
     def __init__(self) -> None:
         self.logger = get_logger(f"collector.{self.name}")
@@ -107,8 +120,19 @@ class BaseCollector(ABC):
 
     # --- orchestration ---------------------------------------------------------
 
-    async def run_once(self, pipeline: "CollectorPipeline") -> list[CollectorOutput]:
-        """Execute one full lifecycle pass. Never raises."""
+    async def run_once(
+        self, pipeline: "CollectorPipeline", force: bool = False
+    ) -> list[CollectorOutput]:
+        """Execute one full lifecycle pass. Never raises.
+
+        Scheduled runs of market-hours-only collectors are skipped outside
+        NSE trading hours; pass ``force=True`` (manual /run) to bypass.
+        """
+        if self.market_hours_only and not force and not is_nse_market_open():
+            self.health.extras["skipped_market_closed"] = (
+                self.health.extras.get("skipped_market_closed", 0) + 1
+            )
+            return []
         started = time.perf_counter()
         self.health.last_run = datetime.now(UTC)
         self.health.run_count += 1

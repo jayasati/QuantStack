@@ -48,6 +48,45 @@ class UnconfiguredOptionsSource(OptionsChainSource):
         raise CollectionError("options chain source not configured")
 
 
+class IvHistoryProvider(ABC):
+    """Historical ATM-IV observations for IV percentile computation."""
+
+    @abstractmethod
+    async def history(self, instrument: str) -> list[float]:
+        """Return past ATM IV observations, most recent last."""
+
+
+class DbIvHistoryProvider(IvHistoryProvider):
+    """Reads our own previously published atm_iv observations from market_events."""
+
+    def __init__(self, limit: int = 5000) -> None:
+        self._limit = limit
+
+    async def history(self, instrument: str) -> list[float]:
+        try:
+            from sqlalchemy import text
+
+            from app.database.session import get_session_factory
+
+            sessions = get_session_factory()
+            async with sessions() as session:
+                result = await session.execute(
+                    text(
+                        "SELECT (data->>'normalized_value')::float FROM market_events "
+                        "WHERE event_type = 'options.observation' "
+                        "AND data->>'instrument' = :instrument "
+                        "AND data->'metadata'->>'feature' = 'atm_iv' "
+                        "ORDER BY id DESC LIMIT :limit"
+                    ),
+                    {"instrument": instrument, "limit": self._limit},
+                )
+                values = [row[0] for row in result if row[0] is not None]
+            values.reverse()
+            return values
+        except Exception:
+            return []
+
+
 @dataclass(frozen=True)
 class _Leg:
     """One side (call or put) of a strike row."""
@@ -143,14 +182,23 @@ class OptionsIntelligenceCollector(BaseCollector):
     source = "options_chain"
     interval_seconds = 60
     priority = 10
+    market_hours_only = True  # the chain does not update outside NSE hours
 
-    def __init__(self, source: OptionsChainSource | None = None) -> None:
+    # IV percentile needs a minimum history before it is meaningful.
+    min_iv_observations = 100
+
+    def __init__(
+        self,
+        source: OptionsChainSource | None = None,
+        iv_history: IvHistoryProvider | None = None,
+    ) -> None:
         super().__init__()
         if source is None:
             from app.collectors.sources.nse_options import NseOptionChainSource
 
             source = NseOptionChainSource()
         self.chain_source: OptionsChainSource = source
+        self.iv_history: IvHistoryProvider = iv_history or DbIvHistoryProvider()
         self.symbols: list[str] = get_settings().watchlist
 
     async def cleanup(self) -> None:
@@ -162,24 +210,129 @@ class OptionsIntelligenceCollector(BaseCollector):
         records: list[CollectorOutput] = []
         for symbol in self.symbols:
             chain = await self.chain_source.fetch_chain(symbol)
-            records.extend(self._derive_features(symbol, chain))
+            records.extend(await self._derive_features(symbol, chain))
         return records
 
     # --- feature derivation -----------------------------------------------------
 
-    def _derive_features(self, instrument: str, chain: dict[str, Any]) -> list[CollectorOutput]:
+    async def _derive_features(
+        self, instrument: str, chain: dict[str, Any]
+    ) -> list[CollectorOutput]:
         spot, prev_spot, rows = _parse_chain(chain)
         records: list[CollectorOutput] = []
 
         records.extend(self._pcr(instrument, rows))
         records.extend(self._max_pain_feature(instrument, spot, rows))
-        records.extend(self._atm_iv(instrument, spot, rows))
+        atm_records = self._atm_iv(instrument, spot, rows)
+        records.extend(atm_records)
         records.extend(self._iv_skew(instrument, spot, rows))
         records.extend(self._oi_concentration(instrument, rows))
+        records.extend(self._oi_distribution(instrument, spot, rows))
+        records.extend(self._volume_distribution(instrument, rows))
         records.extend(self._buildup(instrument, spot, prev_spot, rows))
         records.extend(self._writing_intensity(instrument, rows))
         records.extend(self._exposure_proxies(instrument, rows))
+        if atm_records:
+            iv_value = atm_records[0].normalized_value
+            if iv_value is not None:
+                records.extend(await self._iv_percentile(instrument, iv_value))
         return records
+
+    def _oi_distribution(
+        self, instrument: str, spot: float, rows: list[_StrikeRow]
+    ) -> list[CollectorOutput]:
+        """Positioning structure: put OI below spot (support) vs call OI above
+        spot (resistance), plus the OI-weighted strike vs spot."""
+        support_oi = sum(row.put.oi for row in rows if row.strike < spot)
+        resistance_oi = sum(row.call.oi for row in rows if row.strike > spot)
+        total = support_oi + resistance_oi
+        if total <= 0:
+            return []
+        net = (support_oi - resistance_oi) / total  # [-1, 1]
+        total_oi = sum(row.call.oi + row.put.oi for row in rows)
+        weighted_strike = (
+            sum(row.strike * (row.call.oi + row.put.oi) for row in rows) / total_oi
+            if total_oi
+            else None
+        )
+        if net > 0.1:
+            direction = Direction.BULLISH  # heavier put wall below = support
+        elif net < -0.1:
+            direction = Direction.BEARISH  # heavier call wall above = resistance
+        else:
+            direction = Direction.NEUTRAL
+        return [
+            self._record(
+                instrument,
+                "oi_distribution",
+                net,
+                direction,
+                {
+                    "support_put_oi_below_spot": support_oi,
+                    "resistance_call_oi_above_spot": resistance_oi,
+                    "oi_weighted_strike": weighted_strike,
+                    "spot": spot,
+                },
+            )
+        ]
+
+    def _volume_distribution(
+        self, instrument: str, rows: list[_StrikeRow]
+    ) -> list[CollectorOutput]:
+        """Where option volume sits today: concentration and call/put split."""
+        volumes = [(row.strike, row.call.volume + row.put.volume) for row in rows]
+        total_volume = sum(volume for _, volume in volumes)
+        if total_volume <= 0:
+            return []
+        top = sorted(volumes, key=lambda item: item[1], reverse=True)[:3]
+        top_share = sum(volume for _, volume in top) / total_volume
+        call_volume = sum(row.call.volume for row in rows)
+        put_volume = sum(row.put.volume for row in rows)
+        volume_pcr = put_volume / call_volume if call_volume else None
+        weighted_strike = sum(strike * volume for strike, volume in volumes) / total_volume
+        return [
+            self._record(
+                instrument,
+                "volume_distribution",
+                top_share,
+                Direction.NEUTRAL,
+                {
+                    "top_strikes": [{"strike": s, "volume": v} for s, v in top],
+                    "call_volume": call_volume,
+                    "put_volume": put_volume,
+                    "volume_pcr": volume_pcr,
+                    "volume_weighted_strike": weighted_strike,
+                },
+            )
+        ]
+
+    async def _iv_percentile(
+        self, instrument: str, current_iv: float
+    ) -> list[CollectorOutput]:
+        """Percentile of the current ATM IV within our own stored IV history.
+
+        Emits nothing until enough observations have accumulated — the value
+        is meaningless on day one and is never fabricated.
+        """
+        history = await self.iv_history.history(instrument)
+        if len(history) < self.min_iv_observations:
+            return []
+        below = sum(1 for value in history if value < current_iv)
+        percentile = 100.0 * below / len(history)
+        return [
+            self._record(
+                instrument,
+                "iv_percentile",
+                percentile,
+                Direction.NEUTRAL,
+                {
+                    "current_atm_iv": current_iv,
+                    "observations": len(history),
+                    "history_min": min(history),
+                    "history_max": max(history),
+                },
+            )
+        ]
 
     def _pcr(self, instrument: str, rows: list[_StrikeRow]) -> list[CollectorOutput]:
         total_call_oi = sum(row.call.oi for row in rows)
