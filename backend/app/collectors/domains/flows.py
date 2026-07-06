@@ -70,6 +70,21 @@ def _flow_score(today_cr: float, avg_20d_cr: float) -> float:
     return _clamp(today_cr / max(abs(avg_20d_cr), _MIN_AVG_CR))
 
 
+def _data_age_days(as_of: str | None) -> int | None:
+    """Age in days of the flow snapshot (0 = today), from NSE's dd-Mon-yyyy date."""
+    if not as_of:
+        return None
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        published = datetime.strptime(as_of, "%d-%b-%Y").date()
+        today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        return max((today - published).days, 0)
+    except ValueError:
+        return None
+
+
 def _net_over_gross(net_cr: float, gross_cr: float) -> float:
     """Net activity normalized by gross activity — 0 when there is no activity."""
     return _clamp(net_cr / gross_cr) if gross_cr > 0 else 0.0
@@ -201,6 +216,12 @@ class InstitutionalFlowCollector(BaseCollector):
                 },
             )
         )
+        as_of = flows.get("as_of")
+        age_days = _data_age_days(as_of)
+        for record in records:
+            record.metadata["as_of"] = as_of
+            if age_days is not None:
+                record.metadata["data_age_days"] = age_days
         return records
 
     @staticmethod

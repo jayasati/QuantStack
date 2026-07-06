@@ -118,3 +118,22 @@ async def test_collector_end_to_end_with_nse_shapes() -> None:
     assert "participation_index" in metrics
     fii = next(r for r in records if r.metadata["metric"] == "fii_flow")
     assert fii.normalized_value is not None and fii.normalized_value > 0
+
+
+async def test_records_carry_as_of_and_data_age() -> None:
+    from app.collectors.domains.flows import InstitutionalFlowCollector
+
+    session = FakeSession(
+        {
+            "/api/fiidiiTradeReact": FIIDII_ROWS,  # dated 03-Jul-2026
+            "/api/snapshot-capital-market-largedeal": DEALS_PAYLOAD,
+            "/api/corporate-sast-reg29": {"data": []},
+            "/api/corporates-pit": {"data": []},
+        }
+    )
+    collector = InstitutionalFlowCollector(flow_source=NseFlowSource(session=session))
+    records = await collector.collect()
+    assert records
+    for record in records:
+        assert record.metadata["as_of"] == "03-Jul-2026"
+        assert record.metadata["data_age_days"] >= 0
