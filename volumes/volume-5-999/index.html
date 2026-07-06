@@ -1,0 +1,3320 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="QuantStack — an enterprise quantitative intelligence platform. Architecture specification for an institutional-grade AI trading signal system (Angel One SmartAPI, ensemble ML, LLM explainability, Telegram delivery).">
+      
+      
+        <meta name="author" content="QuantStack">
+      
+      
+        <link rel="canonical" href="https://jayasati.github.io/QuantStack/volumes/volume-5-999/">
+      
+      
+        <link rel="prev" href="../volume-5-99/">
+      
+      
+        <link rel="next" href="../volume-6/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Volume 5.999 — Enterprise Plugin SDK - QuantStack</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#volume-5999-enterprise-sdk-plugin-ecosystem" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="QuantStack" class="md-header__button md-logo" aria-label="QuantStack" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            QuantStack
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Volume 5.999 — Enterprise Plugin SDK
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/jayasati/QuantStack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jayasati/QuantStack
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../overview/architecture-review/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Overview
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../volume-1/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Volumes
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../implementation-guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Implementation Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../backlog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Backlog
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../roadmap/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Roadmap
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../glossary/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Glossary
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="QuantStack" class="md-nav__button md-logo" aria-label="QuantStack" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    QuantStack
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/jayasati/QuantStack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jayasati/QuantStack
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Overview
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/architecture-review/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Review
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/master-blueprint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Master Blueprint
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volumes
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Volumes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 1 — Foundation & System Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 2 — Data Collection & Market Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 3 — Feature Store & Data Quality
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 4 — Market Intelligence & Regime Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5 — Opportunity Detection & Conviction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.5 — Alpha Research Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-75/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.75 — Opportunity Portfolio Intelligence (OPIE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-9/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.9 — Decision Intelligence & Meta-Orchestrator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-95/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.95 — Simulation & Digital Twin Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-99/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.99 — Signal Orchestration (SOEFE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.999 — Enterprise Plugin SDK
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.999 — Enterprise Plugin SDK
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mission
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#philosophy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Philosophy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#new-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-1-sdk-philosophy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 1 — SDK Philosophy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-2-plugin-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 2 — Plugin Types
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-3-plugin-manifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 3 — Plugin Manifest
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 3 — Plugin Manifest">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59991" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.1
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-4-plugin-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 4 — Plugin SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 4 — Plugin SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59992" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.2
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-5-plugin-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 5 — Plugin Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 5 — Plugin Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59993" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.3
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-6-plugin-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 6 — Plugin Registry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 6 — Plugin Registry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59994" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.4
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-7-dependency-resolver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 7 — Dependency Resolver
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 7 — Dependency Resolver">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59995" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.5
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-8-permission-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 8 — Permission Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 8 — Permission Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59996" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.6
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-9-event-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 9 — Event SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 9 — Event SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59997" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.7
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-10-collector-plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 10 — Collector Plugins
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 10 — Collector Plugins">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59998" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.8
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-11-ml-plugin-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 11 — ML Plugin SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 11 — ML Plugin SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59999" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.9
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-12-strategy-plugin-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 12 — Strategy Plugin SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 12 — Strategy Plugin SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599910" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.10
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-13-dashboard-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 13 — Dashboard SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 13 — Dashboard SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599911" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.11
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-14-notification-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 14 — Notification SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 14 — Notification SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599912" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.12
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-15-research-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 15 — Research SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 15 — Research SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599913" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.13
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-16-marketplace-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 16 — Marketplace (Future)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 16 — Marketplace (Future)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599914" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.14
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-17-security-sandbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 17 — Security Sandbox
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 17 — Security Sandbox">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599915" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.15
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-18-plugin-testing-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 18 — Plugin Testing Framework
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 18 — Plugin Testing Framework">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599916" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.16
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-19-developer-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 19 — Developer CLI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 19 — Developer CLI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599917" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.17
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-20-plugin-documentation-generator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 20 — Plugin Documentation Generator
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 20 — Plugin Documentation Generator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599918" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.18
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-21-plugin-health-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 21 — Plugin Health Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 21 — Plugin Health Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599919" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.19
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-22-enterprise-governance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 22 — Enterprise Governance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 22 — Enterprise Governance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599920" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.20
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-23-acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 23 — Acceptance Criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#final-architectural-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Final Architectural Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-6/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 6 — Risk & Trade Construction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-6-1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 6.1 — Dual Risk Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-6-5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 6.5 — Trade Lifecycle Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-7/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 7 — AI Intelligence & Explainability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-8/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 8 — Workspace & User Experience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-9/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 9 — Evaluation & Continuous Learning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-10/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 10 — Enterprise Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../implementation-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implementation Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backlog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backlog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mission
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#philosophy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Philosophy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#new-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-1-sdk-philosophy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 1 — SDK Philosophy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-2-plugin-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 2 — Plugin Types
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-3-plugin-manifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 3 — Plugin Manifest
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 3 — Plugin Manifest">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59991" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.1
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-4-plugin-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 4 — Plugin SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 4 — Plugin SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59992" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.2
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-5-plugin-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 5 — Plugin Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 5 — Plugin Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59993" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.3
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-6-plugin-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 6 — Plugin Registry
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 6 — Plugin Registry">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59994" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.4
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-7-dependency-resolver" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 7 — Dependency Resolver
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 7 — Dependency Resolver">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59995" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.5
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-8-permission-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 8 — Permission Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 8 — Permission Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59996" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.6
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-9-event-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 9 — Event SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 9 — Event SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59997" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.7
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-10-collector-plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 10 — Collector Plugins
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 10 — Collector Plugins">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59998" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.8
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-11-ml-plugin-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 11 — ML Plugin SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 11 — ML Plugin SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-59999" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.9
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-12-strategy-plugin-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 12 — Strategy Plugin SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 12 — Strategy Plugin SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599910" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.10
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-13-dashboard-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 13 — Dashboard SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 13 — Dashboard SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599911" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.11
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-14-notification-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 14 — Notification SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 14 — Notification SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599912" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.12
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-15-research-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 15 — Research SDK
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 15 — Research SDK">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599913" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.13
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-16-marketplace-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 16 — Marketplace (Future)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 16 — Marketplace (Future)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599914" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.14
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-17-security-sandbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 17 — Security Sandbox
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 17 — Security Sandbox">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599915" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.15
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-18-plugin-testing-framework" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 18 — Plugin Testing Framework
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 18 — Plugin Testing Framework">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599916" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.16
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-19-developer-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 19 — Developer CLI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 19 — Developer CLI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599917" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.17
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-20-plugin-documentation-generator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 20 — Plugin Documentation Generator
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 20 — Plugin Documentation Generator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599918" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.18
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-21-plugin-health-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 21 — Plugin Health Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 21 — Plugin Health Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599919" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.19
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-22-enterprise-governance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 22 — Enterprise Governance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 22 — Enterprise Governance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-599920" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.999.20
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-23-acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 23 — Acceptance Criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#final-architectural-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Final Architectural Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="volume-5999-enterprise-sdk-plugin-ecosystem">Volume 5.999 — Enterprise SDK &amp; Plugin Ecosystem<a class="headerlink" href="#volume-5999-enterprise-sdk-plugin-ecosystem" title="Permanent link">&para;</a></h1>
+<p>This volume completes the QuantStack architecture by transforming the system from an <em>application</em> into a <em>platform</em>. Every capability — data collectors, indicators, ML models, strategies, risk engines, notification channels, dashboards — becomes an installable plugin built against a stable SDK, so new functionality can be added without touching core code. It defines the plugin manifest, SDK surfaces, lifecycle management, registry, dependency resolution, permissions, sandboxing, developer tooling, and enterprise governance, and closes with the recommendation to freeze the architecture and move to implementation.</p>
+<div class="admonition note">
+<p class="admonition-title">Design lineage</p>
+<p>This is the same architectural philosophy used by mature enterprise software: <strong>Kubernetes</strong> (plugins), <strong>Grafana</strong> (plugins), <strong>VS Code</strong> (extensions), <strong>Apache Airflow</strong> (operators), and <strong>ElasticSearch</strong> (plugins). Instead of writing features directly into the core, everything is pluggable — the largest architectural improvement of the entire roadmap.</p>
+</div>
+<h2 id="mission">Mission<a class="headerlink" href="#mission" title="Permanent link">&para;</a></h2>
+<p>Turn the platform from an <strong>Application</strong> into a <strong>Platform</strong>.</p>
+<p>A platform means: other developers → install plugins → restart → new capabilities appear — <strong>without touching the core code</strong>.</p>
+<h2 id="philosophy">Philosophy<a class="headerlink" href="#philosophy" title="Permanent link">&para;</a></h2>
+<p>The core system stays <strong>stable</strong>; plugins provide <strong>everything else</strong>. The core should know nothing about:</p>
+<ul>
+<li>Angel One</li>
+<li>Telegram</li>
+<li>OpenAI</li>
+<li>News APIs</li>
+<li>Specific indicators</li>
+<li>Specific models</li>
+<li>Specific strategies</li>
+</ul>
+<p>Everything should be plugins.</p>
+<h2 id="new-architecture">New Architecture<a class="headerlink" href="#new-architecture" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>                     CORE PLATFORM
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>------------------------------------------------------
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  Plugin Loader        Plugin Registry     Plugin Manager
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>  Dependency Manager   Permission Manager  Version Manager
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>  SDK                  Event Bus           Configuration
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>  Health Monitor
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>------------------------------------------------------
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                   Installed Plugins
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>  Collectors      Indicators      Feature Engines
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>  ML Models       Strategies      Risk Engines
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>  LLMs            Notifications   Dashboards
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>  Research        Reports         Exporters
+</code></pre></div>
+<pre class="mermaid"><code>flowchart TD
+    subgraph CORE["Core Platform (stable)"]
+        PL["Plugin Loader"]
+        PR["Plugin Registry"]
+        PM["Plugin Manager"]
+        DM["Dependency Manager"]
+        PE["Permission Manager"]
+        VM["Version Manager"]
+        SDK["Plugin SDK"]
+        EB["Event Bus"]
+        HM["Health Monitor"]
+    end
+    subgraph PLUGINS["Installed Plugins (everything else)"]
+        C["Collectors (Angel One, Polygon.io, Yahoo Finance)"]
+        M["ML Models &amp; Feature Engines"]
+        S["Strategies &amp; Risk Engines"]
+        N["Notifications (Telegram, Slack, Discord)"]
+        D["Dashboards, Research &amp; Exporters"]
+    end
+    PL --&gt; PR --&gt; PM
+    PM --&gt; DM
+    PM --&gt; PE
+    PM --&gt; VM
+    SDK --&gt; EB
+    HM --&gt; PLUGINS
+    C --&gt; SDK
+    M --&gt; SDK
+    S --&gt; SDK
+    N --&gt; SDK
+    D --&gt; SDK</code></pre>
+<h2 id="chapter-1-sdk-philosophy">Chapter 1 — SDK Philosophy<a class="headerlink" href="#chapter-1-sdk-philosophy" title="Permanent link">&para;</a></h2>
+<p>Every extension must implement the same contract chain:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Plugin → Manifest → Configuration → Lifecycle → Health Check → Events
+</code></pre></div>
+<p>Everything behaves identically.</p>
+<h2 id="chapter-2-plugin-types">Chapter 2 — Plugin Types<a class="headerlink" href="#chapter-2-plugin-types" title="Permanent link">&para;</a></h2>
+<p>The platform supports the following plugin types. Never hardcode plugin types.</p>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Plugin Types</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data</td>
+<td>Collector Plugin, Storage Plugin, Export Plugin</td>
+</tr>
+<tr>
+<td>Analytics</td>
+<td>Feature Plugin, Market Intelligence Plugin, Prediction Plugin</td>
+</tr>
+<tr>
+<td>Trading Logic</td>
+<td>Strategy Plugin, Risk Plugin, Decision Plugin, Simulation Plugin, Signal Plugin</td>
+</tr>
+<tr>
+<td>Presentation</td>
+<td>Dashboard Plugin, Visualization Plugin, Notification Plugin</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Research Plugin, Authentication Plugin</td>
+</tr>
+</tbody>
+</table>
+<h2 id="chapter-3-plugin-manifest">Chapter 3 — Plugin Manifest<a class="headerlink" href="#chapter-3-plugin-manifest" title="Permanent link">&para;</a></h2>
+<p>Every plugin declares its identity, requirements, and contracts through a manifest.</p>
+<h3 id="prompt-59991">Prompt 5.999.1<a class="headerlink" href="#prompt-59991" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Build a Plugin Manifest Specification.
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>Every plugin declares:
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>Plugin ID
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>Plugin Name
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>Version
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>Author
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>Description
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>Dependencies
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>Permissions
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>Compatible Platform Version
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>Configuration Schema
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>Entry Point
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>Health Endpoint
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>Supported Events
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>Output Contracts
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>Support semantic versioning.
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>Reject incompatible plugins.
+</code></pre></div>
+<h2 id="chapter-4-plugin-sdk">Chapter 4 — Plugin SDK<a class="headerlink" href="#chapter-4-plugin-sdk" title="Permanent link">&para;</a></h2>
+<p>Plugins must never access internal modules directly — the SDK exposes stable interfaces only.</p>
+<h3 id="prompt-59992">Prompt 5.999.2<a class="headerlink" href="#prompt-59992" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Build a Plugin SDK.
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>Expose APIs for:
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>Logging
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>Configuration
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>Database
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>Redis
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>Feature Store
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>Market State
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>Decision Objects
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>Event Bus
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>Metrics
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>Health Checks
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>Authentication
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>Plugins must never access internal modules directly.
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>Expose stable interfaces only.
+</code></pre></div>
+<h2 id="chapter-5-plugin-lifecycle">Chapter 5 — Plugin Lifecycle<a class="headerlink" href="#chapter-5-plugin-lifecycle" title="Permanent link">&para;</a></h2>
+<p>Every plugin behaves the same, moving through a managed lifecycle:</p>
+<pre class="mermaid"><code>flowchart TD
+    A["Install"] --&gt; B["Validate"]
+    B --&gt; C["Initialize"]
+    C --&gt; D["Start"]
+    D --&gt; E["Running"]
+    E --&gt; F["Pause"]
+    F --&gt; G["Resume"]
+    G --&gt; E
+    E --&gt; H["Upgrade"]
+    H --&gt; E
+    E --&gt; I["Stop"]
+    I --&gt; J["Uninstall"]</code></pre>
+<h3 id="prompt-59993">Prompt 5.999.3<a class="headerlink" href="#prompt-59993" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Implement Plugin Lifecycle.
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>Support:
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>Installation
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>Initialization
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>Validation
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>Upgrade
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>Downgrade
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>Restart
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>Rollback
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>Removal
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>Track lifecycle events.
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>Persist plugin state.
+</code></pre></div>
+<h2 id="chapter-6-plugin-registry">Chapter 6 — Plugin Registry<a class="headerlink" href="#chapter-6-plugin-registry" title="Permanent link">&para;</a></h2>
+<h3 id="prompt-59994">Prompt 5.999.4<a class="headerlink" href="#prompt-59994" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Build a Plugin Registry.
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>Store:
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>Installed Plugins
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>Plugin Metadata
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>Dependencies
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>Configuration
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>Permissions
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>Versions
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>Health
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>Enable:
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>Search
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>Install
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>Update
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>Disable
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>Remove
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>Rollback
+</code></pre></div>
+<h2 id="chapter-7-dependency-resolver">Chapter 7 — Dependency Resolver<a class="headerlink" href="#chapter-7-dependency-resolver" title="Permanent link">&para;</a></h2>
+<h3 id="prompt-59995">Prompt 5.999.5<a class="headerlink" href="#prompt-59995" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Automatically resolve dependencies.
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>Detect:
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>Version conflicts
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>Circular dependencies
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>Missing plugins
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>Incompatible APIs
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>Prevent startup if dependencies fail.
+</code></pre></div>
+<h2 id="chapter-8-permission-engine">Chapter 8 — Permission Engine<a class="headerlink" href="#chapter-8-permission-engine" title="Permanent link">&para;</a></h2>
+<p>Plugins shouldn't do everything. Access is explicit and audited.</p>
+<h3 id="prompt-59996">Prompt 5.999.6<a class="headerlink" href="#prompt-59996" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Build Plugin Permissions.
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>Permissions include:
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>Read Features
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>Write Features
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>Read Decisions
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>Publish Events
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>Database Access
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>Internet Access
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>Notification Access
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>Trading Access
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>Dashboard Access
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>Research Access
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>Audit every permission usage.
+</code></pre></div>
+<h2 id="chapter-9-event-sdk">Chapter 9 — Event SDK<a class="headerlink" href="#chapter-9-event-sdk" title="Permanent link">&para;</a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Plugins communicate <strong>only</strong> through events — never by calling each other directly.</p>
+</div>
+<h3 id="prompt-59997">Prompt 5.999.7<a class="headerlink" href="#prompt-59997" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>Expose Event SDK.
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>Plugins subscribe to:
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>Market Updates
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>Feature Updates
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>Predictions
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>Signals
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>Risk
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>Simulation
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>News
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>Custom Events
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>Support:
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>Priority
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>Retries
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>Filtering
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>Dead Letter Queue
+</code></pre></div>
+<h2 id="chapter-10-collector-plugins">Chapter 10 — Collector Plugins<a class="headerlink" href="#chapter-10-collector-plugins" title="Permanent link">&para;</a></h2>
+<p>Every data source becomes a plugin — for example: <strong>Angel One</strong> → plugin, <strong>Polygon.io</strong> → plugin, <strong>Yahoo Finance</strong> → plugin, <strong>Custom Exchange</strong> → plugin.</p>
+<h3 id="prompt-59998">Prompt 5.999.8<a class="headerlink" href="#prompt-59998" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>Build Collector Plugin API.
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>Plugins expose:
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>Collect
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>Validate
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>Normalize
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>Publish
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>Health
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>Schedule
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>Support multiple collectors simultaneously.
+</code></pre></div>
+<h2 id="chapter-11-ml-plugin-sdk">Chapter 11 — ML Plugin SDK<a class="headerlink" href="#chapter-11-ml-plugin-sdk" title="Permanent link">&para;</a></h2>
+<p>Instead of hardcoding LightGBM, support <strong>any</strong> model as a plugin.</p>
+<h3 id="prompt-59999">Prompt 5.999.9<a class="headerlink" href="#prompt-59999" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>Build Model Plugin SDK.
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>Support:
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>Training
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>Prediction
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>Explainability
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>Calibration
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>Validation
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>Versioning
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>Metadata
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>Model Health
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>Inference Metrics
+</code></pre></div>
+<h2 id="chapter-12-strategy-plugin-sdk">Chapter 12 — Strategy Plugin SDK<a class="headerlink" href="#chapter-12-strategy-plugin-sdk" title="Permanent link">&para;</a></h2>
+<p>Strategies become installable.</p>
+<h3 id="prompt-599910">Prompt 5.999.10<a class="headerlink" href="#prompt-599910" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>Build Strategy SDK.
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>Every strategy exposes:
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>Entry Logic
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>Exit Logic
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>Risk
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>Filters
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>Parameters
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>Supported Markets
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>Version
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>Expected Features
+</code></pre></div>
+<h2 id="chapter-13-dashboard-sdk">Chapter 13 — Dashboard SDK<a class="headerlink" href="#chapter-13-dashboard-sdk" title="Permanent link">&para;</a></h2>
+<p>Users create their own dashboards.</p>
+<h3 id="prompt-599911">Prompt 5.999.11<a class="headerlink" href="#prompt-599911" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>Build Dashboard Plugin SDK.
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>Support:
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>Widgets
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>Charts
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>Tables
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>Heatmaps
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>Indicators
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>Custom Panels
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>Permissions
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>Theme Integration
+</code></pre></div>
+<h2 id="chapter-14-notification-sdk">Chapter 14 — Notification SDK<a class="headerlink" href="#chapter-14-notification-sdk" title="Permanent link">&para;</a></h2>
+<p>Telegram today; tomorrow Discord, Slack, Email, Push — all as plugins.</p>
+<h3 id="prompt-599912">Prompt 5.999.12<a class="headerlink" href="#prompt-599912" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>Build Notification SDK.
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>Support:
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>Telegram
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>Slack
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>Discord
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>Email
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>Webhooks
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>Push Notifications
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>SMS
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>Allow third-party notification plugins.
+</code></pre></div>
+<h2 id="chapter-15-research-sdk">Chapter 15 — Research SDK<a class="headerlink" href="#chapter-15-research-sdk" title="Permanent link">&para;</a></h2>
+<p>Researchers build experiments on top of the platform.</p>
+<h3 id="prompt-599913">Prompt 5.999.13<a class="headerlink" href="#prompt-599913" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>Expose Research SDK.
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>Support:
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>Candidate Features
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>Models
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>Experiments
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>Benchmarks
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>Validation
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>Leaderboard
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>Paper Generation
+</code></pre></div>
+<h2 id="chapter-16-marketplace-future">Chapter 16 — Marketplace (Future)<a class="headerlink" href="#chapter-16-marketplace-future" title="Permanent link">&para;</a></h2>
+<p>The end-state vision: community → shares plugin → click install → works.</p>
+<h3 id="prompt-599914">Prompt 5.999.14<a class="headerlink" href="#prompt-599914" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>Design a Plugin Marketplace.
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>Support:
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>Publishing
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>Ratings
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>Reviews
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>Security Verification
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>Compatibility Checks
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>Auto Updates
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>Licensing
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>Digital Signatures
+</code></pre></div>
+<h2 id="chapter-17-security-sandbox">Chapter 17 — Security Sandbox<a class="headerlink" href="#chapter-17-security-sandbox" title="Permanent link">&para;</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Never trust plugins</p>
+<p>All plugins execute in a sandbox with hard resource and access restrictions. Malicious behavior is detected and compromised plugins are disabled automatically.</p>
+</div>
+<h3 id="prompt-599915">Prompt 5.999.15<a class="headerlink" href="#prompt-599915" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>Sandbox plugins.
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>Restrict:
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>Filesystem
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>Network
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>Database
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>Secrets
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>Memory
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>CPU
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>Detect malicious behavior.
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a>Automatically disable compromised plugins.
+</code></pre></div>
+<h2 id="chapter-18-plugin-testing-framework">Chapter 18 — Plugin Testing Framework<a class="headerlink" href="#chapter-18-plugin-testing-framework" title="Permanent link">&para;</a></h2>
+<h3 id="prompt-599916">Prompt 5.999.16<a class="headerlink" href="#prompt-599916" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>Provide testing SDK.
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>Support:
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>Unit Tests
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>Integration Tests
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>Mock Event Bus
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>Mock Feature Store
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>Mock Market State
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>Performance Benchmarks
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a>Compatibility Validation
+</code></pre></div>
+<h2 id="chapter-19-developer-cli">Chapter 19 — Developer CLI<a class="headerlink" href="#chapter-19-developer-cli" title="Permanent link">&para;</a></h2>
+<p>A dedicated CLI is a huge productivity gain for plugin developers.</p>
+<h3 id="prompt-599917">Prompt 5.999.17<a class="headerlink" href="#prompt-599917" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>Build Platform CLI.
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>Commands:
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>create-plugin
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>validate-plugin
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>install-plugin
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>remove-plugin
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>upgrade-plugin
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>test-plugin
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a>publish-plugin
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a>benchmark-plugin
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a>generate-docs
+</code></pre></div>
+<h2 id="chapter-20-plugin-documentation-generator">Chapter 20 — Plugin Documentation Generator<a class="headerlink" href="#chapter-20-plugin-documentation-generator" title="Permanent link">&para;</a></h2>
+<p>Automatically document plugins from their metadata and interfaces.</p>
+<h3 id="prompt-599918">Prompt 5.999.18<a class="headerlink" href="#prompt-599918" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>Generate documentation.
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>Include:
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>Interfaces
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>Configuration
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>Permissions
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>Dependencies
+<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>Events
+<a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a>Examples
+<a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>API Reference
+<a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a>
+<a id="__codelineno-19-13" name="__codelineno-19-13" href="#__codelineno-19-13"></a>Markdown + HTML output.
+</code></pre></div>
+<h2 id="chapter-21-plugin-health-engine">Chapter 21 — Plugin Health Engine<a class="headerlink" href="#chapter-21-plugin-health-engine" title="Permanent link">&para;</a></h2>
+<p>Every plugin gets monitored continuously.</p>
+<h3 id="prompt-599919">Prompt 5.999.19<a class="headerlink" href="#prompt-599919" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>Measure:
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>Latency
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>Errors
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>Memory
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>CPU
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>Health
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>Availability
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>Restarts
+<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>Version
+<a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a>
+<a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a>Generate plugin health dashboard.
+</code></pre></div>
+<h2 id="chapter-22-enterprise-governance">Chapter 22 — Enterprise Governance<a class="headerlink" href="#chapter-22-enterprise-governance" title="Permanent link">&para;</a></h2>
+<p>For institutional users, plugin operations are governed by policy.</p>
+<h3 id="prompt-599920">Prompt 5.999.20<a class="headerlink" href="#prompt-599920" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>Implement governance.
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>Support:
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a>Plugin Approval Workflow
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a>Role-Based Access
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a>Organization Policies
+<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a>Plugin Signing
+<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a>Audit Logs
+<a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a>Compliance Reports
+<a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a>Version Locking
+</code></pre></div>
+<h2 id="chapter-23-acceptance-criteria">Chapter 23 — Acceptance Criteria<a class="headerlink" href="#chapter-23-acceptance-criteria" title="Permanent link">&para;</a></h2>
+<div class="admonition success">
+<p class="admonition-title">Acceptance criteria</p>
+<p>Before starting <strong>Volume 6</strong>, the platform must satisfy all of the following.</p>
+<p><strong>Platform Foundation</strong></p>
+<ul>
+<li>Core services run independently of plugins.</li>
+<li>All major capabilities are exposed through stable SDK interfaces.</li>
+</ul>
+<p><strong>Extensibility</strong></p>
+<ul>
+<li>New collectors, models, strategies, risk engines, dashboards, and notification channels can be added without modifying the core application.</li>
+<li>Plugins declare metadata, permissions, and compatibility through manifests.</li>
+</ul>
+<p><strong>Reliability</strong></p>
+<ul>
+<li>Plugin lifecycle (install, upgrade, rollback, uninstall) is fully managed.</li>
+<li>Dependency resolution prevents incompatible combinations.</li>
+<li>Plugin failures are isolated and do not crash the platform.</li>
+</ul>
+<p><strong>Security</strong></p>
+<ul>
+<li>Plugins run with explicit permissions.</li>
+<li>Sensitive resources (credentials, database, network) are governed by policy.</li>
+<li>Audit logs capture installation, upgrades, permission changes, and runtime actions.</li>
+</ul>
+<p><strong>Developer Experience</strong></p>
+<ul>
+<li>SDKs exist for all major extension points.</li>
+<li>CLI tooling supports plugin creation, testing, packaging, and publishing.</li>
+<li>Documentation is generated automatically from plugin metadata and interfaces.</li>
+</ul>
+<p><strong>Operations</strong></p>
+<ul>
+<li>Plugin health is monitored continuously.</li>
+<li>Governance supports enterprise deployment and compliance requirements.</li>
+</ul>
+</div>
+<h2 id="final-architectural-recommendation">Final Architectural Recommendation<a class="headerlink" href="#final-architectural-recommendation" title="Permanent link">&para;</a></h2>
+<p>At this point, the architecture should be <strong>frozen</strong>. From <strong>Volume 1</strong> through <strong>Volume 5.999</strong>, the design covers:</p>
+<ul>
+<li>A modular data collection platform.</li>
+<li>A feature engineering and feature store system.</li>
+<li>A market intelligence layer.</li>
+<li>Ensemble prediction and conviction engines.</li>
+<li>A self-improving research platform.</li>
+<li>Opportunity portfolio optimization.</li>
+<li>Decision orchestration with auditable evidence.</li>
+<li>Digital twin simulation and stress testing.</li>
+<li>Signal orchestration and packaging.</li>
+<li>A fully extensible enterprise plugin ecosystem.</li>
+</ul>
+<p>This is no longer just a Telegram signal generator — it is the blueprint for a <strong>general-purpose quantitative intelligence platform</strong>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Do not add more architectural layers</p>
+<p>No further architectural layers should be added before implementation. Any additional layer now is likely to increase complexity more than it increases value.</p>
+</div>
+<p>The next phase shifts from <strong>architecture</strong> to <strong>implementation</strong>, beginning with <strong>Volume 6: Risk Management &amp; Trade Construction</strong> — deterministic position sizing, entry zones, stop-loss logic, profit targets, trade management rules, and capital allocation policies that consume the Decision Object and produce the final executable trade plan.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../volume-5-99/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Volume 5.99 — Signal Orchestration (SOEFE)">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Volume 5.99 — Signal Orchestration (SOEFE)
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../volume-6/" class="md-footer__link md-footer__link--next" aria-label="Next: Volume 6 — Risk &amp; Trade Construction">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Volume 6 — Risk & Trade Construction
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "toc.follow", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

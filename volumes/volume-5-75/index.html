@@ -1,0 +1,3283 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="QuantStack — an enterprise quantitative intelligence platform. Architecture specification for an institutional-grade AI trading signal system (Angel One SmartAPI, ensemble ML, LLM explainability, Telegram delivery).">
+      
+      
+        <meta name="author" content="QuantStack">
+      
+      
+        <link rel="canonical" href="https://jayasati.github.io/QuantStack/volumes/volume-5-75/">
+      
+      
+        <link rel="prev" href="../volume-5-5/">
+      
+      
+        <link rel="next" href="../volume-5-9/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Volume 5.75 — Opportunity Portfolio Intelligence (OPIE) - QuantStack</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#volume-575-opportunity-portfolio-intelligence-engine-opie" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="QuantStack" class="md-header__button md-logo" aria-label="QuantStack" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            QuantStack
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Volume 5.75 — Opportunity Portfolio Intelligence (OPIE)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/jayasati/QuantStack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jayasati/QuantStack
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../overview/architecture-review/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Overview
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../volume-1/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Volumes
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../implementation-guide/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Implementation Guide
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../backlog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Backlog
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../roadmap/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Roadmap
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../glossary/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Glossary
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="QuantStack" class="md-nav__button md-logo" aria-label="QuantStack" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    QuantStack
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/jayasati/QuantStack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jayasati/QuantStack
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Overview
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/architecture-review/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Review
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../overview/master-blueprint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Master Blueprint
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volumes
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Volumes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 1 — Foundation & System Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 2 — Data Collection & Market Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-3/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 3 — Feature Store & Data Quality
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-4/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 4 — Market Intelligence & Regime Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5 — Opportunity Detection & Conviction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.5 — Alpha Research Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.75 — Opportunity Portfolio Intelligence (OPIE)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.75 — Opportunity Portfolio Intelligence (OPIE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mission
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#new-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-1-why-opportunity-portfolio-intelligence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 1 — Why Opportunity Portfolio Intelligence?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-2-opportunity-universe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 2 — Opportunity Universe
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 2 — Opportunity Universe">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5751-opportunity-universe-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.1 — Opportunity Universe Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-3-opportunity-similarity-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 3 — Opportunity Similarity Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 3 — Opportunity Similarity Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5752-opportunity-similarity-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.2 — Opportunity Similarity Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-4-opportunity-clustering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 4 — Opportunity Clustering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 4 — Opportunity Clustering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5753-opportunity-clustering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.3 — Opportunity Clustering
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-5-correlation-intelligence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 5 — Correlation Intelligence
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 5 — Correlation Intelligence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5754-correlation-intelligence-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.4 — Correlation Intelligence Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-6-exposure-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 6 — Exposure Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 6 — Exposure Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5755-exposure-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.5 — Exposure Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-7-opportunity-diversification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 7 — Opportunity Diversification
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 7 — Opportunity Diversification">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5756-diversification-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.6 — Diversification Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-8-opportunity-conflict-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 8 — Opportunity Conflict Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 8 — Opportunity Conflict Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5757-opportunity-conflict-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.7 — Opportunity Conflict Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-9-opportunity-competition-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 9 — Opportunity Competition Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 9 — Opportunity Competition Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5758-opportunity-competition-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.8 — Opportunity Competition Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-10-opportunity-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 10 — Opportunity Budget
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 10 — Opportunity Budget">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5759-opportunity-budget-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.9 — Opportunity Budget Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-11-dynamic-opportunity-ranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 11 — Dynamic Opportunity Ranking
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 11 — Dynamic Opportunity Ranking">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57510-dynamic-opportunity-ranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.10 — Dynamic Opportunity Ranking
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-12-signal-scheduling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 12 — Signal Scheduling
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 12 — Signal Scheduling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57511-signal-scheduling-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.11 — Signal Scheduling Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-13-opportunity-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 13 — Opportunity Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 13 — Opportunity Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57512-opportunity-lifecycle-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.12 — Opportunity Lifecycle Tracking
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-14-attention-intelligence-engine-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 14 — Attention Intelligence Engine (New)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 14 — Attention Intelligence Engine (New)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57513-attention-intelligence-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.13 — Attention Intelligence Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-15-opportunity-replay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 15 — Opportunity Replay
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 15 — Opportunity Replay">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57514-opportunity-replay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.14 — Opportunity Replay
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-16-opportunity-knowledge-graph-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 16 — Opportunity Knowledge Graph (New)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 16 — Opportunity Knowledge Graph (New)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57515-opportunity-knowledge-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.15 — Opportunity Knowledge Graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-17-opportunity-quality-score" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 17 — Opportunity Quality Score
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 17 — Opportunity Quality Score">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57516-opportunity-quality-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.16 — Opportunity Quality Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-18-telegram-feed-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 18 — Telegram Feed Optimizer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 18 — Telegram Feed Optimizer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57517-telegram-feed-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.17 — Telegram Feed Optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-19-acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 19 — Acceptance Criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommended-architectural-change-volume-59-decision-intelligence-meta-orchestrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended Architectural Change: Volume 5.9 — Decision Intelligence &amp; Meta-Orchestrator
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-9/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.9 — Decision Intelligence & Meta-Orchestrator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-95/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.95 — Simulation & Digital Twin Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-99/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.99 — Signal Orchestration (SOEFE)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-5-999/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 5.999 — Enterprise Plugin SDK
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-6/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 6 — Risk & Trade Construction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-6-1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 6.1 — Dual Risk Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-6-5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 6.5 — Trade Lifecycle Management
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-7/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 7 — AI Intelligence & Explainability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-8/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 8 — Workspace & User Experience
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-9/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 9 — Evaluation & Continuous Learning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../volume-10/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Volume 10 — Enterprise Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../implementation-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Implementation Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backlog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backlog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Roadmap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../glossary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Glossary
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#mission" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mission
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#new-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-1-why-opportunity-portfolio-intelligence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 1 — Why Opportunity Portfolio Intelligence?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-2-opportunity-universe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 2 — Opportunity Universe
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 2 — Opportunity Universe">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5751-opportunity-universe-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.1 — Opportunity Universe Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-3-opportunity-similarity-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 3 — Opportunity Similarity Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 3 — Opportunity Similarity Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5752-opportunity-similarity-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.2 — Opportunity Similarity Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-4-opportunity-clustering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 4 — Opportunity Clustering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 4 — Opportunity Clustering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5753-opportunity-clustering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.3 — Opportunity Clustering
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-5-correlation-intelligence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 5 — Correlation Intelligence
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 5 — Correlation Intelligence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5754-correlation-intelligence-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.4 — Correlation Intelligence Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-6-exposure-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 6 — Exposure Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 6 — Exposure Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5755-exposure-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.5 — Exposure Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-7-opportunity-diversification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 7 — Opportunity Diversification
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 7 — Opportunity Diversification">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5756-diversification-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.6 — Diversification Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-8-opportunity-conflict-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 8 — Opportunity Conflict Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 8 — Opportunity Conflict Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5757-opportunity-conflict-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.7 — Opportunity Conflict Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-9-opportunity-competition-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 9 — Opportunity Competition Engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 9 — Opportunity Competition Engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5758-opportunity-competition-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.8 — Opportunity Competition Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-10-opportunity-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 10 — Opportunity Budget
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 10 — Opportunity Budget">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-5759-opportunity-budget-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.9 — Opportunity Budget Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-11-dynamic-opportunity-ranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 11 — Dynamic Opportunity Ranking
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 11 — Dynamic Opportunity Ranking">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57510-dynamic-opportunity-ranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.10 — Dynamic Opportunity Ranking
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-12-signal-scheduling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 12 — Signal Scheduling
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 12 — Signal Scheduling">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57511-signal-scheduling-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.11 — Signal Scheduling Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-13-opportunity-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 13 — Opportunity Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 13 — Opportunity Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57512-opportunity-lifecycle-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.12 — Opportunity Lifecycle Tracking
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-14-attention-intelligence-engine-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 14 — Attention Intelligence Engine (New)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 14 — Attention Intelligence Engine (New)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57513-attention-intelligence-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.13 — Attention Intelligence Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-15-opportunity-replay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 15 — Opportunity Replay
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 15 — Opportunity Replay">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57514-opportunity-replay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.14 — Opportunity Replay
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-16-opportunity-knowledge-graph-new" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 16 — Opportunity Knowledge Graph (New)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 16 — Opportunity Knowledge Graph (New)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57515-opportunity-knowledge-graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.15 — Opportunity Knowledge Graph
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-17-opportunity-quality-score" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 17 — Opportunity Quality Score
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 17 — Opportunity Quality Score">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57516-opportunity-quality-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.16 — Opportunity Quality Engine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-18-telegram-feed-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 18 — Telegram Feed Optimizer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Chapter 18 — Telegram Feed Optimizer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prompt-57517-telegram-feed-optimizer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompt 5.75.17 — Telegram Feed Optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chapter-19-acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chapter 19 — Acceptance Criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommended-architectural-change-volume-59-decision-intelligence-meta-orchestrator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommended Architectural Change: Volume 5.9 — Decision Intelligence &amp; Meta-Orchestrator
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="volume-575-opportunity-portfolio-intelligence-engine-opie">Volume 5.75 — Opportunity Portfolio Intelligence Engine (OPIE)<a class="headerlink" href="#volume-575-opportunity-portfolio-intelligence-engine-opie" title="Permanent link">&para;</a></h1>
+<p>The Opportunity Portfolio Intelligence Engine (OPIE) sits between the Conviction layer and Telegram delivery, and answers a question the Prediction Engine cannot: <em>how good is this trade compared with every other trade available right now?</em> Because QuantStack does not manage capital — it manages user attention through a bandwidth-limited Telegram channel — OPIE ranks, clusters, de-duplicates, schedules, and budgets every opportunity so that only high-quality, diversified, context-aware signals reach the delivery layer. This is the layer most trading systems never build, and it is closer to how professional trading desks operate than simple score-based signal feeds.</p>
+<div class="admonition note">
+<p class="admonition-title">Why the name OPIE?</p>
+<p>The volume was originally titled "Portfolio Intelligence" but was renamed because the platform is <strong>not managing capital yet — it is managing attention</strong>. If the system produces 150 opportunities per day, sending all of them makes the platform almost useless. OPIE asks: <em>"Out of every opportunity in the market, which few deserve the user's attention?"</em></p>
+</div>
+<h2 id="mission">Mission<a class="headerlink" href="#mission" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Engine</th>
+<th>Question it answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Prediction Engine</td>
+<td>How good is this trade?</td>
+</tr>
+<tr>
+<td>Opportunity Portfolio Intelligence Engine</td>
+<td>How good is this trade compared with every other trade available right now?</td>
+</tr>
+</tbody>
+</table>
+<p>These are entirely different optimization problems.</p>
+<h2 id="new-architecture">New Architecture<a class="headerlink" href="#new-architecture" title="Permanent link">&para;</a></h2>
+<p>The previous pipeline:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Prediction
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>      ↓
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Conviction
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>      ↓
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Telegram
+</code></pre></div>
+<p>is replaced by:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Prediction
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>      ↓
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>Conviction
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>      ↓
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>Opportunity Portfolio Intelligence
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>      ↓
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>Risk Budget Allocation
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>      ↓
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>Signal Prioritization
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>      ↓
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>Telegram
+</code></pre></div>
+<pre class="mermaid"><code>flowchart TD
+    P["Prediction Engine"] --&gt; CV["Conviction"]
+    CV --&gt; U["Opportunity Universe"]
+    U --&gt; SIM["Similarity Engine &amp; Clustering"]
+    U --&gt; COR["Correlation Intelligence"]
+    U --&gt; EXP["Exposure Engine"]
+    SIM --&gt; DIV["Diversification Engine"]
+    COR --&gt; DIV
+    EXP --&gt; DIV
+    DIV --&gt; CF["Conflict Engine"]
+    CF --&gt; COMP["Competition Engine (Opportunity Rank)"]
+    COMP --&gt; Q["Opportunity Quality Score"]
+    Q --&gt; BUD["Opportunity Budget (Attention)"]
+    BUD --&gt; SCH["Signal Scheduling &amp; Dynamic Reranking"]
+    SCH --&gt; OPT["Telegram Feed Optimizer"]
+    OPT --&gt; TG["Telegram Delivery"]
+    AIE["Attention Intelligence Engine"] --&gt; OPT
+    KG["Opportunity Knowledge Graph"] --&gt; CF</code></pre>
+<h2 id="chapter-1-why-opportunity-portfolio-intelligence">Chapter 1 — Why Opportunity Portfolio Intelligence?<a class="headerlink" href="#chapter-1-why-opportunity-portfolio-intelligence" title="Permanent link">&para;</a></h2>
+<p>Suppose the system finds the following candidates today:</p>
+<table>
+<thead>
+<tr>
+<th>Instrument</th>
+<th>Direction</th>
+<th>Score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>INFY</td>
+<td>LONG</td>
+<td>88</td>
+</tr>
+<tr>
+<td>HDFC</td>
+<td>LONG</td>
+<td>90</td>
+</tr>
+<tr>
+<td>ICICI</td>
+<td>LONG</td>
+<td>91</td>
+</tr>
+<tr>
+<td>SBIN</td>
+<td>LONG</td>
+<td>92</td>
+</tr>
+<tr>
+<td>AXIS</td>
+<td>LONG</td>
+<td>89</td>
+</tr>
+<tr>
+<td>KOTAK</td>
+<td>LONG</td>
+<td>90</td>
+</tr>
+</tbody>
+</table>
+<p>This looks great — except these are almost the same trade. If banking crashes, all six lose together.</p>
+<p>Instead, the engine should decide:</p>
+<ul>
+<li><strong>Choose:</strong> SBIN</li>
+<li><strong>Reject:</strong> ICICI, AXIS, HDFC — <em>because sector exposure is too high</em></li>
+</ul>
+<div class="admonition success">
+<p class="admonition-title">Impact</p>
+<p>This single behavior — rejecting redundant, correlated signals — dramatically improves the quality of the Telegram feed.</p>
+</div>
+<h2 id="chapter-2-opportunity-universe">Chapter 2 — Opportunity Universe<a class="headerlink" href="#chapter-2-opportunity-universe" title="Permanent link">&para;</a></h2>
+<p>Before ranking, build today's universe of qualified candidates. Every opportunity is captured with a full attribute set and a unique identifier, and snapshots are persisted so any day can be replayed.</p>
+<p>Attributes stored per opportunity:</p>
+<ul>
+<li>Instrument, Sector, Industry</li>
+<li>Direction</li>
+<li>Expected Return, Expected Risk, Expected Volatility</li>
+<li>Conviction, Probability</li>
+<li>Liquidity, Market Structure</li>
+<li>Historical Analog</li>
+<li>Opportunity Lifetime, Expected Holding Period</li>
+<li>Correlation Group</li>
+</ul>
+<h3 id="prompt-5751-opportunity-universe-engine">Prompt 5.75.1 — Opportunity Universe Engine<a class="headerlink" href="#prompt-5751-opportunity-universe-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Build an Opportunity Universe Engine.
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>Collect every qualified trade candidate.
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>Store:
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>Instrument
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>Sector
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>Industry
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>Direction
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>Expected Return
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>Expected Risk
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>Conviction
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>Probability
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>Liquidity
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>Market Structure
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>Historical Analog
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>Opportunity Lifetime
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>Expected Holding Period
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>Expected Volatility
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>Correlation Group
+<a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>
+<a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>Assign every opportunity a unique Opportunity ID.
+<a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>Persist snapshots for replay.
+</code></pre></div>
+<h2 id="chapter-3-opportunity-similarity-engine">Chapter 3 — Opportunity Similarity Engine<a class="headerlink" href="#chapter-3-opportunity-similarity-engine" title="Permanent link">&para;</a></h2>
+<p>Retail systems compare scores. Institutional systems compare <strong>opportunities</strong>. The Similarity Engine measures how alike two candidates are across market-structure and statistical dimensions, produces an Opportunity Distance Matrix, and clusters similar trades.</p>
+<p>Similarity dimensions:</p>
+<ul>
+<li>Sector and Industry</li>
+<li>Correlation and Historical Correlation</li>
+<li>Cointegration</li>
+<li>Feature Similarity</li>
+<li>Market Structure and Trend Similarity</li>
+<li>Liquidity Similarity</li>
+<li>Macro Sensitivity</li>
+<li>Institutional Positioning</li>
+</ul>
+<h3 id="prompt-5752-opportunity-similarity-engine">Prompt 5.75.2 — Opportunity Similarity Engine<a class="headerlink" href="#prompt-5752-opportunity-similarity-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Build an Opportunity Similarity Engine.
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>Compare opportunities using:
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>Sector
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>Industry
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>Correlation
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>Historical Correlation
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>Cointegration
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>Feature Similarity
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>Market Structure
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>Trend Similarity
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>Liquidity Similarity
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>Macro Sensitivity
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>Institutional Positioning
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>Generate an Opportunity Distance Matrix.
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>Cluster similar trades.
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>Expose similarity APIs.
+</code></pre></div>
+<h2 id="chapter-4-opportunity-clustering">Chapter 4 — Opportunity Clustering<a class="headerlink" href="#chapter-4-opportunity-clustering" title="Permanent link">&para;</a></h2>
+<p>Opportunities are automatically grouped so redundancy can be detected and reasoned about at the cluster level.</p>
+<p><strong>Supported algorithms:</strong> KMeans, Hierarchical Clustering, DBSCAN, Spectral Clustering.</p>
+<p><strong>Example cluster types:</strong> Banking, IT, Momentum, Breakout, Mean Reversion, Event Driven, High Volatility, Low Liquidity.</p>
+<p>Cluster history is stored for later analysis and replay.</p>
+<h3 id="prompt-5753-opportunity-clustering">Prompt 5.75.3 — Opportunity Clustering<a class="headerlink" href="#prompt-5753-opportunity-clustering" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Automatically cluster opportunities.
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>Support:
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>KMeans
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>Hierarchical Clustering
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>DBSCAN
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>Spectral Clustering
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>Clusters may include:
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>Banking
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>IT
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>Momentum
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>Breakout
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>Mean Reversion
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>Event Driven
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>High Volatility
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>Low Liquidity
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>Store cluster history.
+</code></pre></div>
+<h2 id="chapter-5-correlation-intelligence">Chapter 5 — Correlation Intelligence<a class="headerlink" href="#chapter-5-correlation-intelligence" title="Permanent link">&para;</a></h2>
+<p>Correlation must be measured beyond sector labels. The engine maintains a continuously updated correlation graph and alerts when multiple live opportunities are highly correlated.</p>
+<p>Correlation measures computed:</p>
+<ul>
+<li>Rolling Correlation</li>
+<li>Partial Correlation</li>
+<li>Dynamic Correlation</li>
+<li>Tail Correlation</li>
+<li>Correlation Stability</li>
+<li>Cointegration</li>
+<li>Distance Correlation</li>
+</ul>
+<h3 id="prompt-5754-correlation-intelligence-engine">Prompt 5.75.4 — Correlation Intelligence Engine<a class="headerlink" href="#prompt-5754-correlation-intelligence-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Build a Correlation Intelligence Engine.
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>Calculate:
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>Rolling Correlation
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>Partial Correlation
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>Dynamic Correlation
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>Tail Correlation
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>Correlation Stability
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>Cointegration
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>Distance Correlation
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>Build a continuously updated correlation graph.
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>Alert when multiple opportunities are highly correlated.
+</code></pre></div>
+<h2 id="chapter-6-exposure-engine">Chapter 6 — Exposure Engine<a class="headerlink" href="#chapter-6-exposure-engine" title="Permanent link">&para;</a></h2>
+<p>Even without placing orders, the platform measures the aggregate exposure implied by the current signal set.</p>
+<p>Exposure dimensions:</p>
+<ul>
+<li>Sector, Industry, Market Cap</li>
+<li>Beta, Volatility</li>
+<li>Macro, Currency, Commodity</li>
+<li>Interest Rates</li>
+<li>Global Markets</li>
+</ul>
+<p>Outputs: <strong>Exposure Map</strong>, <strong>Exposure Concentration</strong>, <strong>Diversification Score</strong>.</p>
+<h3 id="prompt-5755-exposure-engine">Prompt 5.75.5 — Exposure Engine<a class="headerlink" href="#prompt-5755-exposure-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Build an Exposure Engine.
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>Measure exposure across:
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>Sector
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>Industry
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>Market Cap
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>Beta
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>Volatility
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>Macro
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>Currency
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>Commodity
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>Interest Rates
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>Global Markets
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>Generate:
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>Exposure Map
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>Exposure Concentration
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>Diversification Score
+</code></pre></div>
+<h2 id="chapter-7-opportunity-diversification">Chapter 7 — Opportunity Diversification<a class="headerlink" href="#chapter-7-opportunity-diversification" title="Permanent link">&para;</a></h2>
+<p>Given a large candidate pool (for example, 100 opportunities), select the subset that is jointly optimal — not just individually strong.</p>
+<table>
+<thead>
+<tr>
+<th>Maximize</th>
+<th>Minimize</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Expected Return</td>
+<td>Correlation</td>
+</tr>
+<tr>
+<td>Expected Conviction</td>
+<td>Sector Concentration</td>
+</tr>
+<tr>
+<td>Expected Diversity</td>
+<td>Factor Concentration</td>
+</tr>
+<tr>
+<td>Expected Opportunity Coverage</td>
+<td>Macro Concentration</td>
+</tr>
+</tbody>
+</table>
+<p>The engine outputs a Diversification Score for the selected subset.</p>
+<h3 id="prompt-5756-diversification-engine">Prompt 5.75.6 — Diversification Engine<a class="headerlink" href="#prompt-5756-diversification-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Build a Diversification Engine.
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>Given 100 opportunities, select the subset maximizing:
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>Expected Return
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>Expected Conviction
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>Expected Diversity
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>Expected Opportunity Coverage
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>Minimize:
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>Correlation
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>Sector Concentration
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>Factor Concentration
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>Macro Concentration
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>Generate Diversification Score.
+</code></pre></div>
+<h2 id="chapter-8-opportunity-conflict-engine">Chapter 8 — Opportunity Conflict Engine<a class="headerlink" href="#chapter-8-opportunity-conflict-engine" title="Permanent link">&para;</a></h2>
+<p>Some signals contradict others and must be detected before delivery.</p>
+<p>Example conflicts:</p>
+<ul>
+<li>BankNifty Bullish → Private Banks Bullish → <strong>PSU Banks Bearish</strong></li>
+<li>Nifty Bullish → <strong>Heavyweight Bearish</strong></li>
+</ul>
+<p>Outputs per conflict:</p>
+<ul>
+<li>Conflict Score</li>
+<li>Conflict Explanation</li>
+<li>Confidence Reduction</li>
+<li>Conflict Resolution Recommendation</li>
+</ul>
+<h3 id="prompt-5757-opportunity-conflict-engine">Prompt 5.75.7 — Opportunity Conflict Engine<a class="headerlink" href="#prompt-5757-opportunity-conflict-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>Detect conflicting opportunities.
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>Examples:
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>BankNifty Bullish -&gt; Private Banks Bullish -&gt; PSU Banks Bearish
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>Nifty Bullish -&gt; Heavyweight Bearish
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>Generate:
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>Conflict Score
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>Conflict Explanation
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>Confidence Reduction
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>Conflict Resolution Recommendation
+</code></pre></div>
+<h2 id="chapter-9-opportunity-competition-engine">Chapter 9 — Opportunity Competition Engine<a class="headerlink" href="#chapter-9-opportunity-competition-engine" title="Permanent link">&para;</a></h2>
+<p>Multiple trades compete for limited delivery slots; the Competition Engine chooses winners by ranking every candidate.</p>
+<p>Ranking factors:</p>
+<ul>
+<li>Conviction</li>
+<li>Expected Return</li>
+<li>Liquidity</li>
+<li>Market Intelligence</li>
+<li>Historical Win Rate</li>
+<li>Opportunity Lifetime</li>
+<li>Model Agreement</li>
+<li>Signal Quality</li>
+<li>Expected Drawdown</li>
+</ul>
+<p>Output: <strong>Opportunity Rank</strong>.</p>
+<h3 id="prompt-5758-opportunity-competition-engine">Prompt 5.75.8 — Opportunity Competition Engine<a class="headerlink" href="#prompt-5758-opportunity-competition-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>Build an Opportunity Competition Engine.
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>Rank candidates using:
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>Conviction
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>Expected Return
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>Liquidity
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>Market Intelligence
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>Historical Win Rate
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>Opportunity Lifetime
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>Model Agreement
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>Signal Quality
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>Expected Drawdown
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a>Generate Opportunity Rank.
+</code></pre></div>
+<h2 id="chapter-10-opportunity-budget">Chapter 10 — Opportunity Budget<a class="headerlink" href="#chapter-10-opportunity-budget" title="Permanent link">&para;</a></h2>
+<p>Even without trade execution, every signal consumes a scarce resource: user attention. <strong>Treat attention like capital.</strong></p>
+<p>Each opportunity consumes: Telegram Attention, Research Bandwidth, User Focus.</p>
+<p>Budget limits enforced:</p>
+<table>
+<thead>
+<tr>
+<th>Limit</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Maximum signals per hour</td>
+<td>Prevent flooding the channel</td>
+</tr>
+<tr>
+<td>Maximum signals per sector</td>
+<td>Prevent sector pile-ups</td>
+</tr>
+<tr>
+<td>Maximum correlated signals</td>
+<td>Prevent hidden concentration</td>
+</tr>
+<tr>
+<td>Maximum duplicate signals</td>
+<td>Prevent redundancy</td>
+</tr>
+</tbody>
+</table>
+<p>The engine tracks and exposes the remaining opportunity budget.</p>
+<h3 id="prompt-5759-opportunity-budget-engine">Prompt 5.75.9 — Opportunity Budget Engine<a class="headerlink" href="#prompt-5759-opportunity-budget-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>Build an Opportunity Budget Engine.
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>Every opportunity consumes:
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>Telegram Attention
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>Research Bandwidth
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>User Focus
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>Limit:
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>Maximum signals per hour
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>Maximum signals per sector
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>Maximum correlated signals
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>Maximum duplicate signals
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>Generate remaining opportunity budget.
+</code></pre></div>
+<h2 id="chapter-11-dynamic-opportunity-ranking">Chapter 11 — Dynamic Opportunity Ranking<a class="headerlink" href="#chapter-11-dynamic-opportunity-ranking" title="Permanent link">&para;</a></h2>
+<p>Rankings are not computed once — they are continuously recomputed whenever conditions change, and the Telegram queue is updated dynamically.</p>
+<p>Rerank triggers:</p>
+<ul>
+<li>Market Regime changes</li>
+<li>Liquidity changes</li>
+<li>Volatility changes</li>
+<li>Event Risk changes</li>
+<li>Model Confidence changes</li>
+<li>Institutional Flow changes</li>
+</ul>
+<h3 id="prompt-57510-dynamic-opportunity-ranking">Prompt 5.75.10 — Dynamic Opportunity Ranking<a class="headerlink" href="#prompt-57510-dynamic-opportunity-ranking" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>Implement Dynamic Opportunity Ranking.
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>Recompute rankings whenever:
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>Market Regime changes
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>Liquidity changes
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>Volatility changes
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>Event Risk changes
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>Model Confidence changes
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>Institutional Flow changes
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>Update Telegram queue dynamically.
+</code></pre></div>
+<h2 id="chapter-12-signal-scheduling">Chapter 12 — Signal Scheduling<a class="headerlink" href="#chapter-12-signal-scheduling" title="Permanent link">&para;</a></h2>
+<p>Not every signal should be sent immediately — a nuance most retail systems ignore. The Scheduling Engine assigns each signal a delivery decision, under configurable scheduling policies:</p>
+<ul>
+<li><strong>Immediate</strong> — send now</li>
+<li><strong>Delayed</strong> — send later</li>
+<li><strong>Wait Confirmation</strong> — hold until confirming conditions appear</li>
+<li><strong>Discard</strong> — never send</li>
+<li><strong>Batch</strong> — group with other signals</li>
+<li><strong>Expiration</strong> — drop once the opportunity window closes</li>
+</ul>
+<h3 id="prompt-57511-signal-scheduling-engine">Prompt 5.75.11 — Signal Scheduling Engine<a class="headerlink" href="#prompt-57511-signal-scheduling-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>Build a Signal Scheduling Engine.
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>Determine:
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>Immediate
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>Delayed
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>Wait Confirmation
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>Discard
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>Batch
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>Expiration
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>Support configurable scheduling policies.
+</code></pre></div>
+<h2 id="chapter-13-opportunity-lifecycle">Chapter 13 — Opportunity Lifecycle<a class="headerlink" href="#chapter-13-opportunity-lifecycle" title="Permanent link">&para;</a></h2>
+<p>Every opportunity moves through a tracked lifecycle:</p>
+<pre class="mermaid"><code>flowchart TD
+    A["Detected"] --&gt; B["Candidate"]
+    B --&gt; C["Ranked"]
+    C --&gt; D["Scheduled"]
+    D --&gt; E["Sent"]
+    E --&gt; F["Expired"]
+    F --&gt; G["Successful"]
+    G --&gt; H["Failed"]</code></pre>
+<p>For each opportunity, the platform stores: Creation, Ranking, Promotion, Delay, Expiration, Outcome, Success Rate, and Lifetime — maintaining a complete history.</p>
+<h3 id="prompt-57512-opportunity-lifecycle-tracking">Prompt 5.75.12 — Opportunity Lifecycle Tracking<a class="headerlink" href="#prompt-57512-opportunity-lifecycle-tracking" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>Track every opportunity.
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>Store:
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>Creation
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>Ranking
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>Promotion
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>Delay
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>Expiration
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>Outcome
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>Success Rate
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>Lifetime
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>Maintain complete history.
+</code></pre></div>
+<h2 id="chapter-14-attention-intelligence-engine-new">Chapter 14 — Attention Intelligence Engine (New)<a class="headerlink" href="#chapter-14-attention-intelligence-engine-new" title="Permanent link">&para;</a></h2>
+<p>A feature rarely found in open-source trading systems: learn how users actually consume signals, and adapt delivery accordingly — <strong>without changing trading logic</strong>.</p>
+<p>The engine learns:</p>
+<ul>
+<li>When users respond to signals</li>
+<li>Which signals get ignored</li>
+<li>Which sectors receive more engagement</li>
+<li>Which signal lengths perform best</li>
+<li>Which confidence levels users trust</li>
+</ul>
+<p>Outputs: Engagement Score, User Interest Score, Signal Timing Recommendation, Content Recommendation.</p>
+<h3 id="prompt-57513-attention-intelligence-engine">Prompt 5.75.13 — Attention Intelligence Engine<a class="headerlink" href="#prompt-57513-attention-intelligence-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>Build an Attention Intelligence Engine.
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>Learn:
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>When users respond to signals.
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>Which signals get ignored.
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>Which sectors receive more engagement.
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>Which signal lengths perform best.
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>Which confidence levels users trust.
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>Generate:
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>Engagement Score
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>User Interest Score
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>Signal Timing Recommendation
+<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>Content Recommendation
+<a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a>
+<a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a>This engine improves Telegram delivery without changing trading logic.
+</code></pre></div>
+<h2 id="chapter-15-opportunity-replay">Chapter 15 — Opportunity Replay<a class="headerlink" href="#chapter-15-opportunity-replay" title="Permanent link">&para;</a></h2>
+<p>Any trading day can be replayed end-to-end for auditing and research. The replay shows:</p>
+<ul>
+<li>All opportunities detected that day</li>
+<li>Ranking changes over the day</li>
+<li>Dropped opportunities</li>
+<li>Suppressed signals</li>
+<li>Final Telegram messages</li>
+</ul>
+<p>and explains <strong>why every opportunity was or was not delivered</strong>.</p>
+<h3 id="prompt-57514-opportunity-replay">Prompt 5.75.14 — Opportunity Replay<a class="headerlink" href="#prompt-57514-opportunity-replay" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>Replay any trading day.
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>Show:
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>All opportunities
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>Ranking changes
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>Dropped opportunities
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>Suppressed signals
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>Final Telegram messages
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>Explain why every opportunity was or was not delivered.
+</code></pre></div>
+<h2 id="chapter-16-opportunity-knowledge-graph-new">Chapter 16 — Opportunity Knowledge Graph (New)<a class="headerlink" href="#chapter-16-opportunity-knowledge-graph-new" title="Permanent link">&para;</a></h2>
+<p>This is where the platform becomes genuinely research-oriented: a graph linking every entity in the system.</p>
+<p><strong>Node types:</strong> Stocks, Sectors, Market Regimes, Macro Events, Features, Signals, Models, Historical Outcomes, Strategies.</p>
+<p><strong>Edge types:</strong> <code>influences</code>, <code>correlates_with</code>, <code>depends_on</code>, <code>invalidates</code>, <code>supports</code>.</p>
+<p><strong>Graph applications:</strong> conflict detection, similarity search, research, explainability, historical exploration.</p>
+<h3 id="prompt-57515-opportunity-knowledge-graph">Prompt 5.75.15 — Opportunity Knowledge Graph<a class="headerlink" href="#prompt-57515-opportunity-knowledge-graph" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>Build an Opportunity Knowledge Graph.
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>Represent:
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>Stocks
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>Sectors
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>Market Regimes
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>Macro Events
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>Features
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>Signals
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>Models
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>Historical Outcomes
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>Strategies
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a>
+<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a>Connections:
+<a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a>influences
+<a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a>correlates_with
+<a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a>depends_on
+<a id="__codelineno-16-18" name="__codelineno-16-18" href="#__codelineno-16-18"></a>invalidates
+<a id="__codelineno-16-19" name="__codelineno-16-19" href="#__codelineno-16-19"></a>supports
+<a id="__codelineno-16-20" name="__codelineno-16-20" href="#__codelineno-16-20"></a>
+<a id="__codelineno-16-21" name="__codelineno-16-21" href="#__codelineno-16-21"></a>Use the graph for:
+<a id="__codelineno-16-22" name="__codelineno-16-22" href="#__codelineno-16-22"></a>Conflict detection
+<a id="__codelineno-16-23" name="__codelineno-16-23" href="#__codelineno-16-23"></a>Similarity search
+<a id="__codelineno-16-24" name="__codelineno-16-24" href="#__codelineno-16-24"></a>Research
+<a id="__codelineno-16-25" name="__codelineno-16-25" href="#__codelineno-16-25"></a>Explainability
+<a id="__codelineno-16-26" name="__codelineno-16-26" href="#__codelineno-16-26"></a>Historical exploration.
+</code></pre></div>
+<h2 id="chapter-17-opportunity-quality-score">Chapter 17 — Opportunity Quality Score<a class="headerlink" href="#chapter-17-opportunity-quality-score" title="Permanent link">&para;</a></h2>
+<p>The last score computed before Telegram delivery. Instead of relying only on conviction, OPIE computes a comprehensive quality assessment.</p>
+<p>Inputs combined:</p>
+<ul>
+<li>Conviction</li>
+<li>Market Intelligence</li>
+<li>Signal Quality</li>
+<li>Diversification</li>
+<li>Correlation</li>
+<li>Historical Reliability</li>
+<li>Market Confidence</li>
+<li>Liquidity</li>
+<li>Model Agreement</li>
+</ul>
+<p>Outputs: <strong>Opportunity Score</strong>, <strong>Opportunity Grade</strong>, <strong>Priority</strong>, <strong>Confidence</strong>, <strong>Risk Class</strong>, <strong>Telegram Readiness</strong>.</p>
+<h3 id="prompt-57516-opportunity-quality-engine">Prompt 5.75.16 — Opportunity Quality Engine<a class="headerlink" href="#prompt-57516-opportunity-quality-engine" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>Build an Opportunity Quality Engine.
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>Combine:
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>Conviction
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>Market Intelligence
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>Signal Quality
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>Diversification
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>Correlation
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>Historical Reliability
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>Market Confidence
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a>Liquidity
+<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>Model Agreement
+<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a>
+<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a>Generate:
+<a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a>Opportunity Score
+<a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a>Opportunity Grade
+<a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a>Priority
+<a id="__codelineno-17-18" name="__codelineno-17-18" href="#__codelineno-17-18"></a>Confidence
+<a id="__codelineno-17-19" name="__codelineno-17-19" href="#__codelineno-17-19"></a>Risk Class
+<a id="__codelineno-17-20" name="__codelineno-17-20" href="#__codelineno-17-20"></a>Telegram Readiness
+</code></pre></div>
+<h2 id="chapter-18-telegram-feed-optimizer">Chapter 18 — Telegram Feed Optimizer<a class="headerlink" href="#chapter-18-telegram-feed-optimizer" title="Permanent link">&para;</a></h2>
+<p>The final decision-maker before any message is sent. For each delivery cycle it selects the optimal set of opportunities.</p>
+<p>Goals:</p>
+<ul>
+<li>Maximize information value</li>
+<li>Minimize redundancy</li>
+<li>Prevent alert fatigue</li>
+<li>Respect user attention budgets</li>
+</ul>
+<p>Configurable delivery modes:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Character</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Conservative</td>
+<td>Fewest, highest-confidence signals</td>
+</tr>
+<tr>
+<td>Balanced</td>
+<td>Default trade-off</td>
+</tr>
+<tr>
+<td>Aggressive</td>
+<td>More signals, higher tolerance</td>
+</tr>
+<tr>
+<td>Research</td>
+<td>Broader, exploration-oriented feed</td>
+</tr>
+<tr>
+<td>Institutional</td>
+<td>Desk-style prioritized feed</td>
+</tr>
+</tbody>
+</table>
+<h3 id="prompt-57517-telegram-feed-optimizer">Prompt 5.75.17 — Telegram Feed Optimizer<a class="headerlink" href="#prompt-57517-telegram-feed-optimizer" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>Build a Telegram Feed Optimizer.
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>Goals:
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>Maximize information value.
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>Minimize redundancy.
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>Prevent alert fatigue.
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>Respect user attention budgets.
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>Select the optimal set of opportunities for each delivery cycle.
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a>Support configurable delivery modes:
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a>Conservative
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a>Balanced
+<a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a>Aggressive
+<a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a>Research
+<a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a>Institutional
+</code></pre></div>
+<h2 id="chapter-19-acceptance-criteria">Chapter 19 — Acceptance Criteria<a class="headerlink" href="#chapter-19-acceptance-criteria" title="Permanent link">&para;</a></h2>
+<div class="admonition success">
+<p class="admonition-title">Acceptance criteria — before moving to Volume 6</p>
+<ul>
+<li>Every opportunity is compared against every other opportunity.</li>
+<li>Similar opportunities are clustered.</li>
+<li>Correlation and factor exposure are measured.</li>
+<li>Diversification is optimized.</li>
+<li>Opportunity conflicts are detected and explained.</li>
+<li>Telegram messages are scheduled intelligently rather than immediately.</li>
+<li>Attention budgets prevent signal overload.</li>
+<li>Opportunity replay explains every ranking decision.</li>
+<li>Knowledge Graph links opportunities, features, regimes, and historical outcomes.</li>
+<li>Only high-quality, diversified, and context-aware signals reach the Telegram delivery layer.</li>
+</ul>
+</div>
+<h2 id="recommended-architectural-change-volume-59-decision-intelligence-meta-orchestrator">Recommended Architectural Change: Volume 5.9 — Decision Intelligence &amp; Meta-Orchestrator<a class="headerlink" href="#recommended-architectural-change-volume-59-decision-intelligence-meta-orchestrator" title="Permanent link">&para;</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Foundational volume to insert before Risk Management</p>
+<p>Reviewing the complete system, one more foundational volume should be inserted before Risk Management: <strong>Volume 5.9 — Decision Intelligence &amp; Meta-Orchestrator</strong>. Instead of each engine making independent decisions, a central orchestration layer:</p>
+<ul>
+<li>Collects outputs from every engine.</li>
+<li>Resolves conflicts between modules.</li>
+<li>Applies business rules and policy constraints.</li>
+<li>Produces a single, auditable decision object.</li>
+<li>Tracks why a signal was approved, delayed, modified, or rejected.</li>
+<li>Feeds the LLM with a structured explanation instead of raw metrics.</li>
+</ul>
+<p>This creates a clean separation between <strong>analysis</strong> (everything built so far) and <strong>decision-making</strong> (what ultimately becomes a Telegram signal), making the platform easier to debug, audit, and extend over time.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../volume-5-5/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Volume 5.5 — Alpha Research Engine">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Volume 5.5 — Alpha Research Engine
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../volume-5-9/" class="md-footer__link md-footer__link--next" aria-label="Next: Volume 5.9 — Decision Intelligence &amp; Meta-Orchestrator">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Volume 5.9 — Decision Intelligence & Meta-Orchestrator
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "toc.follow", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
