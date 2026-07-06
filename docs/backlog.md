@@ -21,8 +21,7 @@ The seven domain collectors are fully implemented and tested against injectable 
 ### Other Volume 2 items
 
 - **Breadth universe size** — the breadth source tracks NIFTY 50 constituents (configurable `index` parameter). Expanding to NIFTY 500 needs ~500 daily-candle fetches for the EMA cache (~3 minutes once a day at broker rate limits) — decide whether the extra coverage is worth it.
-- **Sector volume ratio** — NSE index candles carry zero traded volume, so `volume_ratio` is a neutral 1.0 constant. A real ratio needs constituent-level volume aggregation per sector.
-- **Options Greeks: live activation pending** — the Angel One `optionGreek` enrichment is implemented and fixture-tested, but the endpoint returns "No Data Available" outside market hours, so gamma/delta exposure has not yet been observed live. Confirm on the next trading day. IV percentile is implemented and will start emitting automatically once ≥100 ATM-IV observations accumulate in `market_events`.
+- **IV percentile ramp-up** — implemented; starts emitting automatically once ≥100 ATM-IV observations accumulate (~10:55 IST on the first full trading day).
 - **FinBERT sentiment** — `SentimentProvider` in `app/collectors/domains/news.py` currently uses a lexicon. Swap in FinBERT (or another finance model) behind the same interface. Unblocked by: deciding on the inference dependency (transformers/onnx) and its container size cost.
 - **Market depth over WebSocket (20-level)** — the feed parses LTP and Quote modes (51/123 bytes); Snap Quote mode (379 bytes, includes 5-level depth) is not parsed yet. `app/market/angel_ws.py`.
 - **Raw tick retention policy** — `raw_ticks` grows unbounded at one row per symbol per 15s. Needs a retention/aggregation job (e.g., keep 7 days raw, downsample the rest).
@@ -42,6 +41,8 @@ Volumes 3 (Feature Store), 4 (Market Intelligence), 5 (Prediction & Conviction) 
 
 | Item | Resolution |
 |------|-----------|
+| Sector relative volume (Prompt 2.6) | Today's per-index volume from NSE `equity-stock-indices` (10-min cache), ratioed against our own stored end-of-day volume history; neutral 1.0 until ≥3 days accumulate (starts activating ~2026-07-09). Benchmark raw entry now persists in the summary record for history queries. |
+| Options Greeks live activation | Confirmed live on 2026-07-06: gamma_exposure and delta_exposure emitting with real Angel One Greeks during market hours. |
 | Prompt 2.4 completion: OI/volume distribution, IV percentile, Greeks, market-hours gating | `oi_distribution` (put-wall vs call-wall positioning) and `volume_distribution` (concentration, volume PCR, volume-weighted strike) verified live. IV percentile computes from our own stored ATM-IV history (min 100 observations). Greeks enrichment via Angel One `optionGreek` merges delta/gamma into chain legs. Market-hours-only collectors skip scheduled runs outside NSE hours (manual `/run` bypasses). |
 | Market breadth real feed (Prompt 2.5) | `app/collectors/sources/nse_breadth.py` — NIFTY 50 constituents + live quotes from NSE `equity-stock-indices`; EMAs (20/50/100/200) computed from broker daily candles with a daily cache. Verified live: 16 breadth metrics from 50 real constituents. |
 | Sector rotation real feed (Prompt 2.6) | `app/collectors/sources/broker_sectors.py` — twelve NSE sectoral indices via broker daily candles (4h cache). Sector list adjusted to indices that actually exist (PSU Bank / Private Bank replace Capital Goods / Defence, which have no NSE index in the broker universe). Verified live: 13 records. |

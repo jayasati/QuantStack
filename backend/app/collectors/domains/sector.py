@@ -167,7 +167,9 @@ class SectorRotationCollector(BaseCollector):
                     "leader": leader,
                     "laggard": laggard,
                     "rotation_intensity": rotation_intensity,
-                    "benchmark": benchmark,
+                    # Raw payload entry (not just required fields) so extras
+                    # like index_volume persist for volume-history queries.
+                    "benchmark": payload.get("benchmark"),
                 },
             )
         )
