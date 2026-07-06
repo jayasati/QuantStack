@@ -44,6 +44,7 @@ def wire_default_services() -> None:
     from app.core.config import get_settings
     from app.database.session import get_session_factory
     from app.events.bus import EventBus
+    from app.features.price import PriceFeatureEngine
     from app.market.angel_one import AngelOneAdapter
     from app.market.broker import BrokerInterface
 
@@ -58,5 +59,13 @@ def wire_default_services() -> None:
                 bus=container.resolve(EventBus),
                 session_factory=get_session_factory(),
             )
+        ),
+    )
+    container.register(
+        PriceFeatureEngine,
+        lambda: PriceFeatureEngine(
+            session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
+            cache=container.resolve(CacheService),
         ),
     )

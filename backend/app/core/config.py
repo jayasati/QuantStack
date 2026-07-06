@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     # Per-collector schedule overrides, e.g. {"news_intelligence": 300}.
     collector_intervals: dict[str, int] = Field(default_factory=dict)
 
+    # Feature engineering (Volume 3).
+    feature_windows: list[int] = Field(default_factory=lambda: [5, 10, 20, 50, 100, 200])
+    feature_timeframes: list[str] = Field(default_factory=lambda: ["D"])
+    feature_benchmark_symbol: str = "NIFTY"
+    feature_engine_interval: int = 300
+    # Candles loaded per run; must exceed the largest rolling window.
+    feature_candle_lookback: int = 500
+
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None
     angel_one_client_id: str | None = None

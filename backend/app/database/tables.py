@@ -53,18 +53,102 @@ class MarketEvent(Base):
     source: Mapped[str] = mapped_column(String(100))
 
 
-# --- Features ----------------------------------------------------------------
+# --- Features (Volume 3) -------------------------------------------------------
 
 class FeatureStoreRow(Base):
+    """Offline feature store: one row per feature observation (Prompt 3.1)."""
+
     __tablename__ = "feature_store"
+    __table_args__ = (
+        UniqueConstraint(
+            "feature_name", "feature_version", "symbol", "timeframe", "ts",
+            name="uq_feature_store_identity",
+        ),
+    )
     feature_name: Mapped[str] = mapped_column(String(200), index=True)
     feature_version: Mapped[str] = mapped_column(String(20), default="v1")
+    symbol: Mapped[str] = mapped_column(String(50), index=True)
+    timeframe: Mapped[str] = mapped_column(String(10))
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    value: Mapped[float] = mapped_column()
+    window_size: Mapped[int | None] = mapped_column(nullable=True)
 
 
 class FeatureVersion(Base):
     __tablename__ = "feature_versions"
+    __table_args__ = (
+        UniqueConstraint("feature_name", "version", name="uq_feature_versions_identity"),
+    )
     feature_name: Mapped[str] = mapped_column(String(200), index=True)
     version: Mapped[str] = mapped_column(String(20))
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class FeatureRegistryRow(Base):
+    """Master list of registered features and their Chapter 5 metadata."""
+
+    __tablename__ = "feature_registry"
+    feature_name: Mapped[str] = mapped_column(String(200), unique=True)
+    category: Mapped[str] = mapped_column(String(50), index=True)
+    description: Mapped[str] = mapped_column(String(500))
+    version: Mapped[str] = mapped_column(String(20))
+    calculation_frequency: Mapped[str] = mapped_column(String(50))
+    owner: Mapped[str] = mapped_column(String(100))
+    quality_threshold: Mapped[float] = mapped_column(default=0.0)
+    unit: Mapped[str] = mapped_column(String(50))
+    expected_min: Mapped[float | None] = mapped_column(nullable=True)
+    expected_max: Mapped[float | None] = mapped_column(nullable=True)
+    enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class FeatureDependencyRow(Base):
+    """Edges of the feature dependency graph (Chapter 7)."""
+
+    __tablename__ = "feature_dependencies"
+    __table_args__ = (
+        UniqueConstraint("feature_name", "depends_on", name="uq_feature_dependencies_edge"),
+    )
+    feature_name: Mapped[str] = mapped_column(String(200), index=True)
+    depends_on: Mapped[str] = mapped_column(String(200), index=True)
+
+
+class FeatureQualityRow(Base):
+    __tablename__ = "feature_quality"
+    feature_name: Mapped[str] = mapped_column(String(200), index=True)
+    symbol: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    timeframe: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    quality_score: Mapped[float] = mapped_column()
+    sample_count: Mapped[int] = mapped_column(default=0)
+
+
+class FeatureStatisticRow(Base):
+    __tablename__ = "feature_statistics"
+    feature_name: Mapped[str] = mapped_column(String(200), index=True)
+    symbol: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    timeframe: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    mean: Mapped[float | None] = mapped_column(nullable=True)
+    std: Mapped[float | None] = mapped_column(nullable=True)
+    min_value: Mapped[float | None] = mapped_column(nullable=True)
+    max_value: Mapped[float | None] = mapped_column(nullable=True)
+    sample_count: Mapped[int] = mapped_column(default=0)
+
+
+class FeatureDriftRow(Base):
+    __tablename__ = "feature_drift"
+    feature_name: Mapped[str] = mapped_column(String(200), index=True)
+    metric: Mapped[str] = mapped_column(String(50))
+    value: Mapped[float] = mapped_column()
+    threshold: Mapped[float] = mapped_column()
+    breached: Mapped[bool] = mapped_column(default=False)
+
+
+class FeatureUsageRow(Base):
+    __tablename__ = "feature_usage"
+    __table_args__ = (
+        UniqueConstraint("feature_name", "consumer", name="uq_feature_usage_edge"),
+    )
+    feature_name: Mapped[str] = mapped_column(String(200), index=True)
+    consumer: Mapped[str] = mapped_column(String(100))
 
 
 # --- Market intelligence -----------------------------------------------------

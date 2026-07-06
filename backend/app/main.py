@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.collectors import router as collectors_router
+from app.api.features import router as features_router
 from app.api.health import router as health_router
 from app.collectors.registry import CollectorRegistry
 from app.core.config import get_settings
 from app.core.container import container, wire_default_services
 from app.core.logging import get_logger, setup_logging
 from app.database.session import dispose_engine
+from app.features.price import PriceFeatureEngine
 from app.market.broker import BrokerInterface
 from app.scheduler.service import start_scheduler
 
@@ -34,6 +36,20 @@ async def lifespan(app: FastAPI):
 
     scheduler = start_scheduler()
     scheduled = registry.schedule_all(scheduler)
+
+    feature_engine = container.resolve(PriceFeatureEngine)
+    try:
+        await feature_engine.sync_registry()
+    except Exception as exc:
+        logger.error("feature registry sync failed", extra={"error": str(exc)})
+    scheduler.add_job(
+        feature_engine.run_all,
+        trigger="interval",
+        seconds=settings.feature_engine_interval,
+        id="features.price",
+        replace_existing=True,
+    )
+
     logger.info(
         "application started",
         extra={
@@ -41,6 +57,7 @@ async def lifespan(app: FastAPI):
             "environment": settings.environment,
             "collectors_discovered": discovered,
             "collectors_scheduled": scheduled,
+            "features_registered": len(feature_engine.registry.list_definitions()),
         },
     )
     yield
@@ -56,6 +73,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
     app.include_router(health_router)
     app.include_router(collectors_router)
+    app.include_router(features_router)
     return app
 
 
