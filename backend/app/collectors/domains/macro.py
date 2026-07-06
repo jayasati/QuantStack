@@ -104,7 +104,16 @@ class MacroIntelligenceCollector(BaseCollector):
 
     def __init__(self, macro_source: MacroSource | None = None) -> None:
         super().__init__()
-        self._source: MacroSource = macro_source or UnconfiguredMacroSource()
+        if macro_source is None:
+            from app.collectors.sources.yahoo_macro import YahooMacroSource
+
+            macro_source = YahooMacroSource()
+        self._source: MacroSource = macro_source
+
+    async def cleanup(self) -> None:
+        closer = getattr(self._source, "close", None)
+        if closer is not None:
+            await closer()
 
     async def collect(self) -> list[CollectorOutput]:
         raw = await self._source.fetch_macro()

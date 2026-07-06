@@ -135,10 +135,18 @@ async def test_unknown_factor_skipped_and_weights_renormalized() -> None:
     assert composite.normalized_value == pytest.approx(-1.5 / 3.0)
 
 
-async def test_unconfigured_default_raises_collection_error() -> None:
-    collector = MacroIntelligenceCollector()
+async def test_unconfigured_source_raises_collection_error() -> None:
+    from app.collectors.domains.macro import UnconfiguredMacroSource
+
+    collector = MacroIntelligenceCollector(macro_source=UnconfiguredMacroSource())
     with pytest.raises(CollectionError, match="macro source not configured"):
         await collector.collect()
+
+
+def test_default_source_is_yahoo() -> None:
+    from app.collectors.sources.yahoo_macro import YahooMacroSource
+
+    assert isinstance(MacroIntelligenceCollector()._source, YahooMacroSource)
 
 
 def test_sign_map_covers_all_spec_factors() -> None:
