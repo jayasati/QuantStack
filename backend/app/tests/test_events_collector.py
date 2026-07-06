@@ -114,7 +114,17 @@ async def test_confidence_reduction_aggregates_across_active_windows() -> None:
     assert summary.metadata["trading_freeze_recommended"] is True
 
 
-async def test_unconfigured_default_source_raises() -> None:
-    collector = EventCalendarCollector(now=lambda: NOW)
+async def test_unconfigured_source_raises() -> None:
+    from app.collectors.domains.events import UnconfiguredEventSource
+
+    collector = EventCalendarCollector(
+        event_source=UnconfiguredEventSource(), now=lambda: NOW
+    )
     with pytest.raises(CollectionError, match="event calendar source not configured"):
         await collector.collect()
+
+
+def test_default_source_is_nse() -> None:
+    from app.collectors.sources.nse_events import NseEventCalendarSource
+
+    assert isinstance(EventCalendarCollector()._event_source, NseEventCalendarSource)

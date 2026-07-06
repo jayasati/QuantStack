@@ -1,0 +1,36 @@
+# Scheduled macro events — maintained by hand from OFFICIAL calendars.
+# The platform never invents event dates: add entries here when the official
+# schedule is published, with the source noted.
+#
+# Sources to maintain from:
+#   RBI MPC:   rbi.org.in -> press releases -> MPC meeting schedule
+#   Fed FOMC:  federalreserve.gov/monetarypolicy/fomccalendars.htm
+#   ECB:       ecb.europa.eu -> monetary policy -> Governing Council schedule
+#   BoJ:       boj.or.jp -> MPM schedule
+#   US CPI:    bls.gov/schedule/news_release/cpi.htm
+#   MSCI:      msci.com index review calendar
+#   FTSE:      research.ftserussell.com review schedule
+#
+# Static entries (exact dates from official announcements):
+#   - name: RBI MPC Decision
+#     kind: RBI
+#     scheduled_at: "2026-08-06T10:00:00+05:30"
+#     country: IN
+events: []
+
+# Recurring rules for events with a stable official pattern.
+recurring:
+  # MoSPI releases India CPI on the 12th of each month at 17:30 IST
+  # (or the next working day — the pre-event risk window covers the shift).
+  - name: India CPI Release
+    kind: INDIA_CPI
+    day_of_month: 12
+    time: "17:30"
+    country: IN
+  # Union Budget: presented February 1 at 11:00 IST.
+  - name: Union Budget
+    kind: BUDGET
+    month: 2
+    day_of_month: 1
+    time: "11:00"
+    country: IN

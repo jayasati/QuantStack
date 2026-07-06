@@ -211,8 +211,17 @@ class EventCalendarCollector(BaseCollector):
         now: Callable[[], datetime] | None = None,
     ) -> None:
         super().__init__()
-        self._event_source = event_source or UnconfiguredEventSource()
+        if event_source is None:
+            from app.collectors.sources.nse_events import NseEventCalendarSource
+
+            event_source = NseEventCalendarSource()
+        self._event_source = event_source
         self._now: Callable[[], datetime] = now or (lambda: datetime.now(UTC))
+
+    async def cleanup(self) -> None:
+        closer = getattr(self._event_source, "close", None)
+        if closer is not None:
+            await closer()
 
     async def collect(self) -> list[CollectorOutput]:
         events = await self._event_source.fetch_events()
