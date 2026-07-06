@@ -7,7 +7,7 @@ pure calculation; everything else lives here.
 """
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from statistics import fmean, pstdev
 
@@ -76,17 +76,18 @@ class BaseFeatureEngine:
         timeframe: str,
         candles: Sequence[Candle],
         series: dict[str, Series],
-        since: datetime | None = None,
+        since: datetime | Mapping[str, datetime] | None = None,
     ) -> list[FeatureValue]:
         values: list[FeatureValue] = []
         for feature_name, feature_series in series.items():
             definition = self.registry.get(feature_name)
             version = definition.version if definition else "v1"
             window = definition.window if definition else None
+            cutoff = since.get(feature_name) if isinstance(since, Mapping) else since
             for candle, value in zip(candles, feature_series, strict=True):
                 if value is None or not math.isfinite(value):
                     continue
-                if since is not None and candle.ts <= since:
+                if cutoff is not None and candle.ts <= cutoff:
                     continue
                 values.append(
                     FeatureValue(
@@ -121,7 +122,7 @@ class BaseFeatureEngine:
             benchmark = await self._load_candles(reference, timeframe)
 
         series = self._compute(candles, benchmark)
-        since = await self.store.latest_ts(symbol, timeframe, feature_names=list(series))
+        since = await self.store.latest_ts_map(symbol, timeframe, feature_names=list(series))
         values = self.build_values(symbol, timeframe, candles, series, since=since)
         quality = self._quality_check(values)
         stored = await self.store.write(values)

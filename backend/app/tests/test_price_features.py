@@ -164,6 +164,19 @@ def test_build_values_since_filter_is_incremental() -> None:
     assert all(v.ts > since for v in values)
 
 
+def test_build_values_per_feature_watermarks() -> None:
+    engine = make_engine(feature_windows=[5])
+    candles = make_candles(10)
+    series = compute_price_features(candles, windows=(5,))
+    # price_gap_pct is caught up; a feature absent from the map backfills fully.
+    since = {"price_gap_pct": candles[-1].ts}
+    values = engine.build_values("NIFTY", "D", candles, series, since=since)
+    names = {v.feature_name for v in values}
+    assert "price_gap_pct" not in names
+    momentum = [v for v in values if v.feature_name == "price_momentum_5"]
+    assert len(momentum) == 5  # full history from first warm bar (i=5..9)
+
+
 def test_registry_dependency_order() -> None:
     engine = make_engine(feature_windows=[5])
     order = engine.registry.dependency_order()

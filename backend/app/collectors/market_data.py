@@ -398,3 +398,24 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
             result = await session.execute(statement)
             await session.commit()
             return int(getattr(result, "rowcount", 0) or 0)
+
+
+class VixCollector(HistoricalCandleCollector):
+    """Backfill India VIX candles into ohlcv_candles (Volume 3 support).
+
+    Reuses the HistoricalCandleCollector resume/dedup/continuity machinery,
+    pointed at the configured VIX index symbol instead of the watchlist. The
+    volatility engine's vix-distance features join these candles by timestamp,
+    so implied volatility goes live once this collector runs.
+    """
+
+    name = "vix"
+    category = CollectorCategory.MARKET_DATA
+    source = "angel_one"
+    interval_seconds = 300
+    priority = 6
+    requires_auth = True
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.symbols = [get_settings().feature_vix_symbol]

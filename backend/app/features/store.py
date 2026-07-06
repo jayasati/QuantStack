@@ -8,6 +8,7 @@ the offline store remains the source of truth.
 """
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import desc, func, select
@@ -166,25 +167,30 @@ class FeatureStore:
             for row in rows
         ]
 
-    async def latest_ts(
+    async def latest_ts_map(
         self,
         symbol: str,
         timeframe: str,
         feature_names: list[str] | None = None,
-    ):
-        """Most recent stored observation timestamp — used for incremental runs.
+    ) -> dict[str, datetime]:
+        """Most recent stored timestamp per feature — drives incremental runs.
 
-        Scope with `feature_names` so one engine's watermark is not advanced by
-        another engine's rows for the same symbol/timeframe.
+        Per-feature (not per-engine) so a feature that starts producing values
+        later than its siblings (e.g. VIX distance waiting on VIX data) still
+        gets its full history stored.
         """
         if self._sessions is None:
-            return None
-        query = select(func.max(FeatureStoreRow.ts)).where(
-            FeatureStoreRow.symbol == symbol,
-            FeatureStoreRow.timeframe == timeframe,
+            return {}
+        query = (
+            select(FeatureStoreRow.feature_name, func.max(FeatureStoreRow.ts))
+            .where(
+                FeatureStoreRow.symbol == symbol,
+                FeatureStoreRow.timeframe == timeframe,
+            )
+            .group_by(FeatureStoreRow.feature_name)
         )
         if feature_names is not None:
             query = query.where(FeatureStoreRow.feature_name.in_(feature_names))
         async with self._sessions() as session:
-            result = await session.execute(query)
-            return result.scalar()
+            rows = (await session.execute(query)).all()
+        return {feature_name: ts for feature_name, ts in rows}
