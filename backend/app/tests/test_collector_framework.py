@@ -118,3 +118,97 @@ async def test_registry_discovers_market_collectors() -> None:
     names = {c["name"] for c in registry.list_collectors()}
     assert found >= 2
     assert {"live_market", "historical_candles"} <= names
+
+
+class DependentCollector(BaseCollector):
+    name = "dependent"
+    category = CollectorCategory.OPTIONS
+    source = "test"
+    priority = 1  # higher urgency than its dependency
+    depends_on = ("good",)
+
+    async def collect(self) -> list[CollectorOutput]:
+        return []
+
+
+async def test_resolution_order_puts_dependencies_first() -> None:
+    pipeline, _ = make_pipeline()
+    registry = CollectorRegistry(pipeline)
+    registry.register(DependentCollector())  # registered first, priority 1
+    registry.register(GoodCollector())  # priority 100
+    order = [c.name for c in registry.resolution_order()]
+    assert order.index("good") < order.index("dependent")
+    assert registry.validate_dependencies() == []
+
+
+async def test_unknown_dependency_reported() -> None:
+    class Orphan(BaseCollector):
+        name = "orphan"
+        category = CollectorCategory.NEWS
+        source = "test"
+        depends_on = ("does_not_exist",)
+
+        async def collect(self) -> list[CollectorOutput]:
+            return []
+
+    pipeline, _ = make_pipeline()
+    registry = CollectorRegistry(pipeline)
+    registry.register(Orphan())
+    problems = registry.validate_dependencies()
+    assert problems == ["orphan depends on unknown 'does_not_exist'"]
+
+
+async def test_dependency_cycle_detected() -> None:
+    class A(BaseCollector):
+        name = "cycle_a"
+        category = CollectorCategory.NEWS
+        source = "test"
+        depends_on = ("cycle_b",)
+
+        async def collect(self) -> list[CollectorOutput]:
+            return []
+
+    class B(BaseCollector):
+        name = "cycle_b"
+        category = CollectorCategory.NEWS
+        source = "test"
+        depends_on = ("cycle_a",)
+
+        async def collect(self) -> list[CollectorOutput]:
+            return []
+
+    pipeline, _ = make_pipeline()
+    registry = CollectorRegistry(pipeline)
+    registry.register(A())
+    registry.register(B())
+    import pytest
+
+    with pytest.raises(ValueError, match="dependency cycle"):
+        registry.resolution_order()
+
+
+async def test_disable_reports_active_dependents() -> None:
+    pipeline, _ = make_pipeline()
+    registry = CollectorRegistry(pipeline)
+    registry.register(GoodCollector())
+    registry.register(DependentCollector())
+    dependents = registry.disable("good")
+    assert dependents == ["dependent"]
+
+
+async def test_interval_override_from_config(monkeypatch) -> None:
+    monkeypatch.setenv("COLLECTOR_INTERVALS", '{"good": 300}')
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        pipeline, _ = make_pipeline()
+        registry = CollectorRegistry(pipeline)
+        collector = GoodCollector()
+        registry.register(collector)
+        assert registry.effective_interval(collector) == 300
+        listing = registry.list_collectors()[0]
+        assert listing["interval_seconds"] == 300
+        assert listing["default_interval_seconds"] == 60
+    finally:
+        get_settings.cache_clear()

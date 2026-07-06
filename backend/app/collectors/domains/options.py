@@ -183,6 +183,8 @@ class OptionsIntelligenceCollector(BaseCollector):
     interval_seconds = 60
     priority = 10
     market_hours_only = True  # the chain does not update outside NSE hours
+    # Buildup classification reads prev-day close from stored daily candles.
+    depends_on = ("historical_candles",)
 
     # IV percentile needs a minimum history before it is meaningful.
     min_iv_observations = 100

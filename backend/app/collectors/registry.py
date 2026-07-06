@@ -73,8 +73,56 @@ class CollectorRegistry:
                 "category": collector.category.value,
                 "interval_seconds": collector.interval_seconds,
                 "priority": collector.priority,
+                "depends_on": list(collector.depends_on),
             },
         )
+
+    # --- dependency resolution -------------------------------------------------------
+
+    def validate_dependencies(self) -> list[str]:
+        """Warn about dependencies on unknown collectors; return the problems."""
+        problems: list[str] = []
+        for collector in self._collectors.values():
+            for dependency in collector.depends_on:
+                if dependency not in self._collectors:
+                    problems.append(f"{collector.name} depends on unknown '{dependency}'")
+        for problem in problems:
+            logger.warning("dependency problem", extra={"detail": problem})
+        return problems
+
+    def resolution_order(self) -> list[BaseCollector]:
+        """Collectors topologically sorted so dependencies come before their
+        dependents; priority breaks ties. Raises on dependency cycles."""
+        by_name = self._collectors
+        ordered: list[BaseCollector] = []
+        state: dict[str, int] = {}  # 0=unvisited 1=visiting 2=done
+
+        def visit(name: str, chain: tuple[str, ...]) -> None:
+            if state.get(name) == 2:
+                return
+            if state.get(name) == 1:
+                cycle = " -> ".join((*chain, name))
+                raise ValueError(f"collector dependency cycle: {cycle}")
+            state[name] = 1
+            collector = by_name[name]
+            for dependency in sorted(
+                (d for d in collector.depends_on if d in by_name),
+                key=lambda d: by_name[d].priority,
+            ):
+                visit(dependency, (*chain, name))
+            state[name] = 2
+            ordered.append(collector)
+
+        for name in sorted(by_name, key=lambda n: by_name[n].priority):
+            visit(name, ())
+        return ordered
+
+    def effective_interval(self, collector: BaseCollector) -> int:
+        """Configured override from settings, else the collector default."""
+        from app.core.config import get_settings
+
+        override = get_settings().collector_intervals.get(collector.name)
+        return int(override) if override else collector.interval_seconds
 
     # --- lifecycle -----------------------------------------------------------------
 
@@ -84,11 +132,23 @@ class CollectorRegistry:
             self._collectors[name].health.enabled = True
             self._collectors[name].health.status = "idle"
 
-    def disable(self, name: str) -> None:
+    def disable(self, name: str) -> list[str]:
+        """Disable a collector; returns the names of still-enabled dependents."""
         self._disabled.add(name)
         if name in self._collectors:
             self._collectors[name].health.enabled = False
             self._collectors[name].health.status = "disabled"
+        dependents = [
+            c.name
+            for c in self._collectors.values()
+            if name in c.depends_on and c.name not in self._disabled
+        ]
+        if dependents:
+            logger.warning(
+                "disabled collector has active dependents",
+                extra={"collector": name, "dependents": dependents},
+            )
+        return dependents
 
     async def run_collector(self, name: str, force: bool = False) -> None:
         collector = self._collectors.get(name)
@@ -97,13 +157,19 @@ class CollectorRegistry:
         await collector.run_once(self._pipeline, force=force)
 
     def schedule_all(self, scheduler: AsyncIOScheduler) -> int:
-        """Wire every registered collector onto its own interval schedule."""
+        """Wire every registered collector onto its own interval schedule.
+
+        Dependencies are validated and scheduling follows the topological
+        resolution order (dependencies first); intervals honour per-collector
+        overrides from configuration.
+        """
+        self.validate_dependencies()
         scheduled = 0
-        for collector in sorted(self._collectors.values(), key=lambda c: c.priority):
+        for collector in self.resolution_order():
             scheduler.add_job(
                 self.run_collector,
                 trigger="interval",
-                seconds=collector.interval_seconds,
+                seconds=self.effective_interval(collector),
                 args=[collector.name],
                 id=f"collector.{collector.name}",
                 replace_existing=True,
@@ -131,12 +197,14 @@ class CollectorRegistry:
                 "name": c.name,
                 "category": c.category.value,
                 "source": c.source,
-                "interval_seconds": c.interval_seconds,
+                "interval_seconds": self.effective_interval(c),
+                "default_interval_seconds": c.interval_seconds,
                 "priority": c.priority,
+                "depends_on": list(c.depends_on),
                 "enabled": c.name not in self._disabled,
                 "status": c.health.status,
             }
-            for c in sorted(self._collectors.values(), key=lambda c: c.priority)
+            for c in self.resolution_order()
         ]
 
     def health_of(self, name: str) -> dict | None:

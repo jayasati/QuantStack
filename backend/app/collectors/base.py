@@ -83,6 +83,7 @@ class BaseCollector(ABC):
     priority: int = 100  # lower runs earlier when schedules collide
     requires_auth: bool = False
     market_hours_only: bool = False  # scheduled runs skip outside NSE hours
+    depends_on: tuple[str, ...] = ()  # collector names this one consumes data from
 
     def __init__(self) -> None:
         self.logger = get_logger(f"collector.{self.name}")

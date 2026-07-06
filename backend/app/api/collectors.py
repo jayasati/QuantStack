@@ -83,8 +83,8 @@ async def disable_collector(name: str) -> dict:
     registry = container.resolve(CollectorRegistry)
     if registry.get(name) is None:
         raise HTTPException(status_code=404, detail=f"unknown collector: {name}")
-    registry.disable(name)
-    return {"collector": name, "enabled": False}
+    dependents = registry.disable(name)
+    return {"collector": name, "enabled": False, "active_dependents": dependents}
 
 
 @router.post("/{name}/run")
