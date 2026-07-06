@@ -21,6 +21,22 @@ async def event_bus_metrics() -> dict:
     return bus.metrics()
 
 
+@router.get("/events/dead-letters")
+async def list_dead_letters(limit: int = 100) -> list[dict]:
+    """Inspect events that exhausted their retries (Prompt 2.13 DLQ)."""
+    bus = container.resolve(EventBus)
+    return bus.list_dead_letters(limit=min(max(limit, 1), 1000))
+
+
+@router.post("/events/dead-letters/{event_id}/replay")
+async def replay_dead_letter(event_id: str) -> dict:
+    bus = container.resolve(EventBus)
+    replayed = await bus.replay_dead_letter(event_id)
+    if not replayed:
+        raise HTTPException(status_code=404, detail=f"no dead letter: {event_id}")
+    return {"replayed": event_id}
+
+
 @router.get("/{name}")
 async def collector_health(name: str) -> dict:
     registry = container.resolve(CollectorRegistry)

@@ -135,3 +135,50 @@ class EventBus:
             "duplicates_ignored": self.duplicate_count,
             "dead_letters": len(self.dead_letters),
         }
+
+    def list_dead_letters(self, limit: int = 100) -> list[dict]:
+        """Most recent dead letters, newest first (for inspection APIs)."""
+        letters = list(self.dead_letters)[-limit:]
+        return [
+            {
+                "event_id": letter.event.event_id,
+                "event_type": letter.event.type,
+                "trace_id": letter.event.trace_id,
+                "source": letter.event.source,
+                "handler": letter.handler,
+                "error": letter.error,
+                "attempts": letter.attempts,
+                "failed_at": letter.failed_at.isoformat(),
+            }
+            for letter in reversed(letters)
+        ]
+
+    async def replay_dead_letter(self, event_id: str) -> bool:
+        """Re-publish one dead letter as a fresh delivery attempt.
+
+        The original event id is reused minus the idempotency block (a new
+        event id is minted, original preserved in the payload trail) so the
+        replay is actually delivered.
+        """
+        for letter in list(self.dead_letters):
+            if letter.event.event_id == event_id:
+                self.dead_letters.remove(letter)
+                original = letter.event
+                replayed = Event(
+                    type=original.type,
+                    payload=original.payload,
+                    source=original.source,
+                    trace_id=original.trace_id,  # keep the trace chain
+                    version=original.version,
+                )
+                logger.info(
+                    "replaying dead letter",
+                    extra={
+                        "original_event_id": original.event_id,
+                        "replay_event_id": replayed.event_id,
+                        "event_type": original.type,
+                    },
+                )
+                await self.publish(replayed)
+                return True
+        return False

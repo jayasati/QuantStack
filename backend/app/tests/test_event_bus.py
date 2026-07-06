@@ -90,3 +90,52 @@ async def test_duplicate_events_are_ignored() -> None:
 async def test_publish_without_subscribers_is_noop() -> None:
     bus = fast_bus()
     await bus.publish(Event(type="nobody.listens"))
+
+
+async def test_dead_letter_inspection_and_replay() -> None:
+    bus = fast_bus(max_retries=1)
+    calls = {"n": 0}
+
+    async def flaky_then_fine(event: Event) -> None:
+        calls["n"] += 1
+        if calls["n"] <= 2:  # fail first delivery (1 try + 1 retry)
+            raise RuntimeError("downstream was down")
+
+    bus.subscribe("x", flaky_then_fine)
+    event = Event(type="x", payload={"k": 1}, source="test")
+    await bus.publish(event)
+
+    letters = bus.list_dead_letters()
+    assert len(letters) == 1
+    assert letters[0]["event_id"] == event.event_id
+    assert letters[0]["trace_id"] == event.trace_id
+    assert "downstream was down" in letters[0]["error"]
+
+    # Replay: removed from DLQ, delivered fresh, trace preserved
+    assert await bus.replay_dead_letter(event.event_id) is True
+    assert bus.list_dead_letters() == []
+    assert calls["n"] == 3  # replay delivered on first attempt
+
+    # Unknown id -> False
+    assert await bus.replay_dead_letter("nope") is False
+
+
+async def test_replay_bypasses_idempotency_but_keeps_trace() -> None:
+    bus = fast_bus(max_retries=0)
+    seen: list[Event] = []
+
+    fail_first = {"armed": True}
+
+    async def handler(event: Event) -> None:
+        if fail_first["armed"]:
+            fail_first["armed"] = False
+            raise RuntimeError("boom")
+        seen.append(event)
+
+    bus.subscribe("x", handler)
+    original = Event(type="x")
+    await bus.publish(original)
+    assert await bus.replay_dead_letter(original.event_id) is True
+    assert len(seen) == 1
+    assert seen[0].event_id != original.event_id  # fresh id -> not deduped
+    assert seen[0].trace_id == original.trace_id  # trace chain preserved
