@@ -86,7 +86,16 @@ class InstitutionalFlowCollector(BaseCollector):
 
     def __init__(self, flow_source: FlowSource | None = None) -> None:
         super().__init__()
-        self._flow_source = flow_source or UnconfiguredFlowSource()
+        if flow_source is None:
+            from app.collectors.sources.nse_flows import NseFlowSource
+
+            flow_source = NseFlowSource()
+        self._flow_source = flow_source
+
+    async def cleanup(self) -> None:
+        closer = getattr(self._flow_source, "close", None)
+        if closer is not None:
+            await closer()
 
     async def collect(self) -> list[CollectorOutput]:
         flows = await self._flow_source.fetch_flows()

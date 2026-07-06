@@ -96,7 +96,15 @@ async def test_extreme_flows_are_clamped() -> None:
             assert -1.0 <= record.normalized_value <= 1.0
 
 
-async def test_unconfigured_default_source_raises() -> None:
-    collector = InstitutionalFlowCollector()
+async def test_unconfigured_source_raises() -> None:
+    from app.collectors.domains.flows import UnconfiguredFlowSource
+
+    collector = InstitutionalFlowCollector(flow_source=UnconfiguredFlowSource())
     with pytest.raises(CollectionError, match="institutional flow source not configured"):
         await collector.collect()
+
+
+def test_default_source_is_nse() -> None:
+    from app.collectors.sources.nse_flows import NseFlowSource
+
+    assert isinstance(InstitutionalFlowCollector()._flow_source, NseFlowSource)
