@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     feature_engine_interval: int = 300
     # Candles loaded per run; must exceed the largest rolling window.
     feature_candle_lookback: int = 500
+    # Trailing bars used for rolling z-score normalization (_z features).
+    feature_normalization_window: int = 100
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None

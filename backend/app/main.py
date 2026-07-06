@@ -13,6 +13,7 @@ from app.core.container import container, wire_default_services
 from app.core.logging import get_logger, setup_logging
 from app.database.session import dispose_engine
 from app.features.price import PriceFeatureEngine
+from app.features.volume import VolumeFeatureEngine
 from app.market.broker import BrokerInterface
 from app.scheduler.service import start_scheduler
 
@@ -37,18 +38,25 @@ async def lifespan(app: FastAPI):
     scheduler = start_scheduler()
     scheduled = registry.schedule_all(scheduler)
 
-    feature_engine = container.resolve(PriceFeatureEngine)
-    try:
-        await feature_engine.sync_registry()
-    except Exception as exc:
-        logger.error("feature registry sync failed", extra={"error": str(exc)})
-    scheduler.add_job(
-        feature_engine.run_all,
-        trigger="interval",
-        seconds=settings.feature_engine_interval,
-        id="features.price",
-        replace_existing=True,
-    )
+    feature_engines = [
+        container.resolve(PriceFeatureEngine),
+        container.resolve(VolumeFeatureEngine),
+    ]
+    for engine in feature_engines:
+        try:
+            await engine.sync_registry()
+        except Exception as exc:
+            logger.error(
+                "feature registry sync failed",
+                extra={"engine": engine.name, "error": str(exc)},
+            )
+        scheduler.add_job(
+            engine.run_all,
+            trigger="interval",
+            seconds=settings.feature_engine_interval,
+            id=f"features.{engine.category}",
+            replace_existing=True,
+        )
 
     logger.info(
         "application started",
@@ -57,7 +65,9 @@ async def lifespan(app: FastAPI):
             "environment": settings.environment,
             "collectors_discovered": discovered,
             "collectors_scheduled": scheduled,
-            "features_registered": len(feature_engine.registry.list_definitions()),
+            "features_registered": sum(
+                len(engine.registry.list_definitions()) for engine in feature_engines
+            ),
         },
     )
     yield

@@ -24,3 +24,4 @@ feature_timeframes: ["D"]
 feature_benchmark_symbol: NIFTY
 feature_engine_interval: 300
 feature_candle_lookback: 500
+feature_normalization_window: 100

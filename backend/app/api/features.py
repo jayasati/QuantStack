@@ -3,15 +3,32 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
+from app.features.base import BaseFeatureEngine
 from app.features.price import PriceFeatureEngine
+from app.features.schema import FeatureDefinition
+from app.features.volume import VolumeFeatureEngine
 
 router = APIRouter(prefix="/features", tags=["features"])
 
 
+def _engines() -> list[BaseFeatureEngine]:
+    return [
+        container.resolve(PriceFeatureEngine),
+        container.resolve(VolumeFeatureEngine),
+    ]
+
+
+def _owning_engine(feature_name: str) -> tuple[BaseFeatureEngine, FeatureDefinition]:
+    for engine in _engines():
+        definition = engine.registry.get(feature_name)
+        if definition is not None:
+            return engine, definition
+    raise HTTPException(status_code=404, detail=f"unknown feature: {feature_name}")
+
+
 @router.get("")
 async def list_features(category: str | None = None) -> list[dict]:
-    """Registered feature metadata (Chapter 5)."""
-    engine = container.resolve(PriceFeatureEngine)
+    """Registered feature metadata (Chapter 5), across every engine."""
     return [
         {
             "feature_name": d.feature_name,
@@ -26,6 +43,7 @@ async def list_features(category: str | None = None) -> list[dict]:
             "expected_range": list(d.expected_range),
             "window": d.window,
         }
+        for engine in _engines()
         for d in engine.registry.list_definitions(category=category)
     ]
 
@@ -33,11 +51,11 @@ async def list_features(category: str | None = None) -> list[dict]:
 @router.get("/latest/{symbol}")
 async def latest_features(symbol: str, timeframe: str = "D") -> dict:
     """Latest value of every feature for a symbol (online store, offline fallback)."""
-    engine = container.resolve(PriceFeatureEngine)
+    store = _engines()[0].store  # stores share the same tables/cache
     return {
         "symbol": symbol,
         "timeframe": timeframe,
-        "features": await engine.store.latest(symbol, timeframe),
+        "features": await store.latest(symbol, timeframe),
     }
 
 
@@ -51,9 +69,7 @@ async def feature_history(
     offset: int = Query(default=0, ge=0),
 ) -> dict:
     """Historical observations of one feature (offline store), paginated."""
-    engine = container.resolve(PriceFeatureEngine)
-    if engine.registry.get(feature_name) is None:
-        raise HTTPException(status_code=404, detail=f"unknown feature: {feature_name}")
+    engine, _ = _owning_engine(feature_name)
     rows = await engine.store.history(
         feature_name, symbol=symbol, timeframe=timeframe,
         version=version, limit=limit, offset=offset,
@@ -64,9 +80,7 @@ async def feature_history(
 @router.get("/{feature_name}/dependents")
 async def feature_dependents(feature_name: str) -> dict:
     """Downstream features to recompute when this one changes (Chapter 7)."""
-    engine = container.resolve(PriceFeatureEngine)
-    if engine.registry.get(feature_name) is None:
-        raise HTTPException(status_code=404, detail=f"unknown feature: {feature_name}")
+    engine, _ = _owning_engine(feature_name)
     return {
         "feature_name": feature_name,
         "dependents": engine.registry.dependents_of(feature_name),
@@ -76,9 +90,7 @@ async def feature_dependents(feature_name: str) -> dict:
 @router.get("/{feature_name}/versions")
 async def feature_versions(feature_name: str) -> dict:
     """Published version history for one feature (Chapter 6)."""
-    engine = container.resolve(PriceFeatureEngine)
-    if engine.registry.get(feature_name) is None:
-        raise HTTPException(status_code=404, detail=f"unknown feature: {feature_name}")
+    _owning_engine(feature_name)
     from sqlalchemy import select
 
     from app.database.session import get_session_factory
@@ -106,7 +118,10 @@ async def feature_versions(feature_name: str) -> dict:
 
 
 @router.post("/run/{symbol}")
-async def run_feature_engine(symbol: str, timeframe: str = "D") -> dict:
-    """Compute and store price features for one symbol on demand."""
-    engine = container.resolve(PriceFeatureEngine)
-    return await engine.run(symbol, timeframe)
+async def run_feature_engines(symbol: str, timeframe: str = "D") -> list[dict]:
+    """Compute and store features for one symbol on demand, across every engine."""
+    results = []
+    for engine in _engines():
+        result = await engine.run(symbol, timeframe)
+        results.append({"engine": engine.name, **result})
+    return results

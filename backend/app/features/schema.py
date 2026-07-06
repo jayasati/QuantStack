@@ -3,6 +3,9 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+# A feature computed over candles: one value per bar, None during cold start.
+Series = list[float | None]
+
 
 @dataclass(frozen=True)
 class Candle:
