@@ -6,7 +6,9 @@ the run but never blocks event publishing — collector failures must never
 cascade into unrelated components.
 """
 
-from sqlalchemy import insert
+import time
+
+from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.collectors.base import BaseCollector, CollectorPipeline
@@ -20,6 +22,8 @@ logger = get_logger(__name__)
 
 
 class DefaultCollectorPipeline(CollectorPipeline):
+    HISTORY_CACHE_TTL_SECONDS = 900
+
     def __init__(
         self,
         bus: EventBus,
@@ -29,11 +33,15 @@ class DefaultCollectorPipeline(CollectorPipeline):
         self._bus = bus
         self._quality = quality_engine or DataQualityEngine()
         self._session_factory = session_factory
+        self._history_cache: dict[str, tuple[float, float | None]] = {}
 
     async def process(
         self, collector: BaseCollector, records: list[CollectorOutput], latency_ms: float
     ) -> list[CollectorOutput]:
-        assessment = self._quality.assess(collector, records, latency_ms)
+        historical = await self._historical_reliability(collector.name)
+        assessment = self._quality.assess(
+            collector, records, latency_ms, historical_reliability=historical
+        )
         records = self._quality.apply(records, assessment)
         collector.health.last_quality_score = assessment.quality_score
         collector.health.extras["quality_components"] = assessment.components
@@ -59,6 +67,41 @@ class DefaultCollectorPipeline(CollectorPipeline):
                 source=collector.name,
             )
         )
+
+    async def _historical_reliability(self, collector_name: str) -> float | None:
+        """Average persisted quality score over the collector's last 50 runs.
+
+        This is the cross-restart reliability record — distinct from the
+        in-process API reliability. Cached per collector for 15 minutes.
+        """
+        cached = self._history_cache.get(collector_name)
+        now = time.time()
+        if cached is not None and now - cached[0] < self.HISTORY_CACHE_TTL_SECONDS:
+            return cached[1]
+        if self._session_factory is None:
+            return None
+        value: float | None = None
+        try:
+            async with self._session_factory() as session:
+                result = await session.execute(
+                    text(
+                        "SELECT AVG(quality_score) FROM ("
+                        "  SELECT quality_score FROM collector_health "
+                        "  WHERE collector_name = :name AND quality_score IS NOT NULL "
+                        "  ORDER BY id DESC LIMIT 50"
+                        ") recent"
+                    ),
+                    {"name": collector_name},
+                )
+                raw = result.scalar()
+            value = float(raw) if raw is not None else None
+        except Exception as exc:
+            logger.debug(
+                "historical reliability lookup failed",
+                extra={"collector": collector_name, "error": str(exc)},
+            )
+        self._history_cache[collector_name] = (now, value)
+        return value
 
     # --- persistence (tolerant: DB issues degrade, never crash) -----------------
 

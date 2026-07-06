@@ -69,3 +69,45 @@ def test_apply_reduces_confidence_with_quality() -> None:
     engine.apply(records, assessment)
     assert records[0].quality_score == assessment.quality_score
     assert records[0].confidence < 1.0
+
+
+def test_schema_validity_uses_validation_drop_rate() -> None:
+    engine = DataQualityEngine()
+    collector = DummyCollector()
+    collector.health.extras["last_run_collected"] = 10
+    collector.health.extras["last_run_validation_dropped"] = 3
+    assessment = engine.assess(collector, [make_record(1.0)], 100.0)
+    assert assessment.components["schema_validity"] == 70.0
+
+
+def test_missing_values_distinct_from_completeness() -> None:
+    engine = DataQualityEngine()
+    collector = DummyCollector()
+    record = make_record(1.0)
+    record.metadata = {"a": 1, "b": None, "c": None, "d": 4}
+    assessment = engine.assess(collector, [record], 100.0)
+    assert assessment.components["missing_values"] == 50.0
+    assert assessment.components["completeness"] == 100.0  # primary value present
+
+
+def test_historical_reliability_from_persisted_history() -> None:
+    engine = DataQualityEngine()
+    collector = DummyCollector()
+    records = [make_record(1.0)]
+    with_history = engine.assess(collector, records, 100.0, historical_reliability=40.0)
+    assert with_history.components["historical_reliability"] == 40.0
+
+    engine2 = DataQualityEngine()
+    without = engine2.assess(collector, records, 100.0)
+    # Falls back to current-process API reliability (no failures -> 100)
+    assert without.components["historical_reliability"] == 100.0
+    assert with_history.quality_score < without.quality_score
+
+
+def test_all_eight_spec_dimensions_present() -> None:
+    engine = DataQualityEngine()
+    assessment = engine.assess(DummyCollector(), [make_record(1.0)], 100.0)
+    assert set(assessment.components) == {
+        "freshness", "completeness", "latency", "schema_validity",
+        "duplicates", "missing_values", "api_reliability", "historical_reliability",
+    }

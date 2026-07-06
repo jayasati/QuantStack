@@ -144,7 +144,12 @@ class BaseCollector(ABC):
                 await self.authenticate()
 
             records = await self.collect()
+            collected_count = len(records)
             records = await self.validate(records)
+            self.health.extras["last_run_collected"] = collected_count
+            self.health.extras["last_run_validation_dropped"] = (
+                collected_count - len(records)
+            )
             records = await self.normalize(records)
             records = await self.calculate_confidence(records)
 
