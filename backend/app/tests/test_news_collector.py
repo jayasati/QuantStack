@@ -109,10 +109,18 @@ async def test_cross_run_dedup_uses_bounded_seen_set() -> None:
     assert second == []  # all articles already seen in the previous run
 
 
-async def test_unconfigured_default_source_raises() -> None:
-    collector = NewsIntelligenceCollector()
+async def test_unconfigured_source_raises() -> None:
+    from app.collectors.domains.news import UnconfiguredNewsSource
+
+    collector = NewsIntelligenceCollector(news_source=UnconfiguredNewsSource())
     with pytest.raises(CollectionError, match="not configured"):
         await collector.collect()
+
+
+def test_default_source_is_rss() -> None:
+    from app.collectors.sources.rss_news import RssNewsSource
+
+    assert isinstance(NewsIntelligenceCollector()._news_source, RssNewsSource)
 
 
 def test_lexicon_sentiment_signs_and_bounds() -> None:

@@ -284,10 +284,19 @@ class NewsIntelligenceCollector(BaseCollector):
         sentiment_provider: SentimentProvider | None = None,
     ) -> None:
         super().__init__()
-        self._news_source: NewsSource = news_source or UnconfiguredNewsSource()
+        if news_source is None:
+            from app.collectors.sources.rss_news import RssNewsSource
+
+            news_source = RssNewsSource()
+        self._news_source: NewsSource = news_source
         self._sentiment: SentimentProvider = sentiment_provider or LexiconSentimentProvider()
         # Bounded memory of normalized token sets across runs (cross-run dedup).
         self._seen_tokens: deque[frozenset[str]] = deque(maxlen=SEEN_SET_MAX)
+
+    async def cleanup(self) -> None:
+        closer = getattr(self._news_source, "close", None)
+        if closer is not None:
+            await closer()
 
     async def collect(self) -> list[CollectorOutput]:
         articles = await self._news_source.fetch_articles()

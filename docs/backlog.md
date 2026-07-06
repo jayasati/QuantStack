@@ -7,13 +7,9 @@ A running register of deferred work — things designed or stubbed during implem
 
 ## Volume 2 — Data Collection
 
-### Domain collector data sources (high priority)
+### Domain collector data sources
 
-The seven domain collectors are fully implemented and tested against injectable sources, but their **real feeds are not wired**. Each currently degrades gracefully with `"<domain> source not configured"`. To activate one, implement its `*Source` ABC and register it in the collector's constructor wiring.
-
-| Collector | Source interface (file) | Real feed candidates |
-|-----------|------------------------|---------------------|
-| News intelligence | `NewsSource` (`app/collectors/domains/news.py`) | RSS: Moneycontrol, Economic Times markets, Business Standard, Reuters India |
+**All nine collectors now run on real feeds** — see the Done table below. The injectable `*Source` interfaces remain for tests and future feed swaps.
 
 ### Other Volume 2 items
 
@@ -41,6 +37,7 @@ Volumes 3 (Feature Store), 4 (Market Intelligence), 5 (Prediction & Conviction) 
 
 | Item | Resolution |
 |------|-----------|
+| News intelligence real feed (Prompt 2.10) | `app/collectors/sources/rss_news.py` — RSS 2.0 from Economic Times Markets, Moneycontrol (markets + economy), and LiveMint Markets; HTML/entity cleanup, RFC822->ISO timestamps, per-feed failure tolerance, 90s cache. Business Standard dropped (403s non-browser clients). Verified live: 92 unique articles classified across all six categories. |
 | Event calendar real feed (Prompt 2.9) | `app/collectors/sources/nse_events.py` — dividends/bonus/splits from NSE corporateActions ex-dates, results from the NSE event-calendar, IPOs from ipo-current-issue, F&O expiries from option-chain contract-info, plus the maintained `configs/event_calendar.yaml` for scheduled macro events. Verified live: 49 events in the 7-day window (27 dividends, 17 results, IPO, expiry, India CPI). |
 | Macro intelligence real feed (Prompt 2.8) | `app/collectors/sources/yahoo_macro.py` — Yahoo chart API for 13 factors (USDINR, DXY, US10Y, crude, gold, silver, natgas, SPX/NDX/Nikkei/HangSeng/DAX, BTC proxy); z-scores and 1-day changes computed from 3 months of daily closes. Verified live: 14 records incl. Macro Pressure Score, quality 99.15. |
 | Institutional flows real feed (Prompt 2.7) | `app/collectors/sources/nse_flows.py` — FII/DII from NSE fiidiiTradeReact, block/bulk deals from the large-deal snapshot (value = qty x price), SAST filing counts from corporate-sast-reg29. 20-day flow averages come from our own stored history (same-day gross/4 as bootstrap scale). Verified live: 134 records, FII +1355cr / DII -1954cr. |
