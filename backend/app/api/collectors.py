@@ -21,6 +21,15 @@ async def event_bus_metrics() -> dict:
     return bus.metrics()
 
 
+@router.get("/cache/metrics")
+async def cache_metrics() -> dict:
+    """Redis cache hit/miss metrics (Prompt 2.14 monitoring)."""
+    from app.core.cache import CacheService
+
+    cache = container.resolve(CacheService)
+    return cache.metrics()
+
+
 @router.get("/events/dead-letters")
 async def list_dead_letters(limit: int = 100) -> list[dict]:
     """Inspect events that exhausted their retries (Prompt 2.13 DLQ)."""

@@ -89,7 +89,7 @@ def test_window_returns_requires_history() -> None:
 async def test_sector_source_builds_full_payload() -> None:
     closes = {token: [100.0 + i for i in range(40)] for token, _ in SECTOR_TOKENS.values()}
     closes["99926000"] = [200.0 + i for i in range(40)]  # benchmark
-    source = BrokerSectorSource(broker=FakeBroker(closes))
+    source = BrokerSectorSource(broker=FakeBroker(closes), cache=False)
     payload = await source.fetch_sectors()
     assert set(payload["sectors"]) == set(SECTOR_TOKENS)
     assert payload["benchmark"]["return_1d"] > 0
@@ -101,7 +101,7 @@ async def test_sector_source_builds_full_payload() -> None:
 
 async def test_sector_source_fails_loudly_when_index_missing() -> None:
     closes = {"99926000": [200.0 + i for i in range(40)]}  # benchmark only
-    source = BrokerSectorSource(broker=FakeBroker(closes))
+    source = BrokerSectorSource(broker=FakeBroker(closes), cache=False)
     with pytest.raises(CollectionError, match="sector history unavailable"):
         await source.fetch_sectors()
 
@@ -158,6 +158,7 @@ async def test_breadth_source_builds_rows_with_emas() -> None:
         session=FakeNseSession(NSE_INDEX_PAYLOAD),
         broker=broker,
         instruments=FakeInstruments(),
+        cache=False,
     )
     rows = await source.fetch_universe()
     assert len(rows) == 1  # index row skipped, UNKNOWN skipped
@@ -179,6 +180,7 @@ async def test_breadth_source_fails_when_no_constituents() -> None:
         session=FakeNseSession({"data": []}),
         broker=FakeBroker({}),
         instruments=FakeInstruments(),
+        cache=False,
     )
     with pytest.raises(CollectionError, match="no constituents"):
         await source.fetch_universe()

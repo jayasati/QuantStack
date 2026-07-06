@@ -77,11 +77,27 @@ def window_returns(closes: list[float]) -> dict[str, float] | None:
 
 
 class BrokerSectorSource(SectorSource):
-    def __init__(self, broker: Any = None, nse_session: Any = None) -> None:
+    def __init__(
+        self, broker: Any = None, nse_session: Any = None, cache: Any = None
+    ) -> None:
         self._broker = broker
         self._nse = nse_session
+        self._redis = cache
         self._cache: tuple[float, dict] | None = None
         self._volume_cache: tuple[float, dict[str, float]] | None = None
+
+    def _get_redis(self):
+        """Shared Redis cache (Prompt 2.14): sector returns survive restarts
+        instead of refetching 13 index candle histories from the broker."""
+        if self._redis is None:
+            from app.core.cache import CacheService
+            from app.core.container import container
+
+            try:
+                self._redis = container.resolve(CacheService)
+            except Exception:
+                self._redis = False
+        return self._redis or None
 
     def _get_broker(self):
         if self._broker is None:
@@ -99,32 +115,48 @@ class BrokerSectorSource(SectorSource):
         return self._nse
 
     async def fetch_sectors(self) -> dict:
+        payload: dict | None
         if self._cache is not None and time.time() - self._cache[0] < CACHE_TTL_SECONDS:
             payload = self._cache[1]
         else:
-            benchmark = await self._returns_for(*BENCHMARK_TOKEN)
-            if benchmark is None:
-                raise CollectionError("could not compute benchmark returns")
+            payload = None
+            redis_cache = self._get_redis()
+            if redis_cache is not None:
+                payload = await redis_cache.get_safe("sector:returns")
+                if payload is not None:
+                    self._cache = (time.time(), payload)
+            if payload is None:
+                payload = await self._compute_returns()
+                self._cache = (time.time(), payload)
+                if redis_cache is not None:
+                    await redis_cache.set_safe(
+                        "sector:returns", payload, ttl_seconds=CACHE_TTL_SECONDS
+                    )
 
-            sectors: dict[str, dict[str, float]] = {}
-            failed: list[str] = []
-            for name, (token, exchange) in SECTOR_TOKENS.items():
-                metrics = await self._returns_for(token, exchange)
-                if metrics is None:
-                    failed.append(name)
-                    continue
-                sectors[name] = metrics
-            if failed:
-                # The collector requires every tracked sector — fail loudly
-                # rather than silently narrowing the sector set.
-                raise CollectionError(
-                    f"sector history unavailable for: {', '.join(failed)}"
-                )
-            payload = {"benchmark": benchmark, "sectors": sectors}
-            self._cache = (time.time(), payload)
-
+        assert payload is not None
         await self._apply_relative_volume(payload)
         return payload
+
+    async def _compute_returns(self) -> dict:
+        benchmark = await self._returns_for(*BENCHMARK_TOKEN)
+        if benchmark is None:
+            raise CollectionError("could not compute benchmark returns")
+
+        sectors: dict[str, dict[str, float]] = {}
+        failed: list[str] = []
+        for name, (token, exchange) in SECTOR_TOKENS.items():
+            metrics = await self._returns_for(token, exchange)
+            if metrics is None:
+                failed.append(name)
+                continue
+            sectors[name] = metrics
+        if failed:
+            # The collector requires every tracked sector — fail loudly
+            # rather than silently narrowing the sector set.
+            raise CollectionError(
+                f"sector history unavailable for: {', '.join(failed)}"
+            )
+        return {"benchmark": benchmark, "sectors": sectors}
 
     # --- relative volume (NSE index volume vs our own stored history) -----------
 

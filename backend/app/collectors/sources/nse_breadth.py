@@ -46,12 +46,27 @@ class NseBreadthSource(BreadthSource):
         session: Any = None,
         broker: Any = None,
         instruments: Any = None,
+        cache: Any = None,
     ) -> None:
         self._index = index
         self._session = session or NseSession(warmup_path="/market-data/live-equity-market")
         self._broker = broker
         self._instruments = instruments
+        self._cache = cache
         self._ema_cache: dict[str, tuple[float, dict[str, float]]] = {}
+
+    def _get_cache(self):
+        """Shared Redis cache (Prompt 2.14) — survives process restarts so a
+        rebuild does not refetch ~50 EMA histories from the broker."""
+        if self._cache is None:
+            from app.core.cache import CacheService
+            from app.core.container import container
+
+            try:
+                self._cache = container.resolve(CacheService)
+            except Exception:
+                self._cache = False  # container not wired (tests/scripts)
+        return self._cache or None
 
     # --- lazy platform services (avoid import cycles, allow test injection) ------
 
@@ -127,6 +142,13 @@ class NseBreadthSource(BreadthSource):
         now = time.time()
         if cached is not None and now - cached[0] < EMA_CACHE_TTL_SECONDS:
             return cached[1]
+        redis_cache = self._get_cache()
+        if redis_cache is not None:
+            stored = await redis_cache.get_safe(f"breadth:emas:{symbol}")
+            if stored is not None:
+                restored = {str(k): float(v) for k, v in stored.items()}
+                self._ema_cache[symbol] = (now, restored)
+                return restored
         try:
             token, exchange, _ = self._get_instruments().resolve(symbol)
         except KeyError:
@@ -149,6 +171,11 @@ class NseBreadthSource(BreadthSource):
         emas = compute_emas([candle.close for candle in candles])
         if emas is not None:
             self._ema_cache[symbol] = (now, emas)
+            redis_cache = self._get_cache()
+            if redis_cache is not None:
+                await redis_cache.set_safe(
+                    f"breadth:emas:{symbol}", emas, ttl_seconds=EMA_CACHE_TTL_SECONDS
+                )
         await asyncio.sleep(0.35)  # stay well inside broker rate limits
         return emas
 

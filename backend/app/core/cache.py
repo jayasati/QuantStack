@@ -112,6 +112,23 @@ class CacheService:
             await self._client.expire(counter_key, window_seconds)
         return current > max_calls
 
+    async def get_safe(self, key: str) -> Any | None:
+        """get() that returns None instead of raising when Redis is down."""
+        try:
+            return await self.get(key)
+        except Exception as exc:
+            logger.debug("cache get failed", extra={"key": key, "error": str(exc)})
+            return None
+
+    async def set_safe(self, key: str, value: Any, ttl_seconds: int | None = None) -> bool:
+        """set() that swallows Redis outages; returns False when not stored."""
+        try:
+            await self.set(key, value, ttl_seconds=ttl_seconds)
+            return True
+        except Exception as exc:
+            logger.debug("cache set failed", extra={"key": key, "error": str(exc)})
+            return False
+
     def metrics(self) -> dict[str, int | float]:
         total = self.hits + self.misses + self.stale_hits
         return {
