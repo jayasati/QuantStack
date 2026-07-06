@@ -102,7 +102,10 @@ class BaseFeatureEngine:
                 )
         return values
 
-    async def run(self, symbol: str, timeframe: str = "D") -> dict:
+    async def run(self, symbol: str, timeframe: str = "D", full: bool = False) -> dict:
+        """Compute and store features. `full=True` bypasses the incremental
+        watermarks and re-upserts the whole history — use after raw-data
+        backfills that add bars older than what is already stored."""
         candles = await self._load_candles(symbol, timeframe)
         if len(candles) < 2:
             logger.info(
@@ -122,7 +125,9 @@ class BaseFeatureEngine:
             benchmark = await self._load_candles(reference, timeframe)
 
         series = self._compute(candles, benchmark)
-        since = await self.store.latest_ts_map(symbol, timeframe, feature_names=list(series))
+        since: Mapping[str, datetime] | None = None
+        if not full:
+            since = await self.store.latest_ts_map(symbol, timeframe, feature_names=list(series))
         values = self.build_values(symbol, timeframe, candles, series, since=since)
         quality = self._quality_check(values)
         stored = await self.store.write(values)

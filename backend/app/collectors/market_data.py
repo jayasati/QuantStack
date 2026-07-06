@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from app.collectors.sources.yahoo_history import YahooDailyHistory
     from app.market.angel_ws import AngelWebSocketFeed
 
 from sqlalchemy import func, insert, select
@@ -407,6 +408,12 @@ class VixCollector(HistoricalCandleCollector):
     pointed at the configured VIX index symbol instead of the watchlist. The
     volatility engine's vix-distance features join these candles by timestamp,
     so implied volatility goes live once this collector runs.
+
+    Angel One serves only a couple of daily VIX bars, so while the stored
+    daily history is thinner than DAILY_BACKFILL_TARGET each run also pulls a
+    deep daily backfill from Yahoo (^INDIAVIX); the shared upsert keeps the
+    broker's bars authoritative where the two overlap. Once the target depth
+    is reached the Yahoo path stays dormant.
     """
 
     name = "vix"
@@ -416,6 +423,81 @@ class VixCollector(HistoricalCandleCollector):
     priority = 6
     requires_auth = True
 
-    def __init__(self, **kwargs) -> None:
+    DAILY_BACKFILL_TARGET = 200
+
+    def __init__(self, yahoo: "YahooDailyHistory | None" = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.symbols = [get_settings().feature_vix_symbol]
+        self._yahoo = yahoo
+
+    async def collect(self) -> list[CollectorOutput]:
+        records: list[CollectorOutput] = []
+        broker_error: CollectionError | None = None
+        try:
+            records = await super().collect()
+        except CollectionError as exc:
+            broker_error = exc
+        backfill = await self._deep_backfill_daily()
+        if backfill is not None:
+            records.append(backfill)
+        if not records:
+            raise broker_error or CollectionError("no VIX data from broker or Yahoo")
+        return records
+
+    async def _daily_bar_count(self) -> int | None:
+        sessions = self._sessions()
+        if sessions is None:
+            return None
+        async with sessions() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(OhlcvCandle)
+                .where(
+                    OhlcvCandle.symbol == self.symbols[0],
+                    OhlcvCandle.timeframe == "D",
+                )
+            )
+            return int(result.scalar() or 0)
+
+    async def _deep_backfill_daily(self) -> CollectorOutput | None:
+        symbol = self.symbols[0]
+        count = await self._daily_bar_count()
+        if count is None or count >= self.DAILY_BACKFILL_TARGET:
+            return None
+        if self._yahoo is None:
+            from app.collectors.sources.yahoo_history import YahooDailyHistory
+
+            self._yahoo = YahooDailyHistory()
+        try:
+            candles = await self._yahoo.fetch_daily(symbol)
+        except Exception as exc:
+            self.logger.warning(
+                "yahoo daily backfill failed",
+                extra={"symbol": symbol, "error": str(exc)},
+            )
+            return None
+        if not candles:
+            return None
+        stored = await self._store_candles(symbol, candles)
+        self.logger.info(
+            "deep daily backfill from yahoo",
+            extra={"symbol": symbol, "bars_fetched": len(candles), "bars_stored": stored},
+        )
+        return CollectorOutput(
+            collector_name=self.name,
+            collector_category=self.category,
+            source="yahoo",
+            instrument=symbol,
+            exchange="NSE",
+            raw_value=len(candles),
+            normalized_value=float(candles[-1].close),
+            confidence=0.85,  # secondary source, slightly below broker data
+            metadata={
+                "interval": "D",
+                "bars_fetched": len(candles),
+                "bars_stored": stored,
+                "provider": "yahoo_deep_backfill",
+                "from": candles[0].timestamp.isoformat(),
+                "to": candles[-1].timestamp.isoformat(),
+            },
+        )

@@ -120,10 +120,14 @@ async def feature_versions(feature_name: str) -> dict:
 
 
 @router.post("/run/{symbol}")
-async def run_feature_engines(symbol: str, timeframe: str = "D") -> list[dict]:
-    """Compute and store features for one symbol on demand, across every engine."""
+async def run_feature_engines(symbol: str, timeframe: str = "D", full: bool = False) -> list[dict]:
+    """Compute and store features for one symbol on demand, across every engine.
+
+    `full=true` bypasses incremental watermarks and re-upserts the whole
+    history — use after backfilling raw candles older than stored features.
+    """
     results = []
     for engine in _engines():
-        result = await engine.run(symbol, timeframe)
+        result = await engine.run(symbol, timeframe, full=full)
         results.append({"engine": engine.name, **result})
     return results

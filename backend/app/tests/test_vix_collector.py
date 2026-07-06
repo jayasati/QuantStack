@@ -1,10 +1,13 @@
+import json
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from app.collectors.base import BaseCollector, CollectorPipeline
 from app.collectors.market_data import VixCollector
 from app.collectors.registry import CollectorRegistry
+from app.collectors.sources.yahoo_history import IST, YahooDailyHistory
 from app.market.broker import BrokerInterface, Candle, Quote
 
 
@@ -72,6 +75,102 @@ async def test_vix_collector_fetches_all_timeframes() -> None:
     for record in records:
         assert record.metadata["bars_fetched"] == 3
         assert record.normalized_value == pytest.approx(14.4)  # last close
+
+
+def make_yahoo(sessions_utc: list[datetime], closes: list[float]) -> YahooDailyHistory:
+    """Yahoo chart stub returning one daily bar per session-open timestamp."""
+    payload = {
+        "chart": {
+            "result": [
+                {
+                    "timestamp": [int(ts.timestamp()) for ts in sessions_utc],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "open": [c - 0.2 for c in closes],
+                                "high": [c + 0.5 for c in closes],
+                                "low": [c - 0.5 for c in closes],
+                                "close": closes,
+                                "volume": [None] * len(closes),
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "%5EINDIAVIX" in str(request.url) or "^INDIAVIX" in str(request.url)
+        return httpx.Response(200, text=json.dumps(payload))
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="https://query1.finance.yahoo.com",
+    )
+    return YahooDailyHistory(client=client)
+
+
+async def test_yahoo_daily_bars_align_to_broker_timestamp_convention() -> None:
+    # Yahoo stamps the bar at the 09:15 IST session open (03:45 UTC).
+    session_open = datetime(2026, 7, 3, 3, 45, tzinfo=UTC)
+    yahoo = make_yahoo([session_open], [13.4])
+    candles = await yahoo.fetch_daily("INDIAVIX")
+    assert len(candles) == 1
+    # Normalized to midnight IST of the session date = 18:30 UTC the day before,
+    # matching Angel One's daily-bar timestamps so feature joins line up.
+    assert candles[0].timestamp == datetime(2026, 7, 3, 0, 0, tzinfo=IST)
+    assert candles[0].timestamp.astimezone(UTC) == datetime(2026, 7, 2, 18, 30, tzinfo=UTC)
+    assert candles[0].interval == "D"
+    assert candles[0].close == 13.4
+    assert candles[0].volume == 0
+
+
+async def test_deep_backfill_runs_while_daily_history_thin() -> None:
+    collector = VixCollector(
+        broker=FakeBroker(),
+        yahoo=make_yahoo(
+            [datetime(2026, 7, d, 3, 45, tzinfo=UTC) for d in (1, 2, 3)],
+            [13.0, 13.5, 14.0],
+        ),
+    )
+    stored_rows: list[Candle] = []
+
+    async def fake_count() -> int:
+        return 2  # far below DAILY_BACKFILL_TARGET
+
+    async def fake_store(symbol: str, candles: list[Candle]) -> int:
+        stored_rows.extend(candles)
+        return len(candles)
+
+    collector._sessions = lambda: None  # type: ignore[method-assign]  # keep the test off the real DB
+    collector._daily_bar_count = fake_count  # type: ignore[method-assign]
+    collector._store_candles = fake_store  # type: ignore[method-assign]
+    await collector.initialize()
+    records = await collector.collect()
+
+    yahoo_records = [r for r in records if r.source == "yahoo"]
+    assert len(yahoo_records) == 1
+    assert yahoo_records[0].metadata["provider"] == "yahoo_deep_backfill"
+    assert yahoo_records[0].metadata["bars_stored"] == 3
+    # _store_candles also captured the broker bars; check the yahoo daily ones.
+    daily = [c for c in stored_rows if c.interval == "D" and c.close in (13.0, 13.5, 14.0)]
+    assert len(daily) == 3
+    # Broker records for all timeframes still present alongside the backfill.
+    assert len(records) == len(collector.intervals) + 1
+
+
+async def test_deep_backfill_dormant_once_history_is_deep() -> None:
+    collector = VixCollector(broker=FakeBroker())
+
+    async def fake_count() -> int:
+        return VixCollector.DAILY_BACKFILL_TARGET
+
+    collector._sessions = lambda: None  # type: ignore[method-assign]  # keep the test off the real DB
+    collector._daily_bar_count = fake_count  # type: ignore[method-assign]
+    await collector.initialize()
+    records = await collector.collect()
+    assert all(r.source != "yahoo" for r in records)
 
 
 async def test_registry_discovers_vix_collector() -> None:
