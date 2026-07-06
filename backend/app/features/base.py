@@ -59,6 +59,12 @@ class BaseFeatureEngine:
     ) -> dict[str, Series]:
         raise NotImplementedError
 
+    def _reference_symbol(self, symbol: str) -> str | None:
+        """Second symbol whose candles are passed to _compute (e.g. benchmark, VIX)."""
+        if self.uses_benchmark and symbol != self.benchmark_symbol:
+            return self.benchmark_symbol
+        return None
+
     async def sync_registry(self) -> dict[str, int]:
         if self._sessions is None:
             return {"features": 0, "dependencies": 0}
@@ -110,11 +116,12 @@ class BaseFeatureEngine:
             return {"symbol": symbol, "timeframe": timeframe, "stored": 0, "skipped": True}
 
         benchmark: list[Candle] | None = None
-        if self.uses_benchmark and symbol != self.benchmark_symbol:
-            benchmark = await self._load_candles(self.benchmark_symbol, timeframe)
+        reference = self._reference_symbol(symbol)
+        if reference is not None:
+            benchmark = await self._load_candles(reference, timeframe)
 
         series = self._compute(candles, benchmark)
-        since = await self.store.latest_ts(symbol, timeframe)
+        since = await self.store.latest_ts(symbol, timeframe, feature_names=list(series))
         values = self.build_values(symbol, timeframe, candles, series, since=since)
         quality = self._quality_check(values)
         stored = await self.store.write(values)

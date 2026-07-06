@@ -166,15 +166,25 @@ class FeatureStore:
             for row in rows
         ]
 
-    async def latest_ts(self, symbol: str, timeframe: str):
-        """Most recent stored observation timestamp — used for incremental runs."""
+    async def latest_ts(
+        self,
+        symbol: str,
+        timeframe: str,
+        feature_names: list[str] | None = None,
+    ):
+        """Most recent stored observation timestamp — used for incremental runs.
+
+        Scope with `feature_names` so one engine's watermark is not advanced by
+        another engine's rows for the same symbol/timeframe.
+        """
         if self._sessions is None:
             return None
+        query = select(func.max(FeatureStoreRow.ts)).where(
+            FeatureStoreRow.symbol == symbol,
+            FeatureStoreRow.timeframe == timeframe,
+        )
+        if feature_names is not None:
+            query = query.where(FeatureStoreRow.feature_name.in_(feature_names))
         async with self._sessions() as session:
-            result = await session.execute(
-                select(func.max(FeatureStoreRow.ts)).where(
-                    FeatureStoreRow.symbol == symbol,
-                    FeatureStoreRow.timeframe == timeframe,
-                )
-            )
+            result = await session.execute(query)
             return result.scalar()

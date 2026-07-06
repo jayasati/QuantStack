@@ -6,6 +6,7 @@ from app.core.container import container
 from app.features.base import BaseFeatureEngine
 from app.features.price import PriceFeatureEngine
 from app.features.schema import FeatureDefinition
+from app.features.volatility import VolatilityFeatureEngine
 from app.features.volume import VolumeFeatureEngine
 
 router = APIRouter(prefix="/features", tags=["features"])
@@ -15,6 +16,7 @@ def _engines() -> list[BaseFeatureEngine]:
     return [
         container.resolve(PriceFeatureEngine),
         container.resolve(VolumeFeatureEngine),
+        container.resolve(VolatilityFeatureEngine),
     ]
 
 

@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     feature_candle_lookback: int = 500
     # Trailing bars used for rolling z-score normalization (_z features).
     feature_normalization_window: int = 100
+    # Symbol whose closes provide implied volatility for VIX-distance features.
+    feature_vix_symbol: str = "INDIAVIX"
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None
