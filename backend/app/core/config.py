@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     feature_options_lookback: int = 5000
     # Breadth observations loaded per breadth-feature run.
     feature_breadth_lookback: int = 8000
+    # Sector observations loaded per sector-feature run.
+    feature_sector_lookback: int = 8000
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None

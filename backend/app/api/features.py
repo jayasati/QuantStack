@@ -9,6 +9,7 @@ from app.features.liquidity import LiquidityFeatureEngine
 from app.features.options import OptionsFeatureEngine
 from app.features.price import PriceFeatureEngine
 from app.features.schema import FeatureDefinition
+from app.features.sector import SectorFeatureEngine
 from app.features.volatility import VolatilityFeatureEngine
 from app.features.volume import VolumeFeatureEngine
 
@@ -23,6 +24,7 @@ def _engines() -> list[BaseFeatureEngine]:
         container.resolve(LiquidityFeatureEngine),
         container.resolve(OptionsFeatureEngine),
         container.resolve(BreadthFeatureEngine),
+        container.resolve(SectorFeatureEngine),
     ]
 
 

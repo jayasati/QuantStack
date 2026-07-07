@@ -48,6 +48,7 @@ def wire_default_services() -> None:
     from app.features.liquidity import LiquidityFeatureEngine
     from app.features.options import OptionsFeatureEngine
     from app.features.price import PriceFeatureEngine
+    from app.features.sector import SectorFeatureEngine
     from app.features.volatility import VolatilityFeatureEngine
     from app.features.volume import VolumeFeatureEngine
     from app.market.angel_one import AngelOneAdapter
@@ -109,6 +110,14 @@ def wire_default_services() -> None:
     container.register(
         BreadthFeatureEngine,
         lambda: BreadthFeatureEngine(
+            session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
+            cache=container.resolve(CacheService),
+        ),
+    )
+    container.register(
+        SectorFeatureEngine,
+        lambda: SectorFeatureEngine(
             session_factory=get_session_factory(),
             bus=container.resolve(EventBus),
             cache=container.resolve(CacheService),

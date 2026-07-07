@@ -33,3 +33,4 @@ feature_quote_lookback: 500
 feature_reference_order_qty: 1000
 feature_options_lookback: 5000
 feature_breadth_lookback: 8000
+feature_sector_lookback: 8000

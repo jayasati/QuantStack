@@ -59,6 +59,35 @@ def rolling_slope(series: Series, window: int) -> Series:
     return out
 
 
+def rolling_correlation(a: Series, b: Series, window: int) -> Series:
+    """Pearson correlation of two series over the trailing window, per step.
+
+    None until the window is fully populated in both series, or when either
+    side has zero variance.
+    """
+    n = min(len(a), len(b))
+    out: Series = [None] * n
+    for i in range(window - 1, n):
+        pairs = [
+            (x, y)
+            for x, y in zip(a[i - window + 1 : i + 1], b[i - window + 1 : i + 1], strict=True)
+            if x is not None and y is not None
+        ]
+        if len(pairs) < window:
+            continue
+        xs = [p[0] for p in pairs]
+        ys = [p[1] for p in pairs]
+        mean_x, mean_y = fmean(xs), fmean(ys)
+        var_x = fmean([(x - mean_x) ** 2 for x in xs])
+        var_y = fmean([(y - mean_y) ** 2 for y in ys])
+        if var_x <= 0 or var_y <= 0:
+            continue
+        cov = fmean([(x - mean_x) * (y - mean_y) for x, y in pairs])
+        # Pearson is mathematically bounded; clamp float overshoot at +/-1.
+        out[i] = max(-1.0, min(1.0, cov / (var_x * var_y) ** 0.5))
+    return out
+
+
 def trailing_percentile(series: Series, i: int, window: int, min_obs: int) -> float | None:
     """Percentile (0..1) of series[i] among the trailing `window` values, no look-ahead."""
     current = series[i]
