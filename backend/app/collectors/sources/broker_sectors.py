@@ -1,7 +1,10 @@
 """Broker-backed sector rotation source (real feed for Prompt 2.6).
 
 Window returns for the benchmark and every tracked NSE sectoral index are
-computed from broker daily candles, cached for a few hours per index.
+computed from broker daily candles, cached for a few hours per index. When
+the broker is unreachable (e.g. TLS interception on the network path), the
+same daily closes come from Yahoo's sector index tickers instead, so sector
+rotation stays current rather than freezing at the last broker fetch.
 
 Relative volume: broker index candles report zero traded volume, so today's
 index volume comes from NSE's per-sector constituents API, and the ratio is
@@ -36,6 +39,23 @@ SECTOR_TOKENS: dict[str, tuple[str, str]] = {
     "Realty": ("99926018", "NSE"),         # Nifty Realty
     "Metal": ("99926030", "NSE"),          # Nifty Metal
     "Infrastructure": ("99926019", "NSE"), # Nifty Infra
+}
+
+# Yahoo tickers for the same indices — the broker-outage fallback for closes.
+YAHOO_SECTOR_TICKERS: dict[str, str] = {
+    "BENCHMARK": "^NSEI",
+    "Banking": "^NSEBANK",
+    "IT": "^CNXIT",
+    "Auto": "^CNXAUTO",
+    "Energy": "^CNXENERGY",
+    "Pharma": "^CNXPHARMA",
+    "FMCG": "^CNXFMCG",
+    "PSU": "^CNXPSE",
+    "PSU Bank": "^CNXPSUBANK",
+    "Private Bank": "NIFTY_PVT_BANK.NS",
+    "Realty": "^CNXREALTY",
+    "Metal": "^CNXMETAL",
+    "Infrastructure": "^CNXINFRA",
 }
 
 # NSE index page names for per-sector volume lookups.
@@ -78,11 +98,16 @@ def window_returns(closes: list[float]) -> dict[str, float] | None:
 
 class BrokerSectorSource(SectorSource):
     def __init__(
-        self, broker: Any = None, nse_session: Any = None, cache: Any = None
+        self,
+        broker: Any = None,
+        nse_session: Any = None,
+        cache: Any = None,
+        yahoo: Any = None,
     ) -> None:
         self._broker = broker
         self._nse = nse_session
         self._redis = cache
+        self._yahoo = yahoo
         self._cache: tuple[float, dict] | None = None
         self._volume_cache: tuple[float, dict[str, float]] | None = None
 
@@ -138,14 +163,14 @@ class BrokerSectorSource(SectorSource):
         return payload
 
     async def _compute_returns(self) -> dict:
-        benchmark = await self._returns_for(*BENCHMARK_TOKEN)
+        benchmark = await self._returns_for("BENCHMARK", *BENCHMARK_TOKEN)
         if benchmark is None:
             raise CollectionError("could not compute benchmark returns")
 
         sectors: dict[str, dict[str, float]] = {}
         failed: list[str] = []
         for name, (token, exchange) in SECTOR_TOKENS.items():
-            metrics = await self._returns_for(token, exchange)
+            metrics = await self._returns_for(name, token, exchange)
             if metrics is None:
                 failed.append(name)
                 continue
@@ -242,7 +267,16 @@ class BrokerSectorSource(SectorSource):
         except Exception:
             return []
 
-    async def _returns_for(self, token: str, exchange: str) -> dict[str, float] | None:
+    def _get_yahoo(self):
+        if getattr(self, "_yahoo", None) is None:
+            from app.collectors.sources.yahoo_history import YahooDailyHistory
+
+            self._yahoo = YahooDailyHistory()
+        return self._yahoo
+
+    async def _returns_for(
+        self, name: str, token: str, exchange: str
+    ) -> dict[str, float] | None:
         from datetime import UTC, datetime, timedelta
 
         try:
@@ -253,10 +287,26 @@ class BrokerSectorSource(SectorSource):
                 datetime.now(UTC),
                 exchange=exchange,
             )
+            await asyncio.sleep(0.35)  # stay well inside broker rate limits
+            return window_returns([candle.close for candle in candles])
         except Exception as exc:
             logger.warning(
-                "sector history fetch failed", extra={"token": token, "error": str(exc)}
+                "sector history fetch failed; trying yahoo",
+                extra={"sector": name, "token": token, "error": str(exc)},
+            )
+        return await self._returns_from_yahoo(name)
+
+    async def _returns_from_yahoo(self, name: str) -> dict[str, float] | None:
+        ticker = YAHOO_SECTOR_TICKERS.get(name)
+        if ticker is None:
+            return None
+        try:
+            candles = await self._get_yahoo().fetch_daily(ticker, lookback="3mo")
+        except Exception as exc:
+            logger.warning(
+                "yahoo sector fallback failed",
+                extra={"sector": name, "ticker": ticker, "error": str(exc)},
             )
             return None
-        await asyncio.sleep(0.35)  # stay well inside broker rate limits
+        await asyncio.sleep(0.6)  # be polite to the unauthenticated Yahoo API
         return window_returns([candle.close for candle in candles])

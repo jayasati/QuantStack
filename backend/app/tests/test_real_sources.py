@@ -100,8 +100,12 @@ async def test_sector_source_builds_full_payload() -> None:
 
 
 async def test_sector_source_fails_loudly_when_index_missing() -> None:
+    class DeadYahoo:
+        async def fetch_daily(self, ticker: str, lookback: str = "5y"):
+            raise RuntimeError("yahoo unavailable")
+
     closes = {"99926000": [200.0 + i for i in range(40)]}  # benchmark only
-    source = BrokerSectorSource(broker=FakeBroker(closes), cache=False)
+    source = BrokerSectorSource(broker=FakeBroker(closes), cache=False, yahoo=DeadYahoo())
     with pytest.raises(CollectionError, match="sector history unavailable"):
         await source.fetch_sectors()
 

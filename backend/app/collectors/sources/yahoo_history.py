@@ -43,9 +43,12 @@ YAHOO_TICKERS = {
 
 
 def yahoo_ticker(symbol: str) -> str:
-    """Map a friendly symbol to its Yahoo ticker; unmapped symbols are treated
-    as NSE equities (.NS suffix)."""
+    """Map a friendly symbol to its Yahoo ticker; raw Yahoo tickers (index ^
+    prefix or exchange suffix) pass through, other unmapped symbols are
+    treated as NSE equities (.NS suffix)."""
     upper = symbol.upper()
+    if upper.startswith("^") or "." in upper:
+        return upper
     return YAHOO_TICKERS.get(upper, f"{upper}.NS")
 
 
