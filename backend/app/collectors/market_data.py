@@ -276,7 +276,7 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
     priority = 5
     requires_auth = True
 
-    intervals = ("1m", "3m", "5m", "15m", "30m", "1H", "D")
+    intervals: tuple[str, ...] = ("1m", "3m", "5m", "15m", "30m", "1H", "D")
     default_lookback = {
         "1m": timedelta(days=2),
         "3m": timedelta(days=5),
@@ -430,6 +430,12 @@ class VixCollector(HistoricalCandleCollector):
         self.symbols = [get_settings().feature_vix_symbol]
         self._yahoo = yahoo
 
+    def _yahoo_ticker(self, symbol: str) -> str | None:
+        """Yahoo ticker used for the deep backfill; None disables it."""
+        from app.collectors.sources.yahoo_history import yahoo_ticker
+
+        return yahoo_ticker(symbol)
+
     async def collect(self) -> list[CollectorOutput]:
         records: list[CollectorOutput] = []
         broker_error: CollectionError | None = None
@@ -437,14 +443,15 @@ class VixCollector(HistoricalCandleCollector):
             records = await super().collect()
         except CollectionError as exc:
             broker_error = exc
-        backfill = await self._deep_backfill_daily()
-        if backfill is not None:
-            records.append(backfill)
+        for symbol in self.symbols:
+            backfill = await self._deep_backfill_daily(symbol)
+            if backfill is not None:
+                records.append(backfill)
         if not records:
-            raise broker_error or CollectionError("no VIX data from broker or Yahoo")
+            raise broker_error or CollectionError("no data from broker or Yahoo")
         return records
 
-    async def _daily_bar_count(self) -> int | None:
+    async def _daily_bar_count(self, symbol: str) -> int | None:
         sessions = self._sessions()
         if sessions is None:
             return None
@@ -453,27 +460,29 @@ class VixCollector(HistoricalCandleCollector):
                 select(func.count())
                 .select_from(OhlcvCandle)
                 .where(
-                    OhlcvCandle.symbol == self.symbols[0],
+                    OhlcvCandle.symbol == symbol,
                     OhlcvCandle.timeframe == "D",
                 )
             )
             return int(result.scalar() or 0)
 
-    async def _deep_backfill_daily(self) -> CollectorOutput | None:
-        symbol = self.symbols[0]
-        count = await self._daily_bar_count()
+    async def _deep_backfill_daily(self, symbol: str) -> CollectorOutput | None:
+        count = await self._daily_bar_count(symbol)
         if count is None or count >= self.DAILY_BACKFILL_TARGET:
+            return None
+        ticker = self._yahoo_ticker(symbol)
+        if ticker is None:
             return None
         if self._yahoo is None:
             from app.collectors.sources.yahoo_history import YahooDailyHistory
 
             self._yahoo = YahooDailyHistory()
         try:
-            candles = await self._yahoo.fetch_daily(symbol)
+            candles = await self._yahoo.fetch_daily(ticker)
         except Exception as exc:
             self.logger.warning(
                 "yahoo daily backfill failed",
-                extra={"symbol": symbol, "error": str(exc)},
+                extra={"symbol": symbol, "ticker": ticker, "error": str(exc)},
             )
             return None
         if not candles:
@@ -501,3 +510,53 @@ class VixCollector(HistoricalCandleCollector):
                 "to": candles[-1].timestamp.isoformat(),
             },
         )
+
+
+class ReferenceIndexCollector(VixCollector):
+    """Daily candles for cross-reference indices: SENSEX plus every sector
+    index the relative-strength engine compares stocks against (Prompt 3.8).
+
+    Sector symbols store under their sector names (Energy, Banking, IT, ...),
+    resolved to broker tokens via the sector source's token map; deep daily
+    history comes from Yahoo while stored history is thin, exactly like the
+    VIX collector.
+    """
+
+    name = "reference_indices"
+    interval_seconds = 3600
+    priority = 8
+
+    intervals = ("D",)  # references feed daily features only
+    default_lookback = {"D": timedelta(days=365 * 2)}
+
+    def __init__(self, yahoo: "YahooDailyHistory | None" = None, **kwargs) -> None:
+        super().__init__(yahoo=yahoo, **kwargs)
+        settings = get_settings()
+        sectors = sorted(
+            set(settings.feature_stock_sectors.values())
+            | set(settings.feature_stock_industries.values())
+        )
+        self.symbols = [settings.feature_sensex_symbol, *sectors]
+
+    async def initialize(self) -> None:
+        from app.collectors.sources.broker_sectors import SECTOR_TOKENS
+
+        for symbol in self.symbols:
+            if symbol in SECTOR_TOKENS:
+                token, exchange = SECTOR_TOKENS[symbol]
+                self._tokens[symbol] = (token, exchange, symbol)
+                continue
+            try:
+                self._tokens[symbol] = self._instruments.resolve(symbol)
+            except Exception as exc:
+                self.logger.warning(
+                    "could not resolve reference index",
+                    extra={"symbol": symbol, "error": str(exc)},
+                )
+
+    def _yahoo_ticker(self, symbol: str) -> str | None:
+        from app.collectors.sources.broker_sectors import YAHOO_SECTOR_TICKERS
+        from app.collectors.sources.yahoo_history import yahoo_ticker
+
+        ticker = YAHOO_SECTOR_TICKERS.get(symbol)
+        return ticker if ticker is not None else yahoo_ticker(symbol)

@@ -34,3 +34,9 @@ feature_reference_order_qty: 1000
 feature_options_lookback: 5000
 feature_breadth_lookback: 8000
 feature_sector_lookback: 8000
+feature_stock_sectors:
+  RELIANCE: Energy
+  HDFCBANK: Banking
+  INFY: IT
+feature_stock_industries: {}
+feature_sensex_symbol: SENSEX

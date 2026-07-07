@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     feature_breadth_lookback: int = 8000
     # Sector observations loaded per sector-feature run.
     feature_sector_lookback: int = 8000
+    # Relative-strength references (Prompt 3.8): stock -> sector index name.
+    feature_stock_sectors: dict[str, str] = Field(
+        default_factory=lambda: {"RELIANCE": "Energy", "HDFCBANK": "Banking", "INFY": "IT"}
+    )
+    # Stock -> industry index; falls back to the sector when unset (no finer
+    # industry index data source yet).
+    feature_stock_industries: dict[str, str] = Field(default_factory=dict)
+    feature_sensex_symbol: str = "SENSEX"
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None

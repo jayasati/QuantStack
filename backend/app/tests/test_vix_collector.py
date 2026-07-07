@@ -136,7 +136,7 @@ async def test_deep_backfill_runs_while_daily_history_thin() -> None:
     )
     stored_rows: list[Candle] = []
 
-    async def fake_count() -> int:
+    async def fake_count(symbol: str) -> int:
         return 2  # far below DAILY_BACKFILL_TARGET
 
     async def fake_store(symbol: str, candles: list[Candle]) -> int:
@@ -163,7 +163,7 @@ async def test_deep_backfill_runs_while_daily_history_thin() -> None:
 async def test_deep_backfill_dormant_once_history_is_deep() -> None:
     collector = VixCollector(broker=FakeBroker())
 
-    async def fake_count() -> int:
+    async def fake_count(symbol: str) -> int:
         return VixCollector.DAILY_BACKFILL_TARGET
 
     collector._sessions = lambda: None  # type: ignore[method-assign]  # keep the test off the real DB
