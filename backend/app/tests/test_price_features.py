@@ -197,6 +197,23 @@ def test_quality_check_flags_out_of_range_values() -> None:
     assert quality["price_log_return"][1] == len(correlations)
 
 
+async def test_online_store_merges_across_engines() -> None:
+    from app.features.schema import FeatureValue
+
+    cache = CacheService(client=fakeredis.aioredis.FakeRedis(decode_responses=True))
+    store = FeatureStore(cache=cache)
+    ts = BASE_TS + timedelta(days=1)
+    price_value = FeatureValue("price_log_return", "v1", "NIFTY", "D", ts, 0.01)
+    volatility_value = FeatureValue("volatility_hist_20", "v1", "NIFTY", "D", ts, 12.5)
+
+    await store.write([price_value])
+    await store.write([volatility_value])  # a second engine writing the same key
+
+    latest = await store.latest("NIFTY", "D")
+    assert latest["price_log_return"]["value"] == 0.01
+    assert latest["volatility_hist_20"]["value"] == 12.5
+
+
 async def test_online_store_roundtrip() -> None:
     cache = CacheService(client=fakeredis.aioredis.FakeRedis(decode_responses=True))
     store = FeatureStore(cache=cache)

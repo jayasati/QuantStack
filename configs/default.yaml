@@ -16,6 +16,9 @@ rate_limits:
 watchlist:
   - NIFTY
   - BANKNIFTY
+  - RELIANCE
+  - HDFCBANK
+  - INFY
 enable_websocket: true
 
 # Feature engineering (Volume 3)

@@ -125,8 +125,22 @@ def test_turnover_from_candles_and_zero_volume_guard() -> None:
     ]
     index_series = compute_liquidity_candle_features(index_candles)
     assert all(v is None for v in index_series["liquidity_turnover"])
-    # Delivery % stays empty until an NSE delivery source exists.
-    assert all(v is None for v in series["liquidity_delivery_pct"])
+
+
+def test_delivery_series_dedupes_sessions_and_sorts() -> None:
+    from app.features.liquidity import delivery_series
+
+    day1 = datetime(2026, 7, 6, tzinfo=UTC)
+    day2 = datetime(2026, 7, 7, tzinfo=UTC)
+    observations = [
+        (day2, 55.0),
+        (day1, 40.0),  # provisional intraday number...
+        (day1, 42.5),  # ...superseded by the EOD final
+    ]
+    timestamps, series = delivery_series(observations)
+    assert timestamps == [day1, day2]
+    assert series["liquidity_delivery_pct"] == [42.5, 55.0]
+    assert "liquidity_delivery_pct_z" in series
 
 
 def test_parse_quote_event_rest_and_websocket_shapes() -> None:

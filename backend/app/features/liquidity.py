@@ -21,9 +21,9 @@ Conventions:
   scores zero), 30% depth (trailing percentile), 30% impact (0.5% impact
   scores zero). Liquidity Trend is the least-squares slope of the score over
   the window, in points per snapshot.
-- Delivery % is registered but stays empty until an NSE delivery source is
-  collected — the same pattern VIX distance followed before the VIX
-  collector existed.
+- Delivery % joins the nse_delivery collector's observations by session date
+  (one value per trading day, midnight-IST timestamps), stored under the
+  daily timeframe.
 - Index symbols quote without bid/ask, depth, or volume, so liquidity
   features stay empty for them by design; they populate for tradeable
   instruments (stocks, futures).
@@ -148,8 +148,8 @@ def liquidity_feature_definitions(
         define("liquidity_turnover", "Close x volume of the bar.",
                "currency", (0.0, None)),
         define("liquidity_delivery_pct",
-               "Delivered vs traded quantity, in %. Registered ahead of an NSE "
-               "delivery data source; stays empty until one is collected.",
+               "Delivered vs traded quantity, in % (nse_delivery collector, "
+               "one observation per session).",
                "%", (0.0, 100.0)),
     ]
     for w in windows:
@@ -261,12 +261,27 @@ def compute_liquidity_candle_features(
     for i, candle in enumerate(candles):
         if candle.volume > 0 and candle.close > 0:
             turnover[i] = candle.close * candle.volume
-    out: dict[str, Series] = {
-        "liquidity_turnover": turnover,
-        # Pending an NSE delivery data source; never emitted while all-None.
-        "liquidity_delivery_pct": [None] * n,
-    }
-    return add_normalized_series(out, normalization_window)
+    return add_normalized_series({"liquidity_turnover": turnover}, normalization_window)
+
+
+def delivery_series(
+    observations: Sequence[tuple[datetime, float]],
+    normalization_window: int = 100,
+) -> tuple[list[datetime], dict[str, Series]]:
+    """Deduped, time-ordered delivery observations -> feature series (+ _z).
+
+    Multiple observations for the same session (intraday provisional then EOD
+    final) collapse to the last one seen.
+    """
+    latest: dict[datetime, float] = {}
+    for ts, pct in observations:
+        latest[ts] = pct
+    timestamps = sorted(latest)
+    values: Series = [latest[ts] for ts in timestamps]
+    series = add_normalized_series(
+        {"liquidity_delivery_pct": values}, normalization_window
+    )
+    return timestamps, series
 
 
 # --- Engine -------------------------------------------------------------------------
@@ -292,7 +307,49 @@ class LiquidityFeatureEngine(BaseFeatureEngine):
     async def run(self, symbol: str, timeframe: str = "D", full: bool = False) -> dict:
         summary = await super().run(symbol, timeframe, full=full)
         summary["quote_pass"] = await self._run_quote_features(symbol, full=full)
+        summary["delivery_pass"] = await self._run_delivery_features(symbol, full=full)
         return summary
+
+    async def _run_delivery_features(self, symbol: str, full: bool = False) -> dict:
+        observations = await self._load_delivery(symbol)
+        if not observations:
+            return {"timeframe": "D", "stored": 0, "skipped": True}
+        timestamps, series = delivery_series(
+            observations, self._settings.feature_normalization_window
+        )
+        return await self._process_series(symbol, "D", timestamps, series, full=full)
+
+    async def _load_delivery(self, symbol: str) -> list[tuple[datetime, float]]:
+        """Delivery observations from the nse_delivery collector, session-dated."""
+        if self._sessions is None:
+            return []
+        from app.database.tables import MarketEvent
+
+        async with self._sessions() as session:
+            result = await session.execute(
+                select(MarketEvent.data)
+                .where(
+                    MarketEvent.event_type == "market_data.observation",
+                    MarketEvent.source == "nse_delivery",
+                    MarketEvent.data["instrument"].astext == symbol,
+                )
+                .order_by(MarketEvent.id)
+                .limit(2000)
+            )
+            rows = result.scalars().all()
+        observations: list[tuple[datetime, float]] = []
+        for data in rows:
+            meta = (data or {}).get("metadata") or {}
+            pct = meta.get("delivery_pct")
+            if pct is None:
+                continue
+            ts_raw = meta.get("position_date") or data.get("timestamp")
+            try:
+                ts = datetime.fromisoformat(ts_raw)
+            except (TypeError, ValueError):
+                continue
+            observations.append((ts, float(pct)))
+        return observations
 
     async def _run_quote_features(self, symbol: str, full: bool = False) -> dict:
         quotes = await self._load_quotes(symbol)

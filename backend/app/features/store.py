@@ -78,7 +78,12 @@ class FeatureStore:
         return len(rows)
 
     async def _write_online(self, values: list[FeatureValue]) -> int:
-        """Publish the latest observation of every feature to Redis."""
+        """Publish the latest observation of every feature to Redis.
+
+        Merges into the existing entry — several engines share one key per
+        symbol/timeframe, and a plain overwrite would drop every other
+        engine's features.
+        """
         if self._cache is None or not values:
             return 0
         latest: dict[tuple[str, str], dict[str, FeatureValue]] = {}
@@ -90,18 +95,20 @@ class FeatureStore:
 
         written = 0
         for (symbol, timeframe), group in latest.items():
-            payload = {
-                name: {
-                    "value": v.value,
-                    "version": v.feature_version,
-                    "ts": v.ts.isoformat(),
+            key = _online_key(symbol, timeframe)
+            payload: dict[str, Any] = await self._cache.get_safe(key) or {}
+            payload.update(
+                {
+                    name: {
+                        "value": v.value,
+                        "version": v.feature_version,
+                        "ts": v.ts.isoformat(),
+                    }
+                    for name, v in group.items()
                 }
-                for name, v in group.items()
-            }
-            if await self._cache.set_safe(
-                _online_key(symbol, timeframe), payload, ttl_seconds=self._online_ttl
-            ):
-                written += len(payload)
+            )
+            if await self._cache.set_safe(key, payload, ttl_seconds=self._online_ttl):
+                written += len(group)
         return written
 
     async def latest(self, symbol: str, timeframe: str) -> dict[str, Any]:

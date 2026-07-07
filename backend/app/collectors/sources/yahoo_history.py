@@ -42,6 +42,13 @@ YAHOO_TICKERS = {
 }
 
 
+def yahoo_ticker(symbol: str) -> str:
+    """Map a friendly symbol to its Yahoo ticker; unmapped symbols are treated
+    as NSE equities (.NS suffix)."""
+    upper = symbol.upper()
+    return YAHOO_TICKERS.get(upper, f"{upper}.NS")
+
+
 class YahooDailyHistory:
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client or httpx.AsyncClient(
@@ -49,7 +56,7 @@ class YahooDailyHistory:
         )
 
     async def fetch_daily(self, symbol: str, lookback: str = "5y") -> list[Candle]:
-        ticker = YAHOO_TICKERS.get(symbol.upper(), symbol)
+        ticker = yahoo_ticker(symbol)
         response = await self._client.get(
             CHART_PATH.format(ticker=ticker),
             params={"range": lookback, "interval": "1d"},
