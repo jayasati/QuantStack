@@ -87,6 +87,18 @@ class Settings(BaseSettings):
     # News articles / calendar observations loaded per feature run.
     feature_news_lookback: int = 5000
     feature_events_lookback: int = 5000
+    # Time features (Prompt 3.12): NSE index derivative expiry weekday
+    # (0=Mon; Tuesday since Sep 2025), budget window half-width, and the
+    # exchange holiday calendar (ISO dates).
+    feature_expiry_weekday: int = 1
+    feature_budget_window_days: int = 5
+    feature_market_holidays: list[str] = Field(
+        default_factory=lambda: [
+            "2026-01-26", "2026-03-04", "2026-04-03", "2026-04-14",
+            "2026-05-01", "2026-08-15", "2026-10-02", "2026-11-09",
+            "2026-11-10", "2026-12-25",
+        ]
+    )
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None

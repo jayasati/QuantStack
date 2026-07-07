@@ -44,3 +44,16 @@ feature_structure_fractal: 2
 feature_intraday_timeframe: 5m
 feature_news_lookback: 5000
 feature_events_lookback: 5000
+feature_expiry_weekday: 1
+feature_budget_window_days: 5
+feature_market_holidays:
+  - "2026-01-26"
+  - "2026-03-04"
+  - "2026-04-03"
+  - "2026-04-14"
+  - "2026-05-01"
+  - "2026-08-15"
+  - "2026-10-02"
+  - "2026-11-09"
+  - "2026-11-10"
+  - "2026-12-25"
