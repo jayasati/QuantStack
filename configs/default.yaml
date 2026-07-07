@@ -40,3 +40,5 @@ feature_stock_sectors:
   INFY: IT
 feature_stock_industries: {}
 feature_sensex_symbol: SENSEX
+feature_structure_fractal: 2
+feature_intraday_timeframe: 5m

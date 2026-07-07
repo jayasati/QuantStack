@@ -50,6 +50,7 @@ def wire_default_services() -> None:
     from app.features.price import PriceFeatureEngine
     from app.features.relative import RelativeStrengthEngine
     from app.features.sector import SectorFeatureEngine
+    from app.features.structure import MarketStructureEngine
     from app.features.volatility import VolatilityFeatureEngine
     from app.features.volume import VolumeFeatureEngine
     from app.market.angel_one import AngelOneAdapter
@@ -127,6 +128,14 @@ def wire_default_services() -> None:
     container.register(
         RelativeStrengthEngine,
         lambda: RelativeStrengthEngine(
+            session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
+            cache=container.resolve(CacheService),
+        ),
+    )
+    container.register(
+        MarketStructureEngine,
+        lambda: MarketStructureEngine(
             session_factory=get_session_factory(),
             bus=container.resolve(EventBus),
             cache=container.resolve(CacheService),

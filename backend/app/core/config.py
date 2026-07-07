@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     # industry index data source yet).
     feature_stock_industries: dict[str, str] = Field(default_factory=dict)
     feature_sensex_symbol: str = "SENSEX"
+    # Market structure (Prompt 3.9): fractal pivot half-width and the intraday
+    # timeframe used for session features.
+    feature_structure_fractal: int = 2
+    feature_intraday_timeframe: str = "5m"
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None
