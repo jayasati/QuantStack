@@ -1,16 +1,35 @@
-"""Feature normalization helpers (Volume 3).
+"""Feature Normalization Engine (Volume 3, Prompt 3.13).
 
-Prompt 3.2 requires every volume feature to ship normalized; the full
-Normalization Engine arrives with Prompt 3.13. The rolling z-score here is
-look-ahead safe: the window for bar i uses only bars <= i.
+Every method operates on a trailing window ending at the current bar, so no
+value ever sees the future (look-ahead bias prevention); missing values are
+skipped rather than imputed; and bars with fewer than `min_obs` trailing
+observations stay None (cold start). Raw series are always stored alongside
+their normalized companions — the engines emit both.
+
+Methods: rolling z-score, min-max scaling, robust scaling (median/IQR),
+percentile rank, signed log transform, and winsorization — all reachable
+through :func:`normalize_series`.
 """
 
+import math
 from dataclasses import replace
-from statistics import fmean, pstdev
+from statistics import fmean, median, pstdev
 
 from app.features.schema import FeatureDefinition, Series
 
 NORMALIZED_SUFFIX = "_z"
+
+NORMALIZATION_METHODS = (
+    "zscore", "minmax", "robust", "percentile", "log", "winsorize",
+)
+
+
+def _default_min_obs(window: int) -> int:
+    return max(10, window // 10)
+
+
+def _trailing(series: Series, i: int, window: int) -> list[float]:
+    return [v for v in series[max(0, i - window + 1) : i + 1] if v is not None]
 
 
 def rolling_zscore(series: Series, window: int, min_obs: int | None = None) -> Series:
@@ -20,20 +39,149 @@ def rolling_zscore(series: Series, window: int, min_obs: int | None = None) -> S
     stay None (cold start / degenerate distribution).
     """
     if min_obs is None:
-        min_obs = max(10, window // 10)
+        min_obs = _default_min_obs(window)
     n = len(series)
     out: Series = [None] * n
     for i in range(n):
         value = series[i]
         if value is None:
             continue
-        trailing = [v for v in series[max(0, i - window + 1) : i + 1] if v is not None]
+        trailing = _trailing(series, i, window)
         if len(trailing) < min_obs:
             continue
         std = pstdev(trailing)
         if std > 0:
             out[i] = (value - fmean(trailing)) / std
     return out
+
+
+def rolling_minmax(series: Series, window: int, min_obs: int | None = None) -> Series:
+    """Position of each value between the trailing window's min and max, 0..1."""
+    if min_obs is None:
+        min_obs = _default_min_obs(window)
+    out: Series = [None] * len(series)
+    for i, value in enumerate(series):
+        if value is None:
+            continue
+        trailing = _trailing(series, i, window)
+        if len(trailing) < min_obs:
+            continue
+        low, high = min(trailing), max(trailing)
+        if high > low:
+            out[i] = (value - low) / (high - low)
+    return out
+
+
+def _quartiles(values: list[float]) -> tuple[float, float]:
+    ordered = sorted(values)
+    n = len(ordered)
+
+    def quantile(q: float) -> float:
+        position = q * (n - 1)
+        lower = int(position)
+        upper = min(lower + 1, n - 1)
+        fraction = position - lower
+        return ordered[lower] * (1 - fraction) + ordered[upper] * fraction
+
+    return quantile(0.25), quantile(0.75)
+
+
+def rolling_robust(series: Series, window: int, min_obs: int | None = None) -> Series:
+    """Robust scaling: (value - median) / IQR over the trailing window.
+
+    Outlier-resistant — a handful of extreme bars cannot distort the scale
+    the way they distort a z-score.
+    """
+    if min_obs is None:
+        min_obs = _default_min_obs(window)
+    out: Series = [None] * len(series)
+    for i, value in enumerate(series):
+        if value is None:
+            continue
+        trailing = _trailing(series, i, window)
+        if len(trailing) < min_obs:
+            continue
+        q1, q3 = _quartiles(trailing)
+        iqr = q3 - q1
+        if iqr > 0:
+            out[i] = (value - median(trailing)) / iqr
+    return out
+
+
+def rolling_percentile_rank(
+    series: Series, window: int, min_obs: int | None = None
+) -> Series:
+    """Percentile (0..1) of each value within its trailing window."""
+    if min_obs is None:
+        min_obs = _default_min_obs(window)
+    out: Series = [None] * len(series)
+    for i, value in enumerate(series):
+        if value is None:
+            continue
+        trailing = _trailing(series, i, window)
+        if len(trailing) < min_obs:
+            continue
+        out[i] = sum(1 for v in trailing if v <= value) / len(trailing)
+    return out
+
+
+def log_transform(series: Series) -> Series:
+    """Signed log1p: sign(x) * ln(1 + |x|). Compresses heavy tails while
+    preserving sign and zero; needs no window (element-wise)."""
+    return [
+        math.copysign(math.log1p(abs(v)), v) if v is not None else None
+        for v in series
+    ]
+
+
+def rolling_winsorize(
+    series: Series,
+    window: int,
+    limits: tuple[float, float] = (0.05, 0.95),
+    min_obs: int | None = None,
+) -> Series:
+    """Clamp each value to the [low, high] quantiles of the *prior* window —
+    outliers are capped, never dropped. The current bar is excluded from the
+    quantile estimate so a spike cannot set its own cap."""
+    if min_obs is None:
+        min_obs = _default_min_obs(window)
+    low_q, high_q = limits
+    out: Series = [None] * len(series)
+    for i, value in enumerate(series):
+        if value is None:
+            continue
+        history = [v for v in series[max(0, i - window) : i] if v is not None]
+        if len(history) < min_obs:
+            out[i] = value  # cold start: pass through unclamped, never None
+            continue
+        ordered = sorted(history)
+        n = len(ordered)
+        low = ordered[max(0, min(n - 1, int(low_q * (n - 1))))]
+        high = ordered[max(0, min(n - 1, int(math.ceil(high_q * (n - 1)))))]
+        out[i] = min(max(value, low), high)
+    return out
+
+
+def normalize_series(
+    series: Series,
+    method: str,
+    window: int = 100,
+    min_obs: int | None = None,
+) -> Series:
+    """Dispatch to a normalization method by name (see NORMALIZATION_METHODS)."""
+    if method == "zscore":
+        return rolling_zscore(series, window, min_obs)
+    if method == "minmax":
+        return rolling_minmax(series, window, min_obs)
+    if method == "robust":
+        return rolling_robust(series, window, min_obs)
+    if method == "percentile":
+        return rolling_percentile_rank(series, window, min_obs)
+    if method == "log":
+        return log_transform(series)
+    if method == "winsorize":
+        return rolling_winsorize(series, window, min_obs=min_obs)
+    raise ValueError(f"unknown normalization method: {method!r}")
 
 
 def rolling_slope(series: Series, window: int) -> Series:
