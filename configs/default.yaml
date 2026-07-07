@@ -44,6 +44,7 @@ feature_structure_fractal: 2
 feature_intraday_timeframe: 5m
 feature_news_lookback: 5000
 feature_events_lookback: 5000
+feature_health_interval: 21600
 feature_expiry_weekday: 1
 feature_budget_window_days: 5
 feature_market_holidays:

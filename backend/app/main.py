@@ -78,6 +78,24 @@ async def lifespan(app: FastAPI):
             replace_existing=True,
         )
 
+    async def feature_health_sweep() -> None:
+        """Quality scores and drift detection across every stored feature."""
+        from app.database.session import get_session_factory
+        from app.features.drift import FeatureDriftEngine
+        from app.features.quality import FeatureQualityEngine
+
+        sessions = get_session_factory()
+        await FeatureQualityEngine(sessions).evaluate_all()
+        await FeatureDriftEngine(sessions).detect_all()
+
+    scheduler.add_job(
+        feature_health_sweep,
+        trigger="interval",
+        seconds=settings.feature_health_interval,
+        id="features.health",
+        replace_existing=True,
+    )
+
     logger.info(
         "application started",
         extra={

@@ -90,6 +90,8 @@ class Settings(BaseSettings):
     # Time features (Prompt 3.12): NSE index derivative expiry weekday
     # (0=Mon; Tuesday since Sep 2025), budget window half-width, and the
     # exchange holiday calendar (ISO dates).
+    # Feature quality + drift sweep interval, seconds (Prompts 3.14/3.15).
+    feature_health_interval: int = 21600
     feature_expiry_weekday: int = 1
     feature_budget_window_days: int = 5
     feature_market_holidays: list[str] = Field(
