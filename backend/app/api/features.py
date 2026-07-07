@@ -6,6 +6,7 @@ from app.core.container import container
 from app.features.base import BaseFeatureEngine
 from app.features.breadth import BreadthFeatureEngine
 from app.features.liquidity import LiquidityFeatureEngine
+from app.features.news import NewsFeatureEngine
 from app.features.options import OptionsFeatureEngine
 from app.features.price import PriceFeatureEngine
 from app.features.relative import RelativeStrengthEngine
@@ -29,6 +30,7 @@ def _engines() -> list[BaseFeatureEngine]:
         container.resolve(SectorFeatureEngine),
         container.resolve(RelativeStrengthEngine),
         container.resolve(MarketStructureEngine),
+        container.resolve(NewsFeatureEngine),
     ]
 
 

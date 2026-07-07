@@ -42,3 +42,5 @@ feature_stock_industries: {}
 feature_sensex_symbol: SENSEX
 feature_structure_fractal: 2
 feature_intraday_timeframe: 5m
+feature_news_lookback: 5000
+feature_events_lookback: 5000

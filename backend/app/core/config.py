@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     # timeframe used for session features.
     feature_structure_fractal: int = 2
     feature_intraday_timeframe: str = "5m"
+    # News articles / calendar observations loaded per feature run.
+    feature_news_lookback: int = 5000
+    feature_events_lookback: int = 5000
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None
