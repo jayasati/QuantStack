@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from statistics import fmean, pstdev
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.cache import CacheService
@@ -266,6 +266,49 @@ class BaseFeatureEngine:
         async with self._sessions() as session:
             session.add_all([*quality_rows, *statistic_rows])
             await session.commit()
+
+    async def _load_labeled_observations(
+        self,
+        event_type: str,
+        symbol: str,
+        label_key: str,
+        lookback: int,
+    ) -> list[tuple[datetime, str, float | None, dict]]:
+        """Collector observations from market_events as (ts, label, value,
+        metadata) tuples, oldest first — input for snapshot bucketing."""
+        if self._sessions is None:
+            return []
+        from app.database.tables import MarketEvent
+
+        async with self._sessions() as session:
+            result = await session.execute(
+                select(MarketEvent.data)
+                .where(
+                    MarketEvent.event_type == event_type,
+                    MarketEvent.data["instrument"].astext == symbol,
+                )
+                .order_by(desc(MarketEvent.id))
+                .limit(lookback)
+            )
+            rows = result.scalars().all()
+        observations: list[tuple[datetime, str, float | None, dict]] = []
+        for data in reversed(rows):
+            if not data:
+                continue
+            metadata = data.get("metadata") or {}
+            label = metadata.get(label_key)
+            ts_raw = data.get("timestamp")
+            if not label or not ts_raw:
+                continue
+            try:
+                ts = datetime.fromisoformat(ts_raw)
+            except (TypeError, ValueError):
+                continue
+            value = data.get("normalized_value")
+            observations.append(
+                (ts, label, float(value) if value is not None else None, metadata)
+            )
+        return observations
 
     async def _load_candles(self, symbol: str, timeframe: str) -> list[Candle]:
         if self._sessions is None:

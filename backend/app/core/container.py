@@ -44,6 +44,7 @@ def wire_default_services() -> None:
     from app.core.config import get_settings
     from app.database.session import get_session_factory
     from app.events.bus import EventBus
+    from app.features.breadth import BreadthFeatureEngine
     from app.features.liquidity import LiquidityFeatureEngine
     from app.features.options import OptionsFeatureEngine
     from app.features.price import PriceFeatureEngine
@@ -100,6 +101,14 @@ def wire_default_services() -> None:
     container.register(
         OptionsFeatureEngine,
         lambda: OptionsFeatureEngine(
+            session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
+            cache=container.resolve(CacheService),
+        ),
+    )
+    container.register(
+        BreadthFeatureEngine,
+        lambda: BreadthFeatureEngine(
             session_factory=get_session_factory(),
             bus=container.resolve(EventBus),
             cache=container.resolve(CacheService),

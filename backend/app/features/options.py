@@ -31,11 +31,6 @@ Every feature ships a look-ahead-safe rolling z-score companion (_z).
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any
-
-from sqlalchemy import desc, select
 
 from app.features.base import BaseFeatureEngine
 from app.features.normalize import (
@@ -44,6 +39,8 @@ from app.features.normalize import (
     trailing_percentile,
 )
 from app.features.schema import Candle, FeatureDefinition, Series
+from app.features.snapshots import Snapshot as ChainSnapshot
+from app.features.snapshots import bucket_observations as bucket_snapshots
 
 ENGINE_NAME = "options_feature_engine"
 ENGINE_VERSION = "v1"
@@ -51,37 +48,6 @@ CATEGORY = "options"
 
 OPTIONS_TIMEFRAME = "chain"
 TRADING_DAYS = 252
-# Observations from one collector run land within one interval; bucket them.
-SNAPSHOT_BUCKET_SECONDS = 60
-
-
-@dataclass(frozen=True)
-class ChainSnapshot:
-    """All observations of one collector run, keyed by the collector's
-    feature label (pcr, max_pain, atm_iv, ...)."""
-
-    ts: datetime
-    values: dict[str, float] = field(default_factory=dict)
-    metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
-
-
-def bucket_snapshots(
-    observations: Sequence[tuple[datetime, str, float | None, dict[str, Any]]],
-    bucket_seconds: int = SNAPSHOT_BUCKET_SECONDS,
-) -> list[ChainSnapshot]:
-    """Group (ts, feature, value, metadata) observations into chain snapshots."""
-    buckets: dict[int, dict[str, Any]] = {}
-    for ts, feature, value, metadata in observations:
-        key = int(ts.timestamp()) // bucket_seconds
-        bucket = buckets.setdefault(key, {"ts": ts, "values": {}, "metadata": {}})
-        bucket["ts"] = max(bucket["ts"], ts)
-        if value is not None:
-            bucket["values"][feature] = float(value)
-        bucket["metadata"][feature] = metadata or {}
-    return [
-        ChainSnapshot(ts=b["ts"], values=b["values"], metadata=b["metadata"])
-        for _, b in sorted(buckets.items())
-    ]
 
 
 # --- Feature definitions -------------------------------------------------------
@@ -267,7 +233,10 @@ class OptionsFeatureEngine(BaseFeatureEngine):
     async def run(self, symbol: str, timeframe: str = "D", full: bool = False) -> dict:
         """Options features ignore the bar timeframe — they live on chain
         snapshots under the synthetic timeframe "chain"."""
-        observations = await self._load_observations(symbol)
+        observations = await self._load_labeled_observations(
+            "options.observation", symbol, "feature",
+            self._settings.feature_options_lookback,
+        )
         snapshots = bucket_snapshots(observations)
         if len(snapshots) < 2:
             return {
@@ -282,41 +251,3 @@ class OptionsFeatureEngine(BaseFeatureEngine):
         return await self._process_series(
             symbol, OPTIONS_TIMEFRAME, [s.ts for s in snapshots], series, full=full
         )
-
-    async def _load_observations(
-        self, symbol: str
-    ) -> list[tuple[datetime, str, float | None, dict[str, Any]]]:
-        if self._sessions is None:
-            return []
-        from app.database.tables import MarketEvent
-
-        lookback = self._settings.feature_options_lookback
-        async with self._sessions() as session:
-            result = await session.execute(
-                select(MarketEvent.data)
-                .where(
-                    MarketEvent.event_type == "options.observation",
-                    MarketEvent.data["instrument"].astext == symbol,
-                )
-                .order_by(desc(MarketEvent.id))
-                .limit(lookback)
-            )
-            rows = result.scalars().all()
-        observations: list[tuple[datetime, str, float | None, dict[str, Any]]] = []
-        for data in reversed(rows):
-            if not data:
-                continue
-            metadata = data.get("metadata") or {}
-            feature = metadata.get("feature")
-            ts_raw = data.get("timestamp")
-            if not feature or not ts_raw:
-                continue
-            try:
-                ts = datetime.fromisoformat(ts_raw)
-            except (TypeError, ValueError):
-                continue
-            value = data.get("normalized_value")
-            observations.append(
-                (ts, feature, float(value) if value is not None else None, metadata)
-            )
-        return observations

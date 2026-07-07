@@ -36,6 +36,29 @@ def rolling_zscore(series: Series, window: int, min_obs: int | None = None) -> S
     return out
 
 
+def rolling_slope(series: Series, window: int) -> Series:
+    """Least-squares slope over the trailing window, per step.
+
+    None until the window is fully populated (no partial-window slopes).
+    """
+    n = len(series)
+    out: Series = [None] * n
+    if window < 2:
+        return out
+    mean_t = (window - 1) / 2
+    var_t = fmean([(t - mean_t) ** 2 for t in range(window)])
+    for i in range(window - 1, n):
+        window_values = series[i - window + 1 : i + 1]
+        values = [v for v in window_values if v is not None]
+        if len(values) < window:
+            continue
+        mean_v = fmean(values)
+        out[i] = fmean(
+            [(t - mean_t) * (v - mean_v) for t, v in enumerate(values)]
+        ) / var_t
+    return out
+
+
 def trailing_percentile(series: Series, i: int, window: int, min_obs: int) -> float | None:
     """Percentile (0..1) of series[i] among the trailing `window` values, no look-ahead."""
     current = series[i]

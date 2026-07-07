@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     feature_reference_order_qty: int = 1000
     # Option-chain observations loaded per options-feature run.
     feature_options_lookback: int = 5000
+    # Breadth observations loaded per breadth-feature run.
+    feature_breadth_lookback: int = 8000
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None
