@@ -78,16 +78,26 @@ class BaseFeatureEngine:
         series: dict[str, Series],
         since: datetime | Mapping[str, datetime] | None = None,
     ) -> list[FeatureValue]:
+        return self.build_values_at(symbol, timeframe, [c.ts for c in candles], series, since)
+
+    def build_values_at(
+        self,
+        symbol: str,
+        timeframe: str,
+        timestamps: Sequence[datetime],
+        series: dict[str, Series],
+        since: datetime | Mapping[str, datetime] | None = None,
+    ) -> list[FeatureValue]:
         values: list[FeatureValue] = []
         for feature_name, feature_series in series.items():
             definition = self.registry.get(feature_name)
             version = definition.version if definition else "v1"
             window = definition.window if definition else None
             cutoff = since.get(feature_name) if isinstance(since, Mapping) else since
-            for candle, value in zip(candles, feature_series, strict=True):
+            for ts, value in zip(timestamps, feature_series, strict=True):
                 if value is None or not math.isfinite(value):
                     continue
-                if cutoff is not None and candle.ts <= cutoff:
+                if cutoff is not None and ts <= cutoff:
                     continue
                 values.append(
                     FeatureValue(
@@ -95,7 +105,7 @@ class BaseFeatureEngine:
                         feature_version=version,
                         symbol=symbol,
                         timeframe=timeframe,
-                        ts=candle.ts,
+                        ts=ts,
                         value=value,
                         window=window,
                     )
@@ -125,10 +135,23 @@ class BaseFeatureEngine:
             benchmark = await self._load_candles(reference, timeframe)
 
         series = self._compute(candles, benchmark)
+        return await self._process_series(
+            symbol, timeframe, [c.ts for c in candles], series, full=full
+        )
+
+    async def _process_series(
+        self,
+        symbol: str,
+        timeframe: str,
+        timestamps: Sequence[datetime],
+        series: dict[str, Series],
+        full: bool = False,
+    ) -> dict:
+        """Quality check, store, and publish one computed series batch."""
         since: Mapping[str, datetime] | None = None
         if not full:
             since = await self.store.latest_ts_map(symbol, timeframe, feature_names=list(series))
-        values = self.build_values(symbol, timeframe, candles, series, since=since)
+        values = self.build_values_at(symbol, timeframe, timestamps, series, since=since)
         quality = self._quality_check(values)
         stored = await self.store.write(values)
         await self._persist_run_metadata(symbol, timeframe, values, quality)
@@ -142,7 +165,7 @@ class BaseFeatureEngine:
                         "timeframe": timeframe,
                         "features": len(series),
                         "values_stored": stored["offline_rows"],
-                        "as_of": candles[-1].ts.isoformat(),
+                        "as_of": timestamps[-1].isoformat(),
                     },
                     source=self.name,
                 )

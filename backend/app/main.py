@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.container import container, wire_default_services
 from app.core.logging import get_logger, setup_logging
 from app.database.session import dispose_engine
+from app.features.liquidity import LiquidityFeatureEngine
 from app.features.price import PriceFeatureEngine
 from app.features.volatility import VolatilityFeatureEngine
 from app.features.volume import VolumeFeatureEngine
@@ -43,6 +44,7 @@ async def lifespan(app: FastAPI):
         container.resolve(PriceFeatureEngine),
         container.resolve(VolumeFeatureEngine),
         container.resolve(VolatilityFeatureEngine),
+        container.resolve(LiquidityFeatureEngine),
     ]
     for engine in feature_engines:
         try:

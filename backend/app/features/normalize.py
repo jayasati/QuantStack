@@ -36,6 +36,17 @@ def rolling_zscore(series: Series, window: int, min_obs: int | None = None) -> S
     return out
 
 
+def trailing_percentile(series: Series, i: int, window: int, min_obs: int) -> float | None:
+    """Percentile (0..1) of series[i] among the trailing `window` values, no look-ahead."""
+    current = series[i]
+    if current is None:
+        return None
+    trailing = [v for v in series[max(0, i - window + 1) : i + 1] if v is not None]
+    if len(trailing) < min_obs:
+        return None
+    return sum(1 for v in trailing if v <= current) / len(trailing)
+
+
 def normalized_definition(definition: FeatureDefinition, window: int) -> FeatureDefinition:
     """Registry metadata for the z-score companion of a raw feature."""
     return replace(

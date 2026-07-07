@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     feature_normalization_window: int = 100
     # Symbol whose closes provide implied volatility for VIX-distance features.
     feature_vix_symbol: str = "INDIAVIX"
+    # Quote snapshots loaded per liquidity run (from market_events).
+    feature_quote_lookback: int = 500
+    # Reference order size (qty) for the market-impact estimate.
+    feature_reference_order_qty: int = 1000
 
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None

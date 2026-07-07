@@ -31,7 +31,11 @@ from collections.abc import Sequence
 from statistics import fmean, pstdev
 
 from app.features.base import BaseFeatureEngine
-from app.features.normalize import add_normalized_series, normalized_definition
+from app.features.normalize import (
+    add_normalized_series,
+    normalized_definition,
+    trailing_percentile,
+)
 from app.features.schema import Candle, FeatureDefinition, Series
 
 ENGINE_NAME = "volatility_feature_engine"
@@ -114,17 +118,6 @@ def volatility_feature_definitions(
 
 # --- Pure calculations -----------------------------------------------------------
 
-def _trailing_percentile(series: Series, i: int, window: int, min_obs: int) -> float | None:
-    """Percentile (0..1) of series[i] among the trailing `window` values, no look-ahead."""
-    current = series[i]
-    if current is None:
-        return None
-    trailing = [v for v in series[max(0, i - window + 1) : i + 1] if v is not None]
-    if len(trailing) < min_obs:
-        return None
-    return sum(1 for v in trailing if v <= current) / len(trailing)
-
-
 def compute_volatility_features(
     candles: Sequence[Candle],
     vix: Sequence[Candle] | None = None,
@@ -195,7 +188,7 @@ def compute_volatility_features(
             vols = [v for v in rolling[i - w + 1 : i + 1] if v is not None]
             if len(vols) == w:
                 vol_of_vol[i] = pstdev(vols)
-            percentile = _trailing_percentile(rolling, i, normalization_window, min_obs)
+            percentile = trailing_percentile(rolling, i, normalization_window, min_obs)
             if percentile is not None:
                 regime[i] = 0.0 if percentile < 1 / 3 else (1.0 if percentile < 2 / 3 else 2.0)
                 squeeze = 1 - percentile
