@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.core.container import container
 from app.features.base import BaseFeatureEngine
 from app.features.breadth import BreadthFeatureEngine
+from app.features.events import EventRiskEngine
 from app.features.liquidity import LiquidityFeatureEngine
 from app.features.news import NewsFeatureEngine
 from app.features.options import OptionsFeatureEngine
@@ -31,6 +32,7 @@ def _engines() -> list[BaseFeatureEngine]:
         container.resolve(RelativeStrengthEngine),
         container.resolve(MarketStructureEngine),
         container.resolve(NewsFeatureEngine),
+        container.resolve(EventRiskEngine),
     ]
 
 
