@@ -87,6 +87,12 @@ class LiveMarketCollector(_BrokerBackedCollector):
 
     Streams via the SmartAPI WebSocket feed when enabled and connected;
     any symbol whose stream is missing or stale falls back to REST polling.
+
+    Also carries the India VIX index token alongside the tradable watchlist.
+    VixCollector only backfills daily candles (the broker gives at most a
+    couple of daily bars), so an intraday VIX spike is otherwise invisible
+    until end of day; this gives VIX the same 15s live tick as everything
+    else here, for free, off the same WS/REST fallback path.
     """
 
     name = "live_market"
@@ -99,6 +105,9 @@ class LiveMarketCollector(_BrokerBackedCollector):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._feed: AngelWebSocketFeed | None = None
+        vix_symbol = get_settings().feature_vix_symbol
+        if vix_symbol not in self.symbols:
+            self.symbols = [*self.symbols, vix_symbol]
 
     async def authenticate(self) -> None:
         await super().authenticate()
