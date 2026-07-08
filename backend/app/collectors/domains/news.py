@@ -38,6 +38,21 @@ POSITIVE_TERMS: dict[str, float] = {
     "growth": 0.5,
     "buyback": 0.8,
     "dividend hike": 0.8,
+    # Geopolitical de-escalation: markets read these as risk-off unwinding.
+    # Bare "ceasefire"/"truce" are deliberately excluded — the word alone is
+    # equally common in headlines reporting one BREAKING, so it must be
+    # scored from the specific phrase, not the word (see ceasefire-collapse
+    # entries in NEGATIVE_TERMS below).
+    "ceasefire deal": 1.2,
+    "ceasefire holds": 1.1,
+    "ceasefire agreed": 1.2,
+    "peace deal": 1.3,
+    "de-escalation": 1.0,
+    "peace talks": 0.8,
+    "troop withdrawal": 0.8,
+    "trade deal": 1.0,
+    "tariff cut": 1.0,
+    "tariffs lifted": 1.1,
 }
 
 NEGATIVE_TERMS: dict[str, float] = {
@@ -57,6 +72,44 @@ NEGATIVE_TERMS: dict[str, float] = {
     "slump": 1.0,
     "probe": 0.8,
     "recession": 1.2,
+    # Geopolitical shock vocabulary: war/conflict language moves index and crude
+    # prices even with zero finance-specific terms in the headline.
+    "war": 1.3,
+    "attack": 1.1,
+    "attacks": 1.1,
+    "strike": 0.9,
+    "strikes": 0.9,
+    "airstrike": 1.2,
+    "airstrikes": 1.2,
+    "missile": 1.1,
+    "missiles": 1.1,
+    "invasion": 1.3,
+    "invades": 1.3,
+    "escalation": 0.9,
+    "escalates": 0.9,
+    "sanctions": 0.9,
+    "conflict": 0.7,
+    "nuclear threat": 1.2,
+    "troops": 0.5,
+    "retaliation": 1.0,
+    "retaliatory": 1.0,
+    "ceasefire collapse": 1.4,
+    "ceasefire collapses": 1.4,
+    "ceasefire collapsed": 1.4,
+    "ceasefire over": 1.4,
+    "ceasefire broken": 1.4,
+    "ceasefire violated": 1.4,
+    "truce collapses": 1.4,
+    "truce broken": 1.4,
+    "martial law": 1.2,
+    # Trade-policy vocabulary: tariff/trade-war language moves export-heavy
+    # sectors and the rupee even without a war/conflict word in the headline.
+    "tariff war": 1.1,
+    "trade war": 1.1,
+    "new tariffs": 1.0,
+    "tariff hike": 1.0,
+    "tariffs imposed": 1.0,
+    "retaliatory tariffs": 1.1,
 }
 
 # Source trust map used by the impact score; unknown sources get DEFAULT_SOURCE_TRUST.
@@ -69,6 +122,10 @@ SOURCE_TRUST: dict[str, float] = {
     "livemint": 0.80,
     "business standard": 0.80,
     "cnbc": 0.75,
+    "al jazeera": 0.80,
+    "associated press": 0.90,
+    "ap": 0.90,
+    "afp": 0.85,
 }
 DEFAULT_SOURCE_TRUST: float = 0.6
 
@@ -84,11 +141,105 @@ KNOWN_SECTOR_NAMES: tuple[str, ...] = (
     "TELECOM",
 )
 
+# Countries/regions whose news routinely moves Indian markets (war, sanctions,
+# trade policy, central bank action) even when no Indian entity is named.
+KNOWN_COUNTRY_NAMES: tuple[str, ...] = (
+    # "US" is deliberately excluded: as a bare token it collides with the
+    # common pronoun ("join us", "with us") and would false-positive on almost
+    # any article. "USA" and "america(n)" below are unambiguous instead.
+    "USA",
+    "AMERICA",
+    "CHINA",
+    "RUSSIA",
+    "IRAN",
+    "ISRAEL",
+    "HONG KONG",
+    "TAIWAN",
+    "UKRAINE",
+    "SAUDI ARABIA",
+    "PAKISTAN",
+)
+
+# Heads of state / geopolitical figures whose statements move crude, the
+# rupee, or global risk sentiment even when framed as "just talk" — a war,
+# tariff, or sanctions headline attached to one of these names is the
+# highest-conviction shock signal available before price actually moves.
+# Full names/surnames chosen to avoid common-word collisions (see the "US"
+# note above); "XI JINPING" is spelled out in full for the same reason bare
+# "XI" would be ("Article XI", chapter numbering, etc.).
+KNOWN_GLOBAL_LEADER_NAMES: tuple[str, ...] = (
+    "TRUMP",
+    "PUTIN",
+    "XI JINPING",
+    "ZELENSKYY",
+    "ZELENSKY",
+    "NETANYAHU",
+    "KHAMENEI",
+)
+
+# Central bankers: statements move US10Y/DXY/EUR or India's own repo path
+# directly — the same channel MacroIntelligenceCollector's factors capture,
+# just attributable to a named speaker instead of a price move after the fact.
+KNOWN_CENTRAL_BANKER_NAMES: tuple[str, ...] = (
+    "POWELL",
+    "WARSH",
+    "LAGARDE",
+)
+
+# India's own policymakers: routed to "policy" (domestic), not "global".
+# RBI Governor's full name reduces collision risk vs. a bare surname.
+KNOWN_INDIA_POLICYMAKER_NAMES: tuple[str, ...] = (
+    "MODI",
+    "SITHARAMAN",
+    "SANJAY MALHOTRA",
+)
+
+# Institutions whose decisions/statements are themselves the market event —
+# OPEC production quotas, a sovereign rating action, a Fed/ECB statement.
+KNOWN_INSTITUTION_NAMES: tuple[str, ...] = (
+    "OPEC",
+    "MOODY",  # matches "Moody's" — tokenizer splits the trailing 's separately
+    "FITCH",
+    "S&P",
+    "IMF",
+    "WORLD BANK",
+    "NATO",
+    "FEDERAL RESERVE",
+    "ECB",
+)
+
+# Promoters whose own name can move their flagship stock even when the
+# ticker/symbol itself isn't named in the headline (index-weight concentration:
+# Reliance alone is a large share of Nifty). Resolved to the tradable symbol
+# during entity extraction so stock classification and instrument tagging
+# work exactly like a direct symbol mention.
+PROMOTER_ALIASES: dict[str, str] = {
+    "AMBANI": "RELIANCE",
+    "ADANI": "ADANIENT",
+}
+KNOWN_PROMOTER_NAMES: tuple[str, ...] = tuple(PROMOTER_ALIASES)
+
 _WATCHLIST_SYMBOLS: tuple[str, ...] = tuple(get_settings().watchlist)
 
-# Known entities for extraction: watchlist symbols first (preferred as instrument),
-# then sector names.
-KNOWN_ENTITIES: list[str] = [*_WATCHLIST_SYMBOLS, *KNOWN_SECTOR_NAMES]
+# Known entities for extraction, in instrument-preference order: watchlist
+# symbols and promoter aliases first, then sectors, then countries, then
+# named leaders/central bankers/policymakers/institutions.
+KNOWN_ENTITIES: list[str] = [
+    *_WATCHLIST_SYMBOLS,
+    *KNOWN_PROMOTER_NAMES,
+    *KNOWN_SECTOR_NAMES,
+    *KNOWN_COUNTRY_NAMES,
+    *KNOWN_GLOBAL_LEADER_NAMES,
+    *KNOWN_CENTRAL_BANKER_NAMES,
+    *KNOWN_INDIA_POLICYMAKER_NAMES,
+    *KNOWN_INSTITUTION_NAMES,
+]
+
+# Leaders/institutions whose mentions classify as "global" (foreign) rather
+# than "policy" (domestic) — mirrors the KNOWN_COUNTRY_NAMES routing.
+_GLOBAL_ENTITY_NAMES: frozenset[str] = frozenset(
+    (*KNOWN_GLOBAL_LEADER_NAMES, *KNOWN_CENTRAL_BANKER_NAMES, *KNOWN_INSTITUTION_NAMES)
+)
 
 _POLICY_KEYWORDS: tuple[str, ...] = (
     "rbi",
@@ -124,6 +275,12 @@ _GLOBAL_KEYWORDS: tuple[str, ...] = (
     "crude",
     "treasury",
     "us markets",
+    "middle east",
+    "opec",
+    "war",
+    "invasion",
+    "sanctions",
+    "conflict",
 )
 _CORPORATE_KEYWORDS: tuple[str, ...] = (
     "merger",
@@ -241,9 +398,21 @@ class LexiconSentimentProvider(SentimentProvider):
 
 
 def extract_entities(text: str) -> list[str]:
-    """Match known watchlist symbols and sector names in ``text``."""
+    """Match known watchlist symbols, sectors, countries, and named
+    leaders/institutions in ``text``; promoter names resolve to their
+    tradable symbol (e.g. "Ambani" -> "RELIANCE").
+
+    Entities are tokenized the same way as ``text`` before matching (not
+    just lowered), so punctuation in an entity name — "Moody's", "S&P" —
+    still matches correctly against the alnum-only token stream.
+    """
     padded = _padded(text)
-    return [entity for entity in KNOWN_ENTITIES if f" {entity.lower()} " in padded]
+    matches = []
+    for entity in KNOWN_ENTITIES:
+        entity_padded = f" {' '.join(_tokenize(entity))} "
+        if entity_padded in padded:
+            matches.append(PROMOTER_ALIASES.get(entity, entity))
+    return matches
 
 
 def classify(article: dict[str, Any]) -> str:
@@ -255,6 +424,12 @@ def classify(article: dict[str, Any]) -> str:
         return "stock"
     if any(entity in KNOWN_SECTOR_NAMES for entity in entities):
         return "sector"
+    if any(entity in KNOWN_COUNTRY_NAMES for entity in entities):
+        return "global"
+    if any(entity in _GLOBAL_ENTITY_NAMES for entity in entities):
+        return "global"
+    if any(entity in KNOWN_INDIA_POLICYMAKER_NAMES for entity in entities):
+        return "policy"
     for label, keywords in (
         ("policy", _POLICY_KEYWORDS),
         ("macro", _MACRO_KEYWORDS),
@@ -363,3 +538,34 @@ class NewsIntelligenceCollector(BaseCollector):
 
         self._seen_tokens.extend(run_seen)
         return records
+
+
+class GlobalShockCollector(NewsIntelligenceCollector):
+    """International/geopolitical fast-path (Volume 2, Prompt 2.10 extension).
+
+    Runs the exact same aggregate/classify/score/dedup pipeline as
+    NewsIntelligenceCollector, pointed at :class:`GlobalNewsSource` (CNBC
+    World, Al Jazeera, and Google News queries for US-Iran/Israel,
+    Russia-Ukraine, US-China, Fed policy, OPEC) on a much shorter cadence.
+
+    Kept as a separate collector rather than a shorter interval on the
+    domestic feed so a slow India-portal poll never delays a geopolitical
+    headline, and vice versa.
+    """
+
+    name = "global_shock_news"
+    category = CollectorCategory.GLOBAL_MARKETS
+    source = "global_news_feed"
+    interval_seconds = 30
+    priority = 5
+
+    def __init__(
+        self,
+        news_source: NewsSource | None = None,
+        sentiment_provider: SentimentProvider | None = None,
+    ) -> None:
+        if news_source is None:
+            from app.collectors.sources.global_news import GlobalNewsSource
+
+            news_source = GlobalNewsSource()
+        super().__init__(news_source=news_source, sentiment_provider=sentiment_provider)

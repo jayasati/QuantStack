@@ -45,7 +45,7 @@ _TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
 
 
-def _clean_text(value: str | None) -> str:
+def clean_text(value: str | None) -> str:
     """Strip HTML tags/CDATA remnants and collapse whitespace."""
     if not value:
         return ""
@@ -53,7 +53,7 @@ def _clean_text(value: str | None) -> str:
     return _WHITESPACE_RE.sub(" ", text).strip()
 
 
-def _parse_pubdate(value: str | None) -> str | None:
+def parse_pubdate(value: str | None) -> str | None:
     """RFC 822 pubDate -> ISO 8601 (publisher timestamp kept verbatim)."""
     if not value:
         return None
@@ -71,15 +71,15 @@ def parse_rss(xml_text: str, source: str) -> list[dict[str, Any]]:
         raise CollectionError(f"{source}: invalid rss xml: {exc}") from exc
     articles: list[dict[str, Any]] = []
     for item in root.findall(".//item")[:MAX_ARTICLES_PER_FEED]:
-        title = _clean_text(item.findtext("title"))
+        title = clean_text(item.findtext("title"))
         if not title:
             continue
         articles.append(
             {
                 "title": title,
-                "body": _clean_text(item.findtext("description")),
+                "body": clean_text(item.findtext("description")),
                 "source": source,
-                "published_at": _parse_pubdate(item.findtext("pubDate")),
+                "published_at": parse_pubdate(item.findtext("pubDate")),
                 "url": (item.findtext("link") or "").strip(),
             }
         )
