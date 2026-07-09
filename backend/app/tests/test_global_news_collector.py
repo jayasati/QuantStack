@@ -72,7 +72,9 @@ async def test_global_shock_collector_classifies_and_scores_conflict_article() -
             "url": "https://news.example/iran-us",
         }
     ]
-    collector = GlobalShockCollector(news_source=FakeNewsSource(articles))
+    collector = GlobalShockCollector(
+        news_source=FakeNewsSource(articles), sentiment_provider=LexiconSentimentProvider()
+    )
     records = await collector.collect()
 
     assert len(records) == 1

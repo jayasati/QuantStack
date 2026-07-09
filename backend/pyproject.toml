@@ -18,6 +18,11 @@ dependencies = [
     "pyotp>=2.9",
     "websockets>=12.0",
     "psutil>=5.9",
+    # FinBERT news sentiment (Settings.news_sentiment_provider). CPU inference;
+    # install the CPU-only wheel to avoid pulling CUDA packages on Windows:
+    #   pip install torch --index-url https://download.pytorch.org/whl/cpu
+    "transformers>=4.40",
+    "torch>=2.2",
 ]
 
 [project.optional-dependencies]

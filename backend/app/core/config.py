@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     feature_intraday_timeframe: str = "5m"
     # News articles / calendar observations loaded per feature run.
     feature_news_lookback: int = 5000
+    # Sentiment scorer for NewsIntelligenceCollector/GlobalShockCollector:
+    # "finbert" (ProsusAI/finbert, real financial-text ML model, ~440MB
+    # download + CPU inference) or "lexicon" (dependency-free word-list
+    # scoring, useful for offline/CI environments without the model cached).
+    news_sentiment_provider: str = "finbert"
     feature_events_lookback: int = 5000
     # Time features (Prompt 3.12): NSE index derivative expiry weekday
     # (0=Mon; Tuesday since Sep 2025), budget window half-width, and the

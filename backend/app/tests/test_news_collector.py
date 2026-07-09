@@ -63,7 +63,9 @@ class FakeNewsSource(NewsSource):
 
 
 async def test_collect_classifies_scores_and_dedups() -> None:
-    collector = NewsIntelligenceCollector(news_source=FakeNewsSource(_articles()))
+    collector = NewsIntelligenceCollector(
+        news_source=FakeNewsSource(_articles()), sentiment_provider=LexiconSentimentProvider()
+    )
     records = await collector.collect()
 
     # 4 articles in, near-duplicate dropped: 3 unique records out.
@@ -102,7 +104,9 @@ async def test_collect_classifies_scores_and_dedups() -> None:
 
 
 async def test_cross_run_dedup_uses_bounded_seen_set() -> None:
-    collector = NewsIntelligenceCollector(news_source=FakeNewsSource(_articles()))
+    collector = NewsIntelligenceCollector(
+        news_source=FakeNewsSource(_articles()), sentiment_provider=LexiconSentimentProvider()
+    )
     first = await collector.collect()
     second = await collector.collect()
     assert len(first) == 3

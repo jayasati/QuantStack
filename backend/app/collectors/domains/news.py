@@ -10,6 +10,7 @@ No network calls and no fabricated articles: the default source is
 :class:`UnconfiguredNewsSource`, which always raises ``CollectionError``.
 """
 
+import asyncio
 import re
 from abc import ABC, abstractmethod
 from collections import deque
@@ -379,9 +380,10 @@ class SentimentProvider(ABC):
 class LexiconSentimentProvider(SentimentProvider):
     """Finance-lexicon sentiment via simple token/phrase matching.
 
-    Intentionally dependency-free. A finance-specific ML model (e.g. FinBERT)
-    can be plugged in later through the :class:`SentimentProvider` interface
-    without touching the collector — do not add ML dependencies here.
+    Intentionally dependency-free — no ML dependencies here. The production
+    default is :class:`~app.collectors.sources.finbert_sentiment.FinBertSentimentProvider`
+    (see ``Settings.news_sentiment_provider``); this remains available as the
+    offline/CI fallback and for tests that need fast, deterministic scores.
     """
 
     def score(self, text: str) -> float:
@@ -392,6 +394,17 @@ class LexiconSentimentProvider(SentimentProvider):
         if total == 0:
             return 0.0
         return max(-1.0, min(1.0, (positive - negative) / total))
+
+
+def _default_sentiment_provider() -> SentimentProvider:
+    """Chosen by ``Settings.news_sentiment_provider`` so environments without
+    the FinBERT model cached (or without transformers/torch installed) can
+    opt back into the dependency-free lexicon scorer."""
+    if get_settings().news_sentiment_provider == "finbert":
+        from app.collectors.sources.finbert_sentiment import FinBertSentimentProvider
+
+        return FinBertSentimentProvider()
+    return LexiconSentimentProvider()
 
 
 # --- classification and entity extraction ---------------------------------------
@@ -464,7 +477,7 @@ class NewsIntelligenceCollector(BaseCollector):
 
             news_source = RssNewsSource()
         self._news_source: NewsSource = news_source
-        self._sentiment: SentimentProvider = sentiment_provider or LexiconSentimentProvider()
+        self._sentiment: SentimentProvider = sentiment_provider or _default_sentiment_provider()
         # Bounded memory of normalized token sets across runs (cross-run dedup).
         self._seen_tokens: deque[frozenset[str]] = deque(maxlen=SEEN_SET_MAX)
 
@@ -473,16 +486,29 @@ class NewsIntelligenceCollector(BaseCollector):
         if closer is not None:
             await closer()
 
+    async def _score_all(self, texts: list[str]) -> list[float]:
+        """One thread-pool hop per collect() call — never blocks the event
+        loop, and uses score_batch (a single forward pass) when the provider
+        offers it, e.g. FinBertSentimentProvider."""
+        batch = getattr(self._sentiment, "score_batch", None)
+        if batch is not None:
+            return await asyncio.to_thread(batch, texts)
+        return await asyncio.to_thread(lambda: [self._sentiment.score(t) for t in texts])
+
     async def collect(self) -> list[CollectorOutput]:
         articles = await self._news_source.fetch_articles()
         now = datetime.now(UTC)
+        texts = [
+            f"{a.get('title') or ''} {a.get('body') or ''}".strip() for a in articles
+        ]
+        # Scored up front for every article (dedup below doesn't affect
+        # which texts need scoring, so this is the only batching opportunity).
+        raw_sentiments = await self._score_all(texts)
         records: list[CollectorOutput] = []
         run_seen: list[frozenset[str]] = []
 
-        for article in articles:
+        for article, text, raw_sentiment in zip(articles, texts, raw_sentiments, strict=True):
             title = str(article.get("title") or "")
-            body = str(article.get("body") or "")
-            text = f"{title} {body}".strip()
             tokens = _content_tokens(text)
             if not tokens:
                 continue
@@ -494,7 +520,7 @@ class NewsIntelligenceCollector(BaseCollector):
             run_seen.append(tokens)
             novelty = round(1.0 - max_similarity, 4)
 
-            sentiment = max(-1.0, min(1.0, self._sentiment.score(text)))
+            sentiment = max(-1.0, min(1.0, raw_sentiment))
             entities = extract_entities(text)
             published = _parse_timestamp(article.get("published_at"))
             urgency_label, urgency_weight = _urgency(published, now)
