@@ -48,7 +48,18 @@ class Candle:
 
 
 class BrokerInterface(ABC):
-    """Contract every broker adapter must implement."""
+    """Contract every broker adapter must implement.
+
+    ``get_option_greeks`` and ``get_market_depth`` are concrete (not
+    abstract): not every broker exposes per-strike Greeks or a full depth
+    ladder, so callers get a documented, polymorphic method instead of
+    duck-typing via ``getattr(broker, "get_option_greeks", None)``, but a new
+    adapter isn't forced to implement capabilities it doesn't have. The
+    multi-strike option *chain* (OI/volume/LTP across all strikes) is
+    deliberately not part of this interface — that data is public NSE
+    market data, not broker-specific, and is modeled as an injectable
+    ``OptionsChainSource`` instead (see ``app.collectors.domains.options``).
+    """
 
     @abstractmethod
     async def connect(self) -> None: ...
@@ -71,3 +82,19 @@ class BrokerInterface(ABC):
         end: datetime,
         exchange: str = "NSE",
     ) -> list[Candle]: ...
+
+    async def get_option_greeks(
+        self, name: str, expiry: str
+    ) -> dict[tuple[float, str], dict[str, float]]:
+        """Per-strike Greeks keyed by (strike, "CE"/"PE"). Empty if unsupported."""
+        return {}
+
+    async def get_market_depth(self, symbol: str, exchange: str = "NSE") -> dict[str, Any]:
+        """Order book (bid/ask ladder) for ``symbol``. Empty if unsupported.
+
+        Default implementation reuses ``get_quote``'s depth field so adapters
+        that only expose depth as part of the quote payload (Angel One) don't
+        need a second HTTP round trip.
+        """
+        quote = await self.get_quote(symbol, exchange)
+        return quote.depth

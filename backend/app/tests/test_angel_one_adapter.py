@@ -151,6 +151,41 @@ async def test_unsupported_interval_rejected() -> None:
         await adapter.get_historical("NIFTY", "2m", datetime(2026, 1, 1), datetime(2026, 1, 2))
 
 
+async def test_market_depth_defaults_to_quote_depth() -> None:
+    """BrokerInterface.get_market_depth's default reuses get_quote's depth
+    field so adapters that only expose it there (Angel One) need no override."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == LOGIN_PATH:
+            return httpx.Response(
+                200, json={"status": True, "data": {"jwtToken": "jwt", "refreshToken": "r"}}
+            )
+        return httpx.Response(
+            200,
+            json={
+                "status": True,
+                "data": {
+                    "fetched": [
+                        {
+                            "tradingSymbol": "NIFTY",
+                            "ltp": 25000.5,
+                            "depth": {
+                                "buy": [{"price": 25000.0, "quantity": 50}],
+                                "sell": [{"price": 25001.0, "quantity": 75}],
+                            },
+                        }
+                    ]
+                },
+            },
+        )
+
+    adapter = make_adapter(handler)
+    await adapter.connect()
+    depth = await adapter.get_market_depth("NIFTY")
+    assert depth["buy"][0]["price"] == 25000.0
+    assert depth["sell"][0]["price"] == 25001.0
+
+
 async def test_repeated_network_failures_open_circuit_breaker() -> None:
     """Chapter 13: Retry -> Backoff exhausted enough times trips the breaker,
     and further calls fail fast without hitting the network at all."""

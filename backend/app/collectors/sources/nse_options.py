@@ -114,10 +114,7 @@ class NseOptionChainSource(OptionsChainSource):
             from app.market.broker import BrokerInterface
 
             broker = container.resolve(BrokerInterface)
-            fetch = getattr(broker, "get_option_greeks", None)
-            if fetch is None:
-                return
-            greeks = await fetch(symbol, _smartapi_expiry(expiry))
+            greeks = await broker.get_option_greeks(symbol, _smartapi_expiry(expiry))
         except Exception as exc:
             logger.debug(
                 "greeks enrichment unavailable",
