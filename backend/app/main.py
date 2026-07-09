@@ -29,7 +29,7 @@ from app.features.timefeat import TimeFeatureEngine
 from app.features.volatility import VolatilityFeatureEngine
 from app.features.volume import VolumeFeatureEngine
 from app.market.broker import BrokerInterface
-from app.prediction.opportunity import OpportunityDetectionEngine
+from app.prediction.candidates import CandidateGenerationEngine
 from app.scheduler.service import start_scheduler
 
 logger = get_logger(__name__)
@@ -103,12 +103,16 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
-    opportunity_engine = container.resolve(OpportunityDetectionEngine)
+    # CandidateGenerationEngine.generate() already calls scan() as its first
+    # step (persisting opportunity.detected + trade_candidate.generated
+    # together), so only this one job is scheduled -- a separate
+    # OpportunityDetectionEngine.scan() job would duplicate the same scan.
+    candidate_engine = container.resolve(CandidateGenerationEngine)
     scheduler.add_job(
-        opportunity_engine.scan,
+        candidate_engine.generate,
         trigger="interval",
         seconds=settings.feature_engine_interval,
-        id="prediction.opportunity_scan",
+        id="prediction.candidate_generation",
         replace_existing=True,
     )
 

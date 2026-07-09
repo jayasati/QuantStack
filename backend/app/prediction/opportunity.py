@@ -89,6 +89,14 @@ class OpportunityCandidate:
     triggers: list[TriggerReason] = field(default_factory=list)
     priority_score: float = 0.0
     market_confidence: float | None = None
+    # Transient: the live IntelligenceResults this candidate was triggered
+    # from, kept in-memory only (not part of to_dict()/persistence) so
+    # CandidateGenerationEngine (Prompt 5.2) can build Direction/Regime off
+    # the exact same data that fired, without a second, possibly-inconsistent
+    # fetch. Excluded from repr since IntelligenceResult objects are large.
+    component_results: dict[str, IntelligenceResult | None] = field(
+        default_factory=dict, repr=False
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -289,6 +297,7 @@ class OpportunityDetectionEngine:
             triggers=triggers,
             priority_score=priority_score(triggers),
             market_confidence=confidence_report,
+            component_results=component_results,
         )
         await self._persist(candidate)
         return candidate

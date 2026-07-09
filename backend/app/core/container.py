@@ -73,6 +73,7 @@ def wire_default_services() -> None:
     from app.intelligence.trend import TrendIntelligenceEngine
     from app.market.angel_one import AngelOneAdapter
     from app.market.broker import BrokerInterface
+    from app.prediction.candidates import CandidateGenerationEngine
     from app.prediction.opportunity import OpportunityDetectionEngine
 
     settings = get_settings()
@@ -273,4 +274,11 @@ def wire_default_services() -> None:
     container.register(
         OpportunityDetectionEngine,
         lambda: OpportunityDetectionEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        CandidateGenerationEngine,
+        lambda: CandidateGenerationEngine(
+            session_factory=get_session_factory(),
+            detector=container.resolve(OpportunityDetectionEngine),
+        ),
     )
