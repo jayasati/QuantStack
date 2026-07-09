@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     # single half-open probe is allowed through.
     circuit_breaker_failure_threshold: int = 3
     circuit_breaker_recovery_seconds: float = 60.0
+    # Collector-level retry around collect() (Chapter 20's retry_count):
+    # deliberately small/flat, not max_retry's network-request backoff — many
+    # sources already retry internally (AngelOneAdapter, NseSession), so this
+    # layer only needs to smooth over a blip they didn't catch, not repeat
+    # their whole multi-second backoff on top of itself.
+    collector_retry_attempts: int = 1
+    collector_retry_delay_seconds: float = 0.2
     rate_limits: RateLimits = Field(default_factory=RateLimits)
     watchlist: list[str] = Field(default_factory=lambda: ["NIFTY", "BANKNIFTY"])
     # SmartAPI WebSocket streaming for live quotes (REST polling remains the fallback).

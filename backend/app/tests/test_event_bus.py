@@ -92,6 +92,34 @@ async def test_publish_without_subscribers_is_noop() -> None:
     await bus.publish(Event(type="nobody.listens"))
 
 
+async def test_version_scoped_subscriber_only_receives_matching_version() -> None:
+    """Event.version now does real routing, not just carried metadata."""
+    bus = fast_bus()
+    v1_seen: list[Event] = []
+    v2_seen: list[Event] = []
+    any_seen: list[Event] = []
+
+    async def v1_handler(event: Event) -> None:
+        v1_seen.append(event)
+
+    async def v2_handler(event: Event) -> None:
+        v2_seen.append(event)
+
+    async def any_handler(event: Event) -> None:
+        any_seen.append(event)
+
+    bus.subscribe("x", v1_handler, version=1)
+    bus.subscribe("x", v2_handler, version=2)
+    bus.subscribe("x", any_handler)  # version=None -> every version
+
+    await bus.publish(Event(type="x", version=1))
+    await bus.publish(Event(type="x", version=2))
+
+    assert len(v1_seen) == 1 and v1_seen[0].version == 1
+    assert len(v2_seen) == 1 and v2_seen[0].version == 2
+    assert len(any_seen) == 2  # the version-agnostic handler saw both
+
+
 async def test_dead_letter_inspection_and_replay() -> None:
     bus = fast_bus(max_retries=1)
     calls = {"n": 0}

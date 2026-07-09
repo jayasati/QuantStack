@@ -2,8 +2,10 @@
 
 All inter-module communication flows through events — no module directly
 invokes a downstream module. Supports retries with exponential backoff, a
-dead-letter queue, idempotency (event-id dedup), event versioning, and
-trace ids for cross-module tracing.
+dead-letter queue, idempotency (event-id dedup), trace ids for cross-module
+tracing, and version-scoped dispatch: a handler may subscribe to every
+version of an event type (the default) or to one specific version, and
+``publish`` only routes to handlers whose requested version matches.
 """
 
 import asyncio
@@ -49,7 +51,7 @@ class EventBus:
         dead_letter_capacity: int = 1000,
         idempotency_window: int = 10_000,
     ) -> None:
-        self._subscribers: dict[str, list[Handler]] = {}
+        self._subscribers: dict[str, list[tuple[Handler, int | None]]] = {}
         self._max_retries = max_retries
         self._base_backoff = base_backoff_seconds
         self.dead_letters: deque[DeadLetter] = deque(maxlen=dead_letter_capacity)
@@ -59,8 +61,12 @@ class EventBus:
         self.delivered_count = 0
         self.duplicate_count = 0
 
-    def subscribe(self, event_type: str, handler: Handler) -> None:
-        self._subscribers.setdefault(event_type, []).append(handler)
+    def subscribe(self, event_type: str, handler: Handler, version: int | None = None) -> None:
+        """Subscribe to ``event_type``. ``version=None`` (default) receives
+        every version of that event; passing a specific ``version`` routes
+        only events published with a matching ``Event.version`` — real
+        version-scoped dispatch, not just a field carried through for show."""
+        self._subscribers.setdefault(event_type, []).append((handler, version))
 
     def _is_duplicate(self, event: Event) -> bool:
         if event.event_id in self._seen_event_ids:
@@ -79,7 +85,11 @@ class EventBus:
             )
             return
         self.published_count += 1
-        handlers = self._subscribers.get(event.type, [])
+        handlers = [
+            handler
+            for handler, version in self._subscribers.get(event.type, [])
+            if version is None or version == event.version
+        ]
         if not handlers:
             return
         await asyncio.gather(*(self._deliver(handler, event) for handler in handlers))

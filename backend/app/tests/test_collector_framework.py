@@ -1,5 +1,7 @@
 """End-to-end framework tests: lifecycle, pipeline, quality gate, registry."""
 
+import asyncio
+
 from app.collectors.base import BaseCollector, CollectionError, CollectorPipeline
 from app.collectors.pipeline import DefaultCollectorPipeline
 from app.collectors.registry import CollectorRegistry
@@ -103,6 +105,89 @@ async def test_circuit_breaker_opens_after_failed_status_and_skips_next_run() ->
     assert records == []
     assert collector.health.status == "circuit_open"
     assert collector.health.run_count == run_count_before  # skipped, not attempted
+
+
+class FlakyOnceCollector(BaseCollector):
+    """Fails its first collect() call, then succeeds — a transient blip."""
+
+    name = "flaky_once"
+    category = CollectorCategory.NEWS
+    source = "test"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._calls = 0
+
+    async def collect(self) -> list[CollectorOutput]:
+        self._calls += 1
+        if self._calls == 1:
+            raise CollectionError("transient blip")
+        return [
+            CollectorOutput(
+                collector_name=self.name,
+                collector_category=self.category,
+                source=self.source,
+                instrument="MARKET",
+                normalized_value=1.0,
+                confidence=0.8,
+            )
+        ]
+
+
+async def test_transient_collect_failure_is_retried_and_succeeds() -> None:
+    """Chapter 20 gap-fill: retry_count is real, not decorative — a single
+    blip inside one run_once() call is smoothed over automatically."""
+    pipeline, _ = make_pipeline()
+    collector = FlakyOnceCollector()
+
+    records = await collector.run_once(pipeline)
+
+    assert len(records) == 1
+    assert collector.health.status == "ok"
+    assert collector.health.retry_count == 1
+    assert collector.health.failure_count == 0  # the retry succeeded before escalation
+
+
+class SlowCollector(BaseCollector):
+    """Blocks on an external event so tests can observe in-flight/queued state."""
+
+    name = "slow"
+    category = CollectorCategory.NEWS
+    source = "test"
+
+    def __init__(self, gate: asyncio.Event) -> None:
+        super().__init__()
+        self._gate = gate
+
+    async def collect(self) -> list[CollectorOutput]:
+        await self._gate.wait()
+        return []
+
+
+async def test_queue_length_and_in_flight_track_concurrent_run_once_calls() -> None:
+    """Chapter 20 gap-fill: queue_length/in_flight are real state, not
+    decorative fields — a second concurrent caller (e.g. manual /run racing
+    a scheduled tick) genuinely waits instead of mutating health concurrently."""
+    pipeline, _ = make_pipeline()
+    gate = asyncio.Event()
+    collector = SlowCollector(gate)
+
+    first = asyncio.create_task(collector.run_once(pipeline))
+    await asyncio.sleep(0.05)  # let the first call acquire the lock and block in collect()
+    assert collector.health.in_flight is True
+    assert collector.health.queue_length == 0
+
+    second = asyncio.create_task(collector.run_once(pipeline))
+    await asyncio.sleep(0.05)  # second call is now queued behind the lock
+    assert collector.health.queue_length == 1
+
+    gate.set()
+    await first
+    await second
+
+    assert collector.health.in_flight is False
+    assert collector.health.queue_length == 0
+    assert collector.health.run_count == 2
 
 
 async def test_registry_disable_enable_and_status() -> None:
@@ -214,6 +299,30 @@ async def test_disable_reports_active_dependents() -> None:
     registry.register(DependentCollector())
     dependents = registry.disable("good")
     assert dependents == ["dependent"]
+
+
+async def test_schedule_all_populates_next_run() -> None:
+    """Chapter 20 gap-fill: next_run reflects the real APScheduler job, not
+    a field that's declared and never written."""
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+    pipeline, _ = make_pipeline()
+    registry = CollectorRegistry(pipeline)
+    registry.register(GoodCollector())
+
+    scheduler = AsyncIOScheduler()
+    scheduler.start(paused=False)  # matches main.py: scheduler starts before schedule_all()
+    try:
+        registry.schedule_all(scheduler)
+        health = registry.health_of("good")
+        assert health is not None
+        assert health["next_run"] is not None
+
+        await registry.run_collector("good")
+        health_after = registry.health_of("good")
+        assert health_after is not None and health_after["next_run"] is not None
+    finally:
+        scheduler.shutdown(wait=False)
 
 
 async def test_interval_override_from_config(monkeypatch) -> None:

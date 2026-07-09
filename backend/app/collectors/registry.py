@@ -10,6 +10,7 @@ import importlib
 import inspect
 import pkgutil
 from dataclasses import asdict
+from datetime import datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -28,6 +29,7 @@ class CollectorRegistry:
         self._alerts = alerts
         self._collectors: dict[str, BaseCollector] = {}
         self._disabled: set[str] = set()
+        self._scheduler: AsyncIOScheduler | None = None
 
     # --- discovery & registration -------------------------------------------------
 
@@ -159,6 +161,20 @@ class CollectorRegistry:
         if collector is None or name in self._disabled:
             return
         await collector.run_once(self._pipeline, force=force)
+        # APScheduler recomputes an interval job's next fire time before
+        # invoking it, so this already reflects the upcoming run (Chapter 20).
+        collector.health.next_run = self._next_run_time(name)
+
+    def _next_run_time(self, name: str) -> datetime | None:
+        if self._scheduler is None:
+            return None
+        job = self._scheduler.get_job(f"collector.{name}")
+        if job is None:
+            return None
+        # An unstarted scheduler leaves next_run_time uninitialized (APScheduler
+        # raises AttributeError on access, not None) — never let observability
+        # code crash the caller over scheduler lifecycle timing.
+        return getattr(job, "next_run_time", None)
 
     def schedule_all(self, scheduler: AsyncIOScheduler) -> int:
         """Wire every registered collector onto its own interval schedule.
@@ -167,6 +183,7 @@ class CollectorRegistry:
         resolution order (dependencies first); intervals honour per-collector
         overrides from configuration.
         """
+        self._scheduler = scheduler
         self.validate_dependencies()
         scheduled = 0
         for collector in self.resolution_order():
@@ -180,6 +197,7 @@ class CollectorRegistry:
                 max_instances=1,
                 coalesce=True,
             )
+            collector.health.next_run = self._next_run_time(collector.name)
             scheduled += 1
         return scheduled
 
@@ -196,6 +214,7 @@ class CollectorRegistry:
     # --- observability ---------------------------------------------------------------
 
     def list_collectors(self) -> list[dict]:
+        """Chapter 20's observability field set, one row per collector."""
         return [
             {
                 "name": c.name,
@@ -207,6 +226,13 @@ class CollectorRegistry:
                 "depends_on": list(c.depends_on),
                 "enabled": c.name not in self._disabled,
                 "status": c.health.status,
+                "last_run": c.health.last_run,
+                "next_run": c.health.next_run,
+                "avg_latency_ms": round(c.health.avg_latency_ms, 2),
+                "failure_rate": round(c.health.failure_rate, 4),
+                "retry_count": c.health.retry_count,
+                "queue_length": c.health.queue_length,
+                "last_quality_score": c.health.last_quality_score,
             }
             for c in self.resolution_order()
         ]
