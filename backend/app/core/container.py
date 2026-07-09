@@ -73,6 +73,7 @@ def wire_default_services() -> None:
     from app.intelligence.trend import TrendIntelligenceEngine
     from app.market.angel_one import AngelOneAdapter
     from app.market.broker import BrokerInterface
+    from app.prediction.opportunity import OpportunityDetectionEngine
 
     settings = get_settings()
     container.register(EventBus, EventBus)
@@ -268,4 +269,8 @@ def wire_default_services() -> None:
     container.register(
         BayesianRegimeDetector,
         lambda: BayesianRegimeDetector(session_factory=get_session_factory()),
+    )
+    container.register(
+        OpportunityDetectionEngine,
+        lambda: OpportunityDetectionEngine(session_factory=get_session_factory()),
     )

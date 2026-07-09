@@ -8,6 +8,7 @@ from app.api.collectors import router as collectors_router
 from app.api.features import router as features_router
 from app.api.health import router as health_router
 from app.api.intelligence import router as intelligence_router
+from app.api.prediction import router as prediction_router
 from app.collectors.registry import CollectorRegistry
 from app.core.config import get_settings
 from app.core.container import container, wire_default_services
@@ -28,6 +29,7 @@ from app.features.timefeat import TimeFeatureEngine
 from app.features.volatility import VolatilityFeatureEngine
 from app.features.volume import VolumeFeatureEngine
 from app.market.broker import BrokerInterface
+from app.prediction.opportunity import OpportunityDetectionEngine
 from app.scheduler.service import start_scheduler
 
 logger = get_logger(__name__)
@@ -101,6 +103,15 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
+    opportunity_engine = container.resolve(OpportunityDetectionEngine)
+    scheduler.add_job(
+        opportunity_engine.scan,
+        trigger="interval",
+        seconds=settings.feature_engine_interval,
+        id="prediction.opportunity_scan",
+        replace_existing=True,
+    )
+
     logger.info(
         "application started",
         extra={
@@ -128,6 +139,7 @@ def create_app() -> FastAPI:
     app.include_router(collectors_router)
     app.include_router(features_router)
     app.include_router(intelligence_router)
+    app.include_router(prediction_router)
     return app
 
 
