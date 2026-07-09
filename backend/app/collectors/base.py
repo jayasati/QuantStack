@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from app.collectors.schema import CollectorCategory, CollectorOutput
+from app.core.alerts import AlertService, AlertSeverity
+from app.core.circuit_breaker import CircuitBreaker
 from app.core.logging import get_logger
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -89,6 +91,18 @@ class BaseCollector(ABC):
         self.logger = get_logger(f"collector.{self.name}")
         self.health = CollectorHealthStatus(name=self.name, category=self.category.value)
         self._initialized = False
+        # Error-handling escalation chain (Chapter 13): after repeated
+        # failures, fail fast instead of hammering a down dependency every
+        # scheduled interval. Threshold mirrors the existing "failed" status
+        # cutoff below. alerts is injected by CollectorRegistry.register().
+        self.circuit_breaker = CircuitBreaker(name=f"collector.{self.name}")
+        self.alerts: AlertService | None = None
+
+    async def _fire_alert(self, severity: AlertSeverity, message: str, **context) -> None:
+        if self.alerts is not None:
+            await self.alerts.fire(f"collector.{self.name}", severity, message, **context)
+        else:
+            self.logger.error(message, extra=context)
 
     # --- lifecycle hooks (override as needed) ---------------------------------
 
@@ -134,6 +148,11 @@ class BaseCollector(ABC):
                 self.health.extras.get("skipped_market_closed", 0) + 1
             )
             return []
+        if not self.circuit_breaker.allow_request():
+            self.health.status = "circuit_open"
+            self.health.extras["circuit_skipped"] = self.health.extras.get("circuit_skipped", 0) + 1
+            self.health.extras["circuit_breaker"] = self.circuit_breaker.to_dict()
+            return []
         started = time.perf_counter()
         self.health.last_run = datetime.now(UTC)
         self.health.run_count += 1
@@ -166,6 +185,11 @@ class BaseCollector(ABC):
             self.health.records_emitted += len(records)
             self.health.last_error = None
             self._update_latency(latency_ms)
+            if self.circuit_breaker.record_success():
+                self.health.extras["circuit_breaker"] = self.circuit_breaker.to_dict()
+                await self._fire_alert(
+                    AlertSeverity.INFO, f"collector {self.name} circuit breaker recovered"
+                )
             return records
         except Exception as exc:
             latency_ms = (time.perf_counter() - started) * 1000
@@ -178,6 +202,13 @@ class BaseCollector(ABC):
                 "collector run failed",
                 extra={"collector": self.name, "error": str(exc)},
             )
+            if self.circuit_breaker.record_failure(str(exc)):
+                self.health.extras["circuit_breaker"] = self.circuit_breaker.to_dict()
+                await self._fire_alert(
+                    AlertSeverity.CRITICAL,
+                    f"collector {self.name} circuit breaker opened after repeated failures",
+                    error=str(exc),
+                )
             await pipeline.record_failure(self, exc)
             return []
 

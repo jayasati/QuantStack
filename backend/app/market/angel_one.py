@@ -12,6 +12,8 @@ from typing import Any
 
 import httpx
 
+from app.core.alerts import AlertService, AlertSeverity
+from app.core.circuit_breaker import CircuitBreaker
 from app.core.config import Settings
 from app.core.logging import get_logger
 from app.market.broker import BrokerError, BrokerInterface, Candle, Quote
@@ -42,6 +44,8 @@ class AngelOneAdapter(BrokerInterface):
         settings: Settings,
         client: httpx.AsyncClient | None = None,
         max_retries: int | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
+        alerts: AlertService | None = None,
     ) -> None:
         self._settings = settings
         self._client = client or httpx.AsyncClient(base_url=BASE_URL, timeout=15.0)
@@ -50,6 +54,22 @@ class AngelOneAdapter(BrokerInterface):
         self._refresh_token: str | None = None
         self._feed_token: str | None = None
         self._rate_semaphore = asyncio.Semaphore(settings.rate_limits.angel_one_per_second)
+        self._breaker = circuit_breaker or CircuitBreaker(
+            name="broker.angel_one",
+            failure_threshold=settings.circuit_breaker_failure_threshold,
+            recovery_timeout=settings.circuit_breaker_recovery_seconds,
+        )
+        self._alerts = alerts
+
+    @property
+    def circuit_breaker(self) -> CircuitBreaker:
+        return self._breaker
+
+    async def _fire_alert(self, severity: AlertSeverity, message: str, **context: Any) -> None:
+        if self._alerts is not None:
+            await self._alerts.fire("broker.angel_one", severity, message, **context)
+        else:
+            logger.error(message, extra=context)
 
     # --- auth --------------------------------------------------------------------
 
@@ -140,6 +160,11 @@ class AngelOneAdapter(BrokerInterface):
         authenticated: bool = True,
         allow_refresh: bool = True,
     ) -> dict[str, Any]:
+        if not self._breaker.allow_request():
+            raise BrokerError(
+                f"circuit breaker open for broker.angel_one; retry after cooldown "
+                f"({self._breaker.recovery_timeout}s)"
+            )
         last_error: Exception | None = None
         for attempt in range(1, self._max_retries + 2):
             try:
@@ -156,6 +181,10 @@ class AngelOneAdapter(BrokerInterface):
                     raise BrokerError(
                         f"smartapi error [{body.get('errorcode')}]: {body.get('message')}"
                     )
+                if self._breaker.record_success():
+                    await self._fire_alert(
+                        AlertSeverity.INFO, "broker.angel_one circuit breaker recovered"
+                    )
                 return body
             except BrokerError:
                 raise
@@ -168,6 +197,13 @@ class AngelOneAdapter(BrokerInterface):
                         extra={"path": path, "attempt": attempt, "error": str(exc)},
                     )
                     await asyncio.sleep(delay)
+        if self._breaker.record_failure(str(last_error)):
+            await self._fire_alert(
+                AlertSeverity.CRITICAL,
+                "broker.angel_one circuit breaker opened after repeated failures",
+                path=path,
+                error=str(last_error),
+            )
         raise BrokerError(f"broker request failed after retries: {last_error}") from last_error
 
     # --- market data ---------------------------------------------------------------

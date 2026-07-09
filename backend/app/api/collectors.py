@@ -3,6 +3,8 @@
 from fastapi import APIRouter, HTTPException
 
 from app.collectors.registry import CollectorRegistry
+from app.core.alerts import AlertService
+from app.core.circuit_breaker import CircuitBreakerRegistry
 from app.core.container import container
 from app.events.bus import EventBus
 
@@ -28,6 +30,24 @@ async def cache_metrics() -> dict:
 
     cache = container.resolve(CacheService)
     return cache.metrics()
+
+
+@router.get("/circuit-breakers")
+async def circuit_breakers() -> dict:
+    """Every collector's breaker plus the shared broker breaker (Chapter 13)."""
+    registry = container.resolve(CollectorRegistry)
+    breaker_registry = container.resolve(CircuitBreakerRegistry)
+    return {
+        "collectors": registry.circuit_breakers(),
+        "other": breaker_registry.snapshot(),
+    }
+
+
+@router.get("/alerts")
+async def recent_alerts(limit: int = 50) -> list[dict]:
+    """Most recent fired alerts (Chapter 13 alert stage), newest first."""
+    alerts = container.resolve(AlertService)
+    return alerts.recent(limit=min(max(limit, 1), 500))
 
 
 @router.get("/events/dead-letters")

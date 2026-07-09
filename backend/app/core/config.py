@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     max_retry: int = 3
     cache_timeout: int = 300
+    # Error-handling escalation chain (Chapter 13): consecutive failures
+    # before a circuit breaker opens, and how long it stays open before a
+    # single half-open probe is allowed through.
+    circuit_breaker_failure_threshold: int = 3
+    circuit_breaker_recovery_seconds: float = 60.0
     rate_limits: RateLimits = Field(default_factory=RateLimits)
     watchlist: list[str] = Field(default_factory=lambda: ["NIFTY", "BANKNIFTY"])
     # SmartAPI WebSocket streaming for live quotes (REST polling remains the fallback).

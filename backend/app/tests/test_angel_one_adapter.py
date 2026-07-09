@@ -6,6 +6,7 @@ from datetime import datetime
 import httpx
 import pytest
 
+from app.core.circuit_breaker import CircuitBreaker, CircuitState
 from app.core.config import Settings
 from app.market.angel_one import CANDLE_PATH, LOGIN_PATH, QUOTE_PATH, AngelOneAdapter
 from app.market.broker import BrokerError
@@ -148,3 +149,35 @@ async def test_unsupported_interval_rejected() -> None:
     adapter = make_adapter(lambda request: httpx.Response(200, json={"status": True}))
     with pytest.raises(BrokerError, match="unsupported interval"):
         await adapter.get_historical("NIFTY", "2m", datetime(2026, 1, 1), datetime(2026, 1, 2))
+
+
+async def test_repeated_network_failures_open_circuit_breaker() -> None:
+    """Chapter 13: Retry -> Backoff exhausted enough times trips the breaker,
+    and further calls fail fast without hitting the network at all."""
+    calls = {"n": 0}
+
+    def always_down(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(500)
+
+    breaker = CircuitBreaker(name="broker.angel_one", failure_threshold=2)
+    transport = httpx.MockTransport(always_down)
+    client = httpx.AsyncClient(transport=transport, base_url="https://test")
+    adapter = AngelOneAdapter(SETTINGS, client=client, max_retries=0, circuit_breaker=breaker)
+
+    # First failure: retries exhausted, breaker still closed (below threshold).
+    with pytest.raises(BrokerError, match="failed after retries"):
+        await adapter.connect()
+    assert breaker.state == CircuitState.CLOSED
+    assert calls["n"] == 1
+
+    # Second failure hits the threshold and trips the breaker.
+    with pytest.raises(BrokerError, match="failed after retries"):
+        await adapter.connect()
+    assert breaker.state == CircuitState.OPEN
+    assert calls["n"] == 2
+
+    # Third call fails fast: no additional network request at all.
+    with pytest.raises(BrokerError, match="circuit breaker open"):
+        await adapter.connect()
+    assert calls["n"] == 2

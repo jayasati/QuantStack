@@ -14,6 +14,7 @@ from dataclasses import asdict
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.collectors.base import BaseCollector, CollectorPipeline
+from app.core.alerts import AlertService
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -22,8 +23,9 @@ DISCOVERY_PACKAGES = ["app.collectors.domains", "app.collectors.market_data"]
 
 
 class CollectorRegistry:
-    def __init__(self, pipeline: CollectorPipeline) -> None:
+    def __init__(self, pipeline: CollectorPipeline, alerts: AlertService | None = None) -> None:
         self._pipeline = pipeline
+        self._alerts = alerts
         self._collectors: dict[str, BaseCollector] = {}
         self._disabled: set[str] = set()
 
@@ -65,6 +67,8 @@ class CollectorRegistry:
         if collector.name in self._collectors:
             logger.warning("collector already registered", extra={"collector": collector.name})
             return
+        if self._alerts is not None:
+            collector.alerts = self._alerts
         self._collectors[collector.name] = collector
         logger.info(
             "collector registered",
@@ -217,3 +221,6 @@ class CollectorRegistry:
 
     def get(self, name: str) -> BaseCollector | None:
         return self._collectors.get(name)
+
+    def circuit_breakers(self) -> list[dict]:
+        return [c.circuit_breaker.to_dict() for c in self._collectors.values()]

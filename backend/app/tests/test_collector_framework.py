@@ -85,6 +85,26 @@ async def test_failing_collector_never_raises_and_reports_failure() -> None:
     assert collector.health.status == "failed"
 
 
+async def test_circuit_breaker_opens_after_failed_status_and_skips_next_run() -> None:
+    """Chapter 13 gap-fill: past the point BaseCollector marks itself
+    "failed", the breaker should also be open and fail the next scheduled
+    run fast instead of hitting collect() again."""
+    pipeline, _ = make_pipeline()
+    collector = FailingCollector()
+
+    for _ in range(3):  # matches the existing "3 consecutive failures" cutoff
+        await collector.run_once(pipeline)
+    assert collector.health.status == "failed"
+    assert collector.circuit_breaker.state.value == "open"
+
+    run_count_before = collector.health.run_count
+    records = await collector.run_once(pipeline)
+
+    assert records == []
+    assert collector.health.status == "circuit_open"
+    assert collector.health.run_count == run_count_before  # skipped, not attempted
+
+
 async def test_registry_disable_enable_and_status() -> None:
     pipeline, _ = make_pipeline()
     registry = CollectorRegistry(pipeline)

@@ -9,6 +9,8 @@ from fastapi import APIRouter, Response
 from sqlalchemy import text
 
 from app.core.config import get_settings
+from app.core.container import container
+from app.core.system_metrics import SystemMetricsSampler
 from app.database.session import get_engine
 
 router = APIRouter(prefix="/health", tags=["health"])
@@ -44,3 +46,10 @@ async def ready(response: Response) -> dict:
     if not healthy:
         response.status_code = 503
     return {"status": "ok" if healthy else "degraded", "checks": checks}
+
+
+@router.get("/system")
+async def system_metrics() -> dict:
+    """Process/system CPU and memory (Chapter 12 monitoring)."""
+    sampler = container.resolve(SystemMetricsSampler)
+    return sampler.snapshot()

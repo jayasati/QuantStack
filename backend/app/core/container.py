@@ -40,8 +40,11 @@ def wire_default_services() -> None:
     """Register production implementations. Called once at application startup."""
     from app.collectors.pipeline import DefaultCollectorPipeline
     from app.collectors.registry import CollectorRegistry
+    from app.core.alerts import AlertService, EventBusAlertSink, LoggingAlertSink
     from app.core.cache import CacheService
+    from app.core.circuit_breaker import CircuitBreakerRegistry
     from app.core.config import get_settings
+    from app.core.system_metrics import SystemMetricsSampler
     from app.database.session import get_session_factory
     from app.events.bus import EventBus
     from app.features.breadth import BreadthFeatureEngine
@@ -71,15 +74,37 @@ def wire_default_services() -> None:
 
     settings = get_settings()
     container.register(EventBus, EventBus)
-    container.register(BrokerInterface, lambda: AngelOneAdapter(settings))
     container.register(CacheService, CacheService)
+    container.register(SystemMetricsSampler, SystemMetricsSampler)
+    container.register(
+        CircuitBreakerRegistry,
+        lambda: CircuitBreakerRegistry(
+            failure_threshold=settings.circuit_breaker_failure_threshold,
+            recovery_timeout=settings.circuit_breaker_recovery_seconds,
+        ),
+    )
+    container.register(
+        AlertService,
+        lambda: AlertService(
+            sinks=[LoggingAlertSink(), EventBusAlertSink(container.resolve(EventBus))]
+        ),
+    )
+    container.register(
+        BrokerInterface,
+        lambda: AngelOneAdapter(
+            settings,
+            circuit_breaker=container.resolve(CircuitBreakerRegistry).get("broker.angel_one"),
+            alerts=container.resolve(AlertService),
+        ),
+    )
     container.register(
         CollectorRegistry,
         lambda: CollectorRegistry(
             DefaultCollectorPipeline(
                 bus=container.resolve(EventBus),
                 session_factory=get_session_factory(),
-            )
+            ),
+            alerts=container.resolve(AlertService),
         ),
     )
     container.register(
