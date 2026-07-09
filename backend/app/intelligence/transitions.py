@@ -33,6 +33,7 @@ from app.intelligence.base import (
     IntelligenceResult,
     clamp,
     normalize_states,
+    slope,
 )
 from app.intelligence.regime import BayesianRegimeDetector
 
@@ -54,20 +55,6 @@ MOMENTUM_WEIGHT = 0.4
 
 LEVEL_ANCHORS: dict[str, float] = {"stable": 0.0, "transitioning": 0.5, "unstable": 1.0}
 LEVEL_BAND = 0.4
-
-
-def _slope(values: Sequence[float]) -> float:
-    """Least-squares slope over evenly-spaced steps 0..n-1."""
-    n = len(values)
-    if n < 2:
-        return 0.0
-    mean_t = (n - 1) / 2
-    mean_v = sum(values) / n
-    var_t = sum((t - mean_t) ** 2 for t in range(n))
-    if var_t == 0:
-        return 0.0
-    cov = sum((t - mean_t) * (v - mean_v) for t, v in enumerate(values))
-    return cov / var_t
 
 
 def _level_weights(level: float) -> dict[str, float]:
@@ -119,8 +106,8 @@ def assess_regime_transition(
     )
     dominant_share_series = [max(snap.values()) if snap else 0.0 for snap in belief_history]
 
-    transition_speed = _slope(current_state_series)
-    runner_up_slope = _slope(runner_up_series)
+    transition_speed = slope(current_state_series)
+    runner_up_slope = slope(runner_up_series)
 
     closeness = 1 - clamp(current_share - runner_up_share, 0.0, 1.0)
     rising_runner_up = clamp(max(runner_up_slope, 0.0) / RUNNER_UP_SLOPE_SCALE, 0.0, 1.0)

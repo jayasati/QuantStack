@@ -12,7 +12,7 @@ and their history from the offline store; they never touch collectors —
 the Feature Store is the single source of truth (Volume 3, Chapter 1).
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -69,6 +69,22 @@ def normalize_states(raw: dict[str, float]) -> dict[str, float]:
     if total <= 0:
         return {k: 1.0 / len(raw) for k in raw} if raw else {}
     return {k: max(v, 0.0) / total for k, v in raw.items()}
+
+
+def slope(values: Sequence[float]) -> float:
+    """Least-squares slope over evenly-spaced steps 0..n-1. Shared by any
+    component that needs "is this series rising or falling" (Regime
+    Transition Detection, Market Confidence's trend)."""
+    n = len(values)
+    if n < 2:
+        return 0.0
+    mean_t = (n - 1) / 2
+    mean_v = sum(values) / n
+    var_t = sum((t - mean_t) ** 2 for t in range(n))
+    if var_t == 0:
+        return 0.0
+    cov = sum((t - mean_t) * (v - mean_v) for t, v in enumerate(values))
+    return cov / var_t
 
 
 class IntelligenceComponent:

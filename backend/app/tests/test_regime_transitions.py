@@ -1,23 +1,24 @@
 import pytest
 
+from app.intelligence.base import slope
 from app.intelligence.regime import BayesianRegimeDetector
-from app.intelligence.transitions import RegimeTransitionEngine, _slope, assess_regime_transition
+from app.intelligence.transitions import RegimeTransitionEngine, assess_regime_transition
 
 
 def test_slope_increasing_series_is_positive() -> None:
-    assert _slope([1.0, 2.0, 3.0, 4.0]) == pytest.approx(1.0)
+    assert slope([1.0, 2.0, 3.0, 4.0]) == pytest.approx(1.0)
 
 
 def test_slope_decreasing_series_is_negative() -> None:
-    assert _slope([4.0, 3.0, 2.0, 1.0]) == pytest.approx(-1.0)
+    assert slope([4.0, 3.0, 2.0, 1.0]) == pytest.approx(-1.0)
 
 
 def test_slope_flat_series_is_zero() -> None:
-    assert _slope([2.0, 2.0, 2.0]) == pytest.approx(0.0)
+    assert slope([2.0, 2.0, 2.0]) == pytest.approx(0.0)
 
 
 def test_slope_single_value_is_zero() -> None:
-    assert _slope([5.0]) == 0.0
+    assert slope([5.0]) == 0.0
 
 
 def test_stable_regime_reads_stable_with_no_alert() -> None:
