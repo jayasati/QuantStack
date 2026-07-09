@@ -1,9 +1,10 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.4)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.5)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
 from app.prediction.candidates import CandidateGenerationEngine
+from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabelingEngine
 from app.prediction.multi_horizon import MultiHorizonPredictionEngine
 from app.prediction.opportunity import OpportunityDetectionEngine
 from app.prediction.snapshot import FeatureSnapshotEngine
@@ -82,3 +83,32 @@ async def horizon_history(
     """Persisted per-horizon probability history, newest first."""
     engine = container.resolve(MultiHorizonPredictionEngine)
     return await engine.recent(symbol=symbol, horizon=horizon, limit=limit)
+
+
+@router.get("/labels/{symbol}")
+async def generate_labels(
+    symbol: str,
+    timeframe: str = "D",
+    direction: str = "long",
+    lookback_bars: int = Query(default=100, ge=1, le=2000),
+    max_holding_bars: int = Query(default=DEFAULT_MAX_HOLDING_BARS, ge=1, le=200),
+) -> list[dict]:
+    """Triple-barrier labels over the trailing `lookback_bars` historical
+    entry points — training data for Prompt 5.6, not a live signal."""
+    engine = container.resolve(TripleBarrierLabelingEngine)
+    labels = await engine.label_history(
+        symbol, timeframe=timeframe, direction=direction,
+        lookback_bars=lookback_bars, max_holding_bars=max_holding_bars,
+    )
+    return [label.to_dict() for label in labels]
+
+
+@router.get("/labels/{symbol}/history")
+async def label_history(
+    symbol: str,
+    label: str | None = None,
+    limit: int = Query(default=50, ge=1, le=500),
+) -> list[dict]:
+    """Persisted labels, optionally filtered by outcome, newest first."""
+    engine = container.resolve(TripleBarrierLabelingEngine)
+    return await engine.recent(symbol=symbol, label=label, limit=limit)
