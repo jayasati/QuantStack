@@ -147,27 +147,31 @@ def test_generate_candidate_assembles_every_field() -> None:
                              states={"strong_bull_trend": 1.0}),
         },
     )
-    candidate = generate_candidate(opportunity, priority=3)
+    candidate = generate_candidate(opportunity, priority=3, feature_snapshot_id="snap-abc123")
 
     assert candidate.instrument == "NIFTY"
     assert candidate.direction == "long"
     assert candidate.priority == 3
     assert candidate.priority_score == opportunity.priority_score
     assert len(candidate.supporting_features) == 1
-    assert len(candidate.feature_snapshot_id) == 32  # uuid4 hex
+    assert candidate.feature_snapshot_id == "snap-abc123"
     assert candidate.estimated_lifetime_minutes == 4 * 60
     assert candidate.current_market_regime["trend"] == "strong_bull_trend"
     assert candidate.market_confidence == 72.5
     assert candidate.as_of == opportunity.as_of
 
 
-def test_generate_candidate_snapshot_ids_are_unique_per_candidate() -> None:
+def test_generate_candidate_threads_through_whatever_snapshot_id_is_given() -> None:
+    """Pure function: it doesn't mint its own id, it uses exactly what the
+    caller (CandidateGenerationEngine, which owns the async snapshot
+    capture) passes in."""
     opportunity = make_opportunity([
         TriggerReason("high_volatility_expansion", "volatility.states.expansion", 0.6, 0.5),
     ])
-    a = generate_candidate(opportunity, priority=1)
-    b = generate_candidate(opportunity, priority=1)
-    assert a.feature_snapshot_id != b.feature_snapshot_id
+    a = generate_candidate(opportunity, priority=1, feature_snapshot_id="id-a")
+    b = generate_candidate(opportunity, priority=1, feature_snapshot_id="id-b")
+    assert a.feature_snapshot_id == "id-a"
+    assert b.feature_snapshot_id == "id-b"
 
 
 async def test_generate_caps_at_top_20_and_runs_cleanly_without_a_db() -> None:

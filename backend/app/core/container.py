@@ -75,6 +75,7 @@ def wire_default_services() -> None:
     from app.market.broker import BrokerInterface
     from app.prediction.candidates import CandidateGenerationEngine
     from app.prediction.opportunity import OpportunityDetectionEngine
+    from app.prediction.snapshot import FeatureSnapshotEngine
 
     settings = get_settings()
     container.register(EventBus, EventBus)
@@ -276,9 +277,16 @@ def wire_default_services() -> None:
         lambda: OpportunityDetectionEngine(session_factory=get_session_factory()),
     )
     container.register(
+        FeatureSnapshotEngine,
+        lambda: FeatureSnapshotEngine(
+            session_factory=get_session_factory(), cache=container.resolve(CacheService)
+        ),
+    )
+    container.register(
         CandidateGenerationEngine,
         lambda: CandidateGenerationEngine(
             session_factory=get_session_factory(),
             detector=container.resolve(OpportunityDetectionEngine),
+            snapshot_engine=container.resolve(FeatureSnapshotEngine),
         ),
     )

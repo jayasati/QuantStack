@@ -1,10 +1,11 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.2)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.3)."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
 from app.prediction.candidates import CandidateGenerationEngine
 from app.prediction.opportunity import OpportunityDetectionEngine
+from app.prediction.snapshot import FeatureSnapshotEngine
 
 router = APIRouter(prefix="/prediction", tags=["prediction"])
 
@@ -40,4 +41,23 @@ async def symbol_candidate_history(
 ) -> list[dict]:
     """Persisted candidate-generation history for one symbol, newest first."""
     engine = container.resolve(CandidateGenerationEngine)
+    return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/snapshots/{snapshot_id}")
+async def get_snapshot(snapshot_id: str) -> dict:
+    """Exact historical reconstruction of one frozen feature snapshot."""
+    engine = container.resolve(FeatureSnapshotEngine)
+    snapshot = await engine.get(snapshot_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=f"unknown snapshot: {snapshot_id}")
+    return snapshot
+
+
+@router.get("/snapshots")
+async def snapshot_history(
+    symbol: str | None = None, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted snapshot history, optionally filtered by symbol, newest first."""
+    engine = container.resolve(FeatureSnapshotEngine)
     return await engine.recent(symbol=symbol, limit=limit)

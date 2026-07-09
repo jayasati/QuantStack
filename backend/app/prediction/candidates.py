@@ -11,23 +11,16 @@ directly from the exact IntelligenceResults that triggered the candidate
 detect() so this engine never needs a second, possibly-inconsistent fetch
 of live market data for the same evaluation moment).
 
-Feature Snapshot ID / Feature Snapshot: the doc's Chapter 3 (Prompt 5.3,
-not yet built) is what generalizes reproducible snapshotting into its own
-reusable engine (feature versions, collector versions, model version,
-prediction version — concepts that don't exist yet since no model/
-prediction pipeline exists). Building all of that now would be scope creep
-on this prompt. What IS built here is real, not a stub: every candidate's
-generation freezes the actual metric values behind its triggers into its
-own persisted record, addressable by a UUID, satisfying "the snapshot must
-allow reconstruction" for exactly what 5.2 needs today. Prompt 5.3 can
-later generalize this into something 5.4+ also shares.
+Feature Snapshot ID: resolves to a real FeatureSnapshotEngine record (Prompt
+5.3, app/prediction/snapshot.py) — every candidate freezes its own feature
+values/versions/market report/regime at generation time, addressable and
+reconstructible by snapshot_id.
 
 Store candidates independently from predictions: separate MarketEvent
 event_type ("trade_candidate.generated") from both opportunity.detected
 (Prompt 5.1) and any future prediction_results row (Prompt 5.4+).
 """
 
-import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -36,6 +29,7 @@ from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.intelligence.base import IntelligenceResult
 from app.prediction.opportunity import OpportunityCandidate, OpportunityDetectionEngine
+from app.prediction.snapshot import FeatureSnapshotEngine
 
 logger = get_logger(__name__)
 
@@ -185,9 +179,14 @@ def build_supporting_features(opportunity: OpportunityCandidate) -> list[Support
     return [SupportingFeature(name=t.evidence, value=t.value) for t in opportunity.triggers]
 
 
-def generate_candidate(opportunity: OpportunityCandidate, priority: int) -> TradeCandidate:
+def generate_candidate(
+    opportunity: OpportunityCandidate, priority: int, feature_snapshot_id: str
+) -> TradeCandidate:
     """Pure transformation: one triggered OpportunityCandidate -> one ranked
-    TradeCandidate, using only data already attached to the opportunity."""
+    TradeCandidate, using only data already attached to the opportunity plus
+    the snapshot id the caller froze for it (FeatureSnapshotEngine, Prompt
+    5.3 — capturing a snapshot is an async DB operation, so it happens in
+    CandidateGenerationEngine.generate() below, not in this pure function)."""
     direction = infer_direction(opportunity.component_results)
     return TradeCandidate(
         instrument=opportunity.symbol,
@@ -196,7 +195,7 @@ def generate_candidate(opportunity: OpportunityCandidate, priority: int) -> Trad
         priority=priority,
         priority_score=opportunity.priority_score,
         supporting_features=build_supporting_features(opportunity),
-        feature_snapshot_id=uuid.uuid4().hex,
+        feature_snapshot_id=feature_snapshot_id,
         estimated_lifetime_minutes=estimate_lifetime_minutes(opportunity),
         current_market_regime=current_market_regime(opportunity.component_results),
         market_confidence=opportunity.market_confidence,
@@ -212,20 +211,24 @@ class CandidateGenerationEngine:
         session_factory: Any = None,
         settings: Settings | None = None,
         detector: OpportunityDetectionEngine | None = None,
+        snapshot_engine: FeatureSnapshotEngine | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
         self._detector = detector or OpportunityDetectionEngine(
             session_factory=session_factory, settings=self._settings
         )
+        self._snapshots = snapshot_engine or FeatureSnapshotEngine(
+            session_factory=session_factory, settings=self._settings
+        )
 
     async def generate(self) -> list[TradeCandidate]:
         """Top MAX_CANDIDATES ranked trade candidates from a fresh scan."""
         opportunities = await self._detector.scan()  # already sorted by priority_score desc
-        candidates = [
-            generate_candidate(opportunity, rank)
-            for rank, opportunity in enumerate(opportunities[:MAX_CANDIDATES], start=1)
-        ]
+        candidates = []
+        for rank, opportunity in enumerate(opportunities[:MAX_CANDIDATES], start=1):
+            snapshot = await self._snapshots.capture(opportunity.symbol)
+            candidates.append(generate_candidate(opportunity, rank, snapshot.snapshot_id))
         for candidate in candidates:
             await self._persist(candidate)
         return candidates
