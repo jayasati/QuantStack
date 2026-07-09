@@ -8,6 +8,7 @@ from app.core.container import container
 from app.features.base import BaseFeatureEngine
 from app.features.breadth import BreadthFeatureEngine
 from app.features.events import EventRiskEngine
+from app.features.institutional_flow import InstitutionalFlowFeatureEngine
 from app.features.liquidity import LiquidityFeatureEngine
 from app.features.news import NewsFeatureEngine
 from app.features.options import OptionsFeatureEngine
@@ -24,6 +25,7 @@ ENGINE_TYPES = [
     LiquidityFeatureEngine, OptionsFeatureEngine, BreadthFeatureEngine,
     SectorFeatureEngine, RelativeStrengthEngine, MarketStructureEngine,
     NewsFeatureEngine, EventRiskEngine, TimeFeatureEngine,
+    InstitutionalFlowFeatureEngine,
 ]
 
 
