@@ -169,6 +169,32 @@ class BayesianRegimeDetector(IntelligenceComponent):
             states=row.get("states") or {}, observation_count=row.get("observation_count", 0)
         )
 
+    async def history(
+        self, component: str, symbol: str, timeframe: str, limit: int = 20
+    ) -> list[dict[str, float]]:
+        """The last `limit` posterior belief snapshots, oldest first — the
+        input Regime Transition Detection (Prompt 4.12) analyzes for drift."""
+        if self._sessions is None:
+            return []
+        from sqlalchemy import desc, select
+
+        from app.database.tables import MarketEvent
+
+        async with self._sessions() as session:
+            result = await session.execute(
+                select(MarketEvent.data)
+                .where(
+                    MarketEvent.event_type == BELIEF_EVENT_TYPE,
+                    MarketEvent.source == component,
+                    MarketEvent.data["symbol"].astext == symbol,
+                    MarketEvent.data["timeframe"].astext == timeframe,
+                )
+                .order_by(desc(MarketEvent.id))
+                .limit(limit)
+            )
+            rows = result.scalars().all()
+        return [row.get("states") or {} for row in reversed(rows)]
+
     async def _store_belief(
         self,
         component: str,

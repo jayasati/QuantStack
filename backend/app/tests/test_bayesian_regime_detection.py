@@ -117,6 +117,12 @@ async def test_store_belief_is_a_noop_without_a_session() -> None:
     await detector._store_belief("trend", "NIFTY", "D", {"bull": 1.0}, 1)  # must not raise
 
 
+async def test_history_returns_empty_list_without_a_session() -> None:
+    detector = BayesianRegimeDetector()
+    history = await detector.history("trend", "NIFTY", "D")
+    assert history == []
+
+
 async def test_maturity_increases_confidence_over_repeated_observations(monkeypatch) -> None:
     counts = iter([0, 19])
 
