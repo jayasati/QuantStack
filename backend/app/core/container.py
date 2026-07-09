@@ -48,6 +48,7 @@ def wire_default_services() -> None:
     from app.features.events import EventRiskEngine
     from app.features.institutional_flow import InstitutionalFlowFeatureEngine
     from app.features.liquidity import LiquidityFeatureEngine
+    from app.features.macro import MacroFeatureEngine
     from app.features.news import NewsFeatureEngine
     from app.features.options import OptionsFeatureEngine
     from app.features.price import PriceFeatureEngine
@@ -172,6 +173,14 @@ def wire_default_services() -> None:
     container.register(
         InstitutionalFlowFeatureEngine,
         lambda: InstitutionalFlowFeatureEngine(
+            session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
+            cache=container.resolve(CacheService),
+        ),
+    )
+    container.register(
+        MacroFeatureEngine,
+        lambda: MacroFeatureEngine(
             session_factory=get_session_factory(),
             bus=container.resolve(EventBus),
             cache=container.resolve(CacheService),

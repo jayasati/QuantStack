@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     feature_sector_lookback: int = 8000
     # Institutional flow observations loaded per flow-feature run.
     feature_flow_lookback: int = 8000
+    # Macro observations loaded per macro-feature run.
+    feature_macro_lookback: int = 8000
     # Relative-strength references (Prompt 3.8): stock -> sector index name.
     feature_stock_sectors: dict[str, str] = Field(
         default_factory=lambda: {"RELIANCE": "Energy", "HDFCBANK": "Banking", "INFY": "IT"}
