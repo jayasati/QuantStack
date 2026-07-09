@@ -1,8 +1,9 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.6)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.7)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
+from app.prediction.calibration import ProbabilityCalibrationEngine
 from app.prediction.candidates import CandidateGenerationEngine
 from app.prediction.ensemble import EnsemblePredictionEngine
 from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabelingEngine
@@ -151,4 +152,46 @@ async def ensemble_history(
 ) -> list[dict]:
     """Persisted ensemble prediction history, newest first."""
     engine = container.resolve(EnsemblePredictionEngine)
+    return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/calibration/{symbol}/train")
+async def train_calibration(
+    symbol: str,
+    timeframe: str = "D",
+    direction: str = "long",
+    lookback_bars: int = Query(default=500, ge=1, le=5000),
+    max_holding_bars: int = Query(default=DEFAULT_MAX_HOLDING_BARS, ge=1, le=200),
+) -> dict:
+    """Trains the ensemble (if needed) and chooses the best of Platt
+    Scaling / Isotonic Regression / Temperature Scaling against its
+    out-of-sample holdout set. `calibrated: false` honestly means there
+    wasn't enough calibration data yet -- not a fabricated fit."""
+    engine = container.resolve(ProbabilityCalibrationEngine)
+    result = await engine.calibrate(
+        symbol, timeframe=timeframe, direction=direction,
+        lookback_bars=lookback_bars, max_holding_bars=max_holding_bars,
+    )
+    if result is None:
+        return {"calibrated": False, "reason": "insufficient_calibration_samples"}
+    return {"calibrated": True, **result.to_dict()}
+
+
+@router.get("/calibration/{symbol}")
+async def predict_calibrated(
+    symbol: str, timeframe: str = "D", direction: str = "long"
+) -> dict:
+    """Fresh calibrated prediction: raw ensemble probability, calibrated
+    probability, and calibration confidence."""
+    engine = container.resolve(ProbabilityCalibrationEngine)
+    prediction = await engine.predict(symbol, timeframe=timeframe, direction=direction)
+    return prediction.to_dict()
+
+
+@router.get("/calibration/{symbol}/history")
+async def calibration_history(
+    symbol: str, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted calibrated-prediction history, newest first."""
+    engine = container.resolve(ProbabilityCalibrationEngine)
     return await engine.recent(symbol=symbol, limit=limit)

@@ -14,6 +14,7 @@ from app.prediction.ensemble import (
     TrainingRow,
     assemble_dataset,
     blend_predictions,
+    blended_probabilities,
     disagreement_score,
     feature_stats,
     predict_from_training,
@@ -177,6 +178,29 @@ def test_train_models_returns_nothing_with_a_single_class() -> None:
     assert models == []
 
 
+def test_blended_probabilities_matches_manual_weighted_average() -> None:
+    rows = _separable_rows()
+    means, _ = feature_stats(rows, feature_names=("signal", "noise"))
+    models, split = train_models(rows, feature_names=("signal", "noise"), means=means)
+    import numpy as np
+
+    X_holdout = np.array([[r.features[f] for f in ("signal", "noise")] for r in rows[split:]])
+    probabilities = blended_probabilities(models, X_holdout)
+
+    total_weight = sum(m.weight for m in models)
+    expected_first = sum(
+        m.weight * m.model.predict_proba(X_holdout[:1])[0][1] for m in models
+    ) / total_weight
+    assert probabilities[0] == pytest.approx(expected_first)
+    assert len(probabilities) == len(X_holdout)
+
+
+def test_blended_probabilities_defaults_to_a_coin_flip_with_no_models() -> None:
+    import numpy as np
+
+    assert blended_probabilities([], np.array([[1.0], [2.0]])) == [0.5, 0.5]
+
+
 def test_predict_from_training_blends_a_real_trained_ensemble() -> None:
     rows = _separable_rows()
     means, stds = feature_stats(rows, feature_names=("signal", "noise"))
@@ -231,6 +255,16 @@ def test_ensemble_training_to_dict_excludes_raw_fitted_estimators() -> None:
         {"name": "logistic_regression", "kind": "linear", "weight": 0.3, "holdout_accuracy": 0.8}
     ]
     assert "model" not in payload["models"][0]
+    assert payload["n_calibration_pairs"] == 0  # default: none attached in this test
+
+
+def test_ensemble_training_defaults_to_no_calibration_pairs() -> None:
+    training = EnsembleTraining(
+        symbol="X", timeframe="D", direction="long", trained_at=BASE_TS,
+        n_samples=0, n_holdout=0, feature_names=("a",),
+        feature_means={}, feature_stds={}, model_version="ensemble_v1-untrained-n0",
+    )
+    assert training.calibration_pairs == []
 
 
 # --- engine, no DB: honest degradation -------------------------------------

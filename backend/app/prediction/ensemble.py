@@ -347,6 +347,24 @@ def train_models(
     return trained, split
 
 
+def blended_probabilities(models: Sequence[TrainedModel], X: np.ndarray) -> list[float]:
+    """Weighted-average probability across an already-trained ensemble for
+    every row in X at once (vectorized `blend_predictions`, without the
+    per-model ModelPrediction bookkeeping that only matters at single-row
+    inference time). Used to build the out-of-sample (raw_probability,
+    outcome) calibration set below: one call over the holdout split
+    already carved out by train_models(), so calibration is fit on rows no
+    model was trained on."""
+    if not models or len(X) == 0:
+        return [0.5] * len(X)
+    total_weight = sum(m.weight for m in models)
+    per_model = np.array([m.model.predict_proba(X)[:, 1] for m in models])
+    if total_weight <= 0:
+        return per_model.mean(axis=0).tolist()
+    weights = np.array([m.weight for m in models]).reshape(-1, 1)
+    return ((per_model * weights).sum(axis=0) / total_weight).tolist()
+
+
 # --- Explanations ---------------------------------------------------------
 
 
@@ -421,6 +439,12 @@ class EnsembleTraining:
     feature_stds: dict[str, float]
     model_version: str
     models: list[TrainedModel] = field(default_factory=list)
+    # Out-of-sample (raw blended probability, actual outcome) pairs from
+    # this same training's holdout split -- Prompt 5.7's Probability
+    # Calibration Engine (app/prediction/calibration.py) fits against
+    # these rather than re-deriving its own split, so calibration is
+    # always evaluated on rows no model here was trained on.
+    calibration_pairs: list[tuple[float, int]] = field(default_factory=list)
 
     @property
     def is_trained(self) -> bool:
@@ -443,6 +467,7 @@ class EnsembleTraining:
                  "holdout_accuracy": m.holdout_accuracy}
                 for m in self.models
             ],
+            "n_calibration_pairs": len(self.calibration_pairs),
         }
 
 
@@ -577,12 +602,22 @@ class EnsemblePredictionEngine:
         else:
             means, stds = feature_stats(rows)
             models, split = train_models(rows, means=means)
+            holdout_rows = rows[split:]
+            calibration_pairs: list[tuple[float, int]] = []
+            if models and holdout_rows:
+                X_holdout = np.array([
+                    [row.features.get(f, means[f]) for f in FEATURE_NAMES] for row in holdout_rows
+                ])
+                probabilities = blended_probabilities(models, X_holdout)
+                calibration_pairs = list(
+                    zip(probabilities, [row.label for row in holdout_rows], strict=True)
+                )
             training = EnsembleTraining(
                 symbol=symbol, timeframe=timeframe, direction=direction,
                 trained_at=trained_at, n_samples=len(rows), n_holdout=len(rows) - split,
                 feature_names=FEATURE_NAMES, feature_means=means, feature_stds=stds,
                 model_version=f"ensemble_v1-{trained_at.strftime('%Y%m%dT%H%M%S')}-n{len(rows)}",
-                models=models,
+                models=models, calibration_pairs=calibration_pairs,
             )
         self._trained[(symbol, timeframe, direction)] = training
         return training
