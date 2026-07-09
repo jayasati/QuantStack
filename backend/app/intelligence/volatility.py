@@ -49,7 +49,8 @@ def _level_weights(level: float) -> dict[str, float]:
 
 def _window_values(features: Mapping[str, float], feature: str) -> list[float]:
     return [
-        features[f"{feature}_{w}"] for w in VOL_WINDOWS if features.get(f"{feature}_{w}") is not None
+        features[f"{feature}_{w}"]
+        for w in VOL_WINDOWS if features.get(f"{feature}_{w}") is not None
     ]
 
 

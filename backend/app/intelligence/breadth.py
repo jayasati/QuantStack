@@ -136,7 +136,9 @@ def assess_breadth(features: Mapping[str, float]) -> IntelligenceResult:
         participation_pct / 100 if participation_pct is not None else None,
         trend_pct / 100 if trend_pct is not None else None,
     ) if v is not None]
-    base_quality = _mean(quality_terms) if quality_terms else 0.5
+    # Computed inline (not via _mean) so mypy sees a plain float, not
+    # float | None — quality_terms is checked non-empty right here.
+    base_quality = sum(quality_terms) / len(quality_terms) if quality_terms else 0.5
 
     divergence = features.get("breadth_divergence")
     divergence_penalty = 1.0
@@ -163,11 +165,15 @@ def assess_breadth(features: Mapping[str, float]) -> IntelligenceResult:
         reasoning.append("No collector health composite; derived a proxy from quality/level.")
 
     data_completeness = len(level_terms) / 5.0
-    signs = [s for s in (
-        (1 if momentum_signal > 0 else -1 if momentum_signal < 0 else 0) if momentum_mean is not None else None,
+    momentum_sign = (
+        (1 if momentum_signal > 0 else -1 if momentum_signal < 0 else 0)
+        if momentum_mean is not None else None
+    )
+    nh_nl_sign = (
         (1 if nh_nl_signal > 0 else -1 if nh_nl_signal < 0 else 0)
-        if new_high_momentum is not None and new_low_momentum is not None else None,
-    ) if s is not None]
+        if new_high_momentum is not None and new_low_momentum is not None else None
+    )
+    signs = [s for s in (momentum_sign, nh_nl_sign) if s is not None]
     nonzero_signs = {s for s in signs if s != 0}
     # 0.0 (not a "neutral" 0.5) when there is nothing to agree on at all —
     # a missing-data floor consistent with Trend/Volatility Intelligence,
