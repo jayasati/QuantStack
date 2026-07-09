@@ -7,6 +7,7 @@ from app.features.base import BaseFeatureEngine
 from app.features.breadth import BreadthFeatureEngine
 from app.features.events import EventRiskEngine
 from app.features.institutional_flow import InstitutionalFlowFeatureEngine
+from app.features.intraday_risk import IntradayRiskFeatureEngine
 from app.features.liquidity import LiquidityFeatureEngine
 from app.features.macro import MacroFeatureEngine
 from app.features.news import NewsFeatureEngine
@@ -41,6 +42,7 @@ def _engines() -> list[BaseFeatureEngine]:
         container.resolve(InstitutionalFlowFeatureEngine),
         container.resolve(MacroFeatureEngine),
         container.resolve(RiskFeatureEngine),
+        container.resolve(IntradayRiskFeatureEngine),
     ]
 
 
