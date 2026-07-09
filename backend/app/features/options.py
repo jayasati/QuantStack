@@ -16,8 +16,14 @@ Feature conventions:
   of ATM IV over the same window. Both 0-100.
 - Call/Put Writing Scores are the collector's writing intensities: fresh OI
   added on that side relative to the side's total OI.
-- Gamma/Delta Exposure pass through the collector's proxies and stay empty on
-  snapshots where the chain carried no Greeks.
+- Gamma/Delta Exposure pass through the collector's chain-wide proxies and
+  stay empty on snapshots where the chain carried no Greeks.
+- ATM Theta %, ATM Gamma, ATM Vega (same-day F&O gap fill, 2026-07-09) pass
+  through the collector's ATM-strike Greeks — genuinely different from
+  Gamma/Delta Exposure above: those are chain-wide OI-weighted sums, these
+  are the single ATM strike's raw Greeks, which is where gamma/theta peak
+  and where a same-day trader's actual risk concentrates. Instrument-level,
+  not position-level: this codebase has no open-position tracking yet.
 - Option Volume Ratio is the volume PCR (put volume / call volume).
 - Expected Move is the one-day move implied by ATM IV:
   spot x IV/100 / sqrt(252).
@@ -103,6 +109,18 @@ def options_feature_definitions(
         define("options_delta_exposure",
                "Net delta exposure proxy (call delta x OI + put delta x OI); "
                "empty when the chain carries no Greeks.",
+               "exposure", (None, None)),
+        define("options_atm_theta_pct",
+               "ATM strike's Theta as % of ATM premium — same-day time-decay "
+               "burn rate; empty when the chain carries no Greeks.",
+               "%", (0.0, 50.0)),
+        define("options_atm_gamma",
+               "ATM strike's raw Gamma (call + put) — where gamma risk "
+               "peaks; empty when the chain carries no Greeks.",
+               "exposure", (None, None)),
+        define("options_atm_vega",
+               "ATM strike's raw Vega (call + put) — IV-crush/spike "
+               "sensitivity; empty when the chain carries no Greeks.",
                "exposure", (None, None)),
         define("options_volume_ratio", "Put volume / call volume (volume PCR).",
                "ratio", (0.0, 5.0)),
@@ -206,6 +224,9 @@ def compute_options_features(
         "options_put_writing_score": put_writing,
         "options_gamma_exposure": passthrough("gamma_exposure"),
         "options_delta_exposure": passthrough("delta_exposure"),
+        "options_atm_theta_pct": passthrough("atm_theta_pct"),
+        "options_atm_gamma": passthrough("atm_gamma"),
+        "options_atm_vega": passthrough("atm_vega"),
         "options_volume_ratio": volume_ratio,
         "options_expected_move": expected_move,
         "options_dealer_positioning": dealer_positioning,

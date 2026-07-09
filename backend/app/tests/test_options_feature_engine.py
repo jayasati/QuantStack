@@ -24,7 +24,9 @@ def make_snapshot(i: int, *, atm_iv: float = 12.0, total_call_oi: float = 1_000_
                   total_put_oi: float = 1_200_000, spot: float = 25_000.0,
                   max_pain: float = 25_100.0, call_writing: float = 0.02,
                   put_writing: float = 0.05, volume_pcr: float = 1.1,
-                  gamma: float | None = None) -> ChainSnapshot:
+                  gamma: float | None = None, atm_theta_pct: float | None = None,
+                  atm_gamma: float | None = None, atm_vega: float | None = None,
+                  ) -> ChainSnapshot:
     values = {
         "pcr": total_put_oi / total_call_oi,
         "atm_iv": atm_iv,
@@ -33,6 +35,12 @@ def make_snapshot(i: int, *, atm_iv: float = 12.0, total_call_oi: float = 1_000_
     }
     if gamma is not None:
         values["gamma_exposure"] = gamma
+    if atm_theta_pct is not None:
+        values["atm_theta_pct"] = atm_theta_pct
+    if atm_gamma is not None:
+        values["atm_gamma"] = atm_gamma
+    if atm_vega is not None:
+        values["atm_vega"] = atm_vega
     return ChainSnapshot(
         ts=BASE_TS + timedelta(minutes=i),
         values=values,
@@ -116,6 +124,18 @@ def test_greeks_pass_through_only_when_present() -> None:
     assert series["options_gamma_exposure"][1] == pytest.approx(1_500.0)
 
 
+def test_atm_greeks_risk_pass_through_only_when_present() -> None:
+    snapshots = [
+        make_snapshot(0),
+        make_snapshot(1, atm_theta_pct=8.5, atm_gamma=0.1, atm_vega=0.24),
+    ]
+    series = compute_options_features(snapshots)
+    assert series["options_atm_theta_pct"][0] is None
+    assert series["options_atm_theta_pct"][1] == pytest.approx(8.5)
+    assert series["options_atm_gamma"][1] == pytest.approx(0.1)
+    assert series["options_atm_vega"][1] == pytest.approx(0.24)
+
+
 def test_volume_ratio_from_metadata() -> None:
     series = compute_options_features([make_snapshot(0, volume_pcr=0.85),
                                        make_snapshot(1, volume_pcr=0.85)])
@@ -126,13 +146,13 @@ def test_every_feature_has_z_companion_and_registration() -> None:
     series = compute_options_features([make_snapshot(i) for i in range(20)],
                                       normalization_window=10)
     raw = [name for name in series if not name.endswith("_z")]
-    assert len(raw) == 13
+    assert len(raw) == 16
     for name in raw:
         assert f"{name}_z" in series
 
     engine = OptionsFeatureEngine(settings=Settings())
     definitions = engine.registry.list_definitions(category="options")
-    assert len(definitions) == 13 * 2
+    assert len(definitions) == 16 * 2
     assert all(d.version == "v1" for d in definitions)
     order = engine.registry.dependency_order()
     assert order.index("options_atm_iv") < order.index("options_iv_rank")

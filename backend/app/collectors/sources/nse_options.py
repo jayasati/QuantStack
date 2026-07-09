@@ -130,7 +130,8 @@ class NseOptionChainSource(OptionsChainSource):
                 entry = greeks.get((strike, side))
                 if entry:
                     strike_row[leg_key].update(
-                        {k: v for k, v in entry.items() if k in ("delta", "gamma")}
+                        {k: v for k, v in entry.items()
+                         if k in ("delta", "gamma", "theta", "vega")}
                     )
                     enriched += 1
         chain["greeks_enriched_legs"] = enriched

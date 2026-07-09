@@ -1,10 +1,16 @@
 """Options intelligence collector (Volume 2, Chapter 9, Prompt 2.4).
 
 Derives normalized option-chain features — PCR, max pain, ATM IV, IV skew,
-OI concentration, buildup classification, writing intensity, and exposure
-proxies — instead of publishing raw chain rows. The chain itself comes from
-an injectable ``OptionsChainSource``; the default is the public NSE
-option-chain feed (``NseOptionChainSource``).
+OI concentration, buildup classification, writing intensity, chain-wide
+exposure proxies, and ATM Greeks risk (Theta burn %, Gamma, Vega) — instead
+of publishing raw chain rows. The chain itself comes from an injectable
+``OptionsChainSource``; the default is the public NSE option-chain feed
+(``NseOptionChainSource``).
+
+ATM Greeks risk (same-day F&O gap fill, 2026-07-09) is generic/instrument-
+level, not position-level: this codebase has no open-position tracking yet,
+so "Theta burn" here means "at the current ATM strike right now," not "on
+your specific trade."
 """
 
 from abc import ABC, abstractmethod
@@ -28,7 +34,8 @@ class OptionsChainSource(ABC):
             "strikes": [
                 {
                     "strike": float,
-                    "call": {"oi", "oi_change", "iv", "volume", "ltp"[, "gamma", "delta"]},
+                    "call": {"oi", "oi_change", "iv", "volume", "ltp"
+                             "[, gamma, delta, theta, vega]"},
                     "put":  {...same keys...},
                 },
                 ...
@@ -98,6 +105,8 @@ class _Leg:
     ltp: float | None
     gamma: float | None
     delta: float | None
+    theta: float | None
+    vega: float | None
 
 
 @dataclass(frozen=True)
@@ -138,6 +147,8 @@ def _parse_leg(payload: dict[str, Any]) -> _Leg:
         ltp=optional("ltp"),
         gamma=optional("gamma"),
         delta=optional("delta"),
+        theta=optional("theta"),
+        vega=optional("vega"),
     )
 
 
@@ -234,6 +245,7 @@ class OptionsIntelligenceCollector(BaseCollector):
         records.extend(self._buildup(instrument, spot, prev_spot, rows))
         records.extend(self._writing_intensity(instrument, rows))
         records.extend(self._exposure_proxies(instrument, rows))
+        records.extend(self._atm_greeks_risk(instrument, spot, rows))
         if atm_records:
             iv_value = atm_records[0].normalized_value
             if iv_value is not None:
@@ -540,6 +552,64 @@ class OptionsIntelligenceCollector(BaseCollector):
                     dex,
                     direction,
                     {"strikes_with_delta": len(delta_terms)},
+                )
+            )
+        return records
+
+    def _atm_greeks_risk(
+        self, instrument: str, spot: float, rows: list[_StrikeRow]
+    ) -> list[CollectorOutput]:
+        """Same-day F&O risk from the Greeks at the ATM strike (where gamma
+        and theta both peak): Theta burn as a % of premium, raw Gamma, raw
+        Vega. Only when the chain carries Greeks -- never fabricated."""
+        atm = min(rows, key=lambda row: abs(row.strike - spot))
+        records: list[CollectorOutput] = []
+
+        thetas = [t for t in (atm.call.theta, atm.put.theta) if t is not None]
+        ltps = [p for p in (atm.call.ltp, atm.put.ltp) if p is not None]
+        if thetas and ltps:
+            avg_premium = fmean(ltps)
+            if avg_premium > 0:
+                theta_pct = abs(fmean(thetas)) / avg_premium * 100
+                records.append(
+                    self._record(
+                        instrument,
+                        "atm_theta_pct",
+                        theta_pct,
+                        Direction.NEUTRAL,
+                        {
+                            "atm_strike": atm.strike,
+                            "call_theta": atm.call.theta,
+                            "put_theta": atm.put.theta,
+                            "call_ltp": atm.call.ltp,
+                            "put_ltp": atm.put.ltp,
+                        },
+                    )
+                )
+
+        gammas = [g for g in (atm.call.gamma, atm.put.gamma) if g is not None]
+        if gammas:
+            records.append(
+                self._record(
+                    instrument,
+                    "atm_gamma",
+                    sum(gammas),
+                    Direction.NEUTRAL,
+                    {"atm_strike": atm.strike, "call_gamma": atm.call.gamma,
+                     "put_gamma": atm.put.gamma},
+                )
+            )
+
+        vegas = [v for v in (atm.call.vega, atm.put.vega) if v is not None]
+        if vegas:
+            records.append(
+                self._record(
+                    instrument,
+                    "atm_vega",
+                    sum(vegas),
+                    Direction.NEUTRAL,
+                    {"atm_strike": atm.strike, "call_vega": atm.call.vega,
+                     "put_vega": atm.put.vega},
                 )
             )
         return records

@@ -143,6 +143,45 @@ async def test_greeks_in_chain_activate_exposures() -> None:
     assert got["delta_exposure"].direction is Direction.BULLISH
 
 
+async def test_atm_greeks_risk_theta_gamma_vega() -> None:
+    chain = {
+        "spot": 100.0,
+        "strikes": [
+            {
+                "strike": 90.0,  # far OTM; excluded from ATM selection
+                "call": {"oi": 100, "oi_change": 0, "iv": 20.0, "volume": 10, "ltp": 11.0,
+                         "gamma": 0.01, "delta": 0.9, "theta": -0.02, "vega": 0.03},
+                "put": {"oi": 100, "oi_change": 0, "iv": 20.0, "volume": 10, "ltp": 0.1,
+                        "gamma": 0.01, "delta": -0.1, "theta": -0.01, "vega": 0.03},
+            },
+            {
+                "strike": 100.0,  # ATM: nearest to spot
+                "call": {"oi": 1000, "oi_change": 0, "iv": 15.0, "volume": 10, "ltp": 2.0,
+                         "gamma": 0.05, "delta": 0.5, "theta": -0.30, "vega": 0.12},
+                "put": {"oi": 900, "oi_change": 0, "iv": 15.0, "volume": 10, "ltp": 1.8,
+                        "gamma": 0.05, "delta": -0.5, "theta": -0.28, "vega": 0.12},
+            },
+        ],
+    }
+    got = await features(make_collector(chain))
+
+    # Theta % of premium uses the ATM strike only, magnitude-expressed.
+    avg_theta = (0.30 + 0.28) / 2
+    avg_premium = (2.0 + 1.8) / 2
+    assert got["atm_theta_pct"].normalized_value == pytest.approx(avg_theta / avg_premium * 100)
+    assert got["atm_theta_pct"].metadata["atm_strike"] == 100.0
+
+    assert got["atm_gamma"].normalized_value == pytest.approx(0.05 + 0.05)
+    assert got["atm_vega"].normalized_value == pytest.approx(0.12 + 0.12)
+
+
+async def test_atm_greeks_risk_absent_without_greeks() -> None:
+    got = await features(make_collector(CHAIN))  # module-level CHAIN carries no Greeks
+    assert "atm_theta_pct" not in got
+    assert "atm_gamma" not in got
+    assert "atm_vega" not in got
+
+
 # --- Market-hours gating --------------------------------------------------------------
 
 

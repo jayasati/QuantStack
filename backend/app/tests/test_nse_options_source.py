@@ -1,9 +1,13 @@
 """NSE option-chain mapping tests (offline, fixture-based)."""
 
+from datetime import datetime
+
 import pytest
 
 from app.collectors.base import CollectionError
-from app.collectors.sources.nse_options import map_nse_chain
+from app.collectors.sources.nse_options import NseOptionChainSource, map_nse_chain
+from app.core.container import container
+from app.market.broker import BrokerInterface, Candle, Quote
 
 NSE_PAYLOAD = {
     "records": {
@@ -98,3 +102,50 @@ async def test_collector_derives_features_from_nse_shape() -> None:
     assert "max_pain" in features
     assert "buildup" in features  # prev_spot present -> classification emitted
     assert features["buildup"].raw_value == "long_buildup"  # price up, OI up
+
+
+class FakeGreeksBroker(BrokerInterface):
+    """Returns full Greeks (delta/gamma/theta/vega) for one known strike."""
+
+    async def connect(self) -> None:
+        pass
+
+    async def disconnect(self) -> None:
+        pass
+
+    async def is_connected(self) -> bool:
+        return True
+
+    async def get_quote(self, symbol: str, exchange: str = "NSE") -> Quote:
+        raise NotImplementedError
+
+    async def get_historical(
+        self, symbol: str, interval: str, start: datetime, end: datetime,
+        exchange: str = "NSE",
+    ) -> list[Candle]:
+        raise NotImplementedError
+
+    async def get_option_greeks(
+        self, name: str, expiry: str
+    ) -> dict[tuple[float, str], dict[str, float]]:
+        return {
+            (100.0, "CE"): {"delta": 0.5, "gamma": 0.05, "theta": -0.3, "vega": 0.12},
+            (100.0, "PE"): {"delta": -0.5, "gamma": 0.05, "theta": -0.28, "vega": 0.12},
+        }
+
+
+async def test_enrich_with_greeks_passes_theta_and_vega_through() -> None:
+    """Chapter 9 gap fill: theta/vega used to be dropped during enrichment
+    (only delta/gamma survived), even though the broker already returns
+    them — Options Feature Engine's ATM Theta/Vega features need this."""
+    container.register(BrokerInterface, FakeGreeksBroker)
+    source = NseOptionChainSource()
+    chain = {"strikes": [{"strike": 100.0, "call": {}, "put": {}}]}
+
+    await source._enrich_with_greeks("NIFTY", "07-Jul-2026", chain)
+
+    call = chain["strikes"][0]["call"]
+    put = chain["strikes"][0]["put"]
+    assert call == {"delta": 0.5, "gamma": 0.05, "theta": -0.3, "vega": 0.12}
+    assert put == {"delta": -0.5, "gamma": 0.05, "theta": -0.28, "vega": 0.12}
+    assert chain["greeks_enriched_legs"] == 2
