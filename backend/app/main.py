@@ -20,6 +20,7 @@ from app.features.news import NewsFeatureEngine
 from app.features.options import OptionsFeatureEngine
 from app.features.price import PriceFeatureEngine
 from app.features.relative import RelativeStrengthEngine
+from app.features.risk import RiskFeatureEngine
 from app.features.sector import SectorFeatureEngine
 from app.features.structure import MarketStructureEngine
 from app.features.timefeat import TimeFeatureEngine
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI):
         container.resolve(NewsFeatureEngine),
         container.resolve(EventRiskEngine),
         container.resolve(TimeFeatureEngine),
+        container.resolve(RiskFeatureEngine),
     ]
     for engine in feature_engines:
         try:

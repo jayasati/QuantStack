@@ -13,6 +13,7 @@ from app.features.news import NewsFeatureEngine
 from app.features.options import OptionsFeatureEngine
 from app.features.price import PriceFeatureEngine
 from app.features.relative import RelativeStrengthEngine
+from app.features.risk import RiskFeatureEngine
 from app.features.schema import FeatureDefinition
 from app.features.sector import SectorFeatureEngine
 from app.features.structure import MarketStructureEngine
@@ -39,6 +40,7 @@ def _engines() -> list[BaseFeatureEngine]:
         container.resolve(TimeFeatureEngine),
         container.resolve(InstitutionalFlowFeatureEngine),
         container.resolve(MacroFeatureEngine),
+        container.resolve(RiskFeatureEngine),
     ]
 
 

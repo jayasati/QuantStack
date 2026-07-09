@@ -56,6 +56,7 @@ def wire_default_services() -> None:
     from app.features.options import OptionsFeatureEngine
     from app.features.price import PriceFeatureEngine
     from app.features.relative import RelativeStrengthEngine
+    from app.features.risk import RiskFeatureEngine
     from app.features.sector import SectorFeatureEngine
     from app.features.structure import MarketStructureEngine
     from app.features.timefeat import TimeFeatureEngine
@@ -214,6 +215,14 @@ def wire_default_services() -> None:
     container.register(
         MacroFeatureEngine,
         lambda: MacroFeatureEngine(
+            session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
+            cache=container.resolve(CacheService),
+        ),
+    )
+    container.register(
+        RiskFeatureEngine,
+        lambda: RiskFeatureEngine(
             session_factory=get_session_factory(),
             bus=container.resolve(EventBus),
             cache=container.resolve(CacheService),
