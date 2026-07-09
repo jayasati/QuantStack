@@ -11,6 +11,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# CatBoost training logs (written to CWD by CatBoostClassifier.fit())
+catboost_info/
+
 # Secrets — never commit credentials
 .env
 

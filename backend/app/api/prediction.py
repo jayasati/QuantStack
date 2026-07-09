@@ -1,9 +1,10 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.5)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.6)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
 from app.prediction.candidates import CandidateGenerationEngine
+from app.prediction.ensemble import EnsemblePredictionEngine
 from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabelingEngine
 from app.prediction.multi_horizon import MultiHorizonPredictionEngine
 from app.prediction.opportunity import OpportunityDetectionEngine
@@ -112,3 +113,42 @@ async def label_history(
     """Persisted labels, optionally filtered by outcome, newest first."""
     engine = container.resolve(TripleBarrierLabelingEngine)
     return await engine.recent(symbol=symbol, label=label, limit=limit)
+
+
+@router.get("/ensemble/{symbol}/train")
+async def train_ensemble(
+    symbol: str,
+    timeframe: str = "D",
+    direction: str = "long",
+    lookback_bars: int = Query(default=500, ge=1, le=5000),
+    max_holding_bars: int = Query(default=DEFAULT_MAX_HOLDING_BARS, ge=1, le=200),
+) -> dict:
+    """Fits the six-model ensemble against Triple Barrier labels and cached
+    in memory for subsequent /ensemble/{symbol} calls."""
+    engine = container.resolve(EnsemblePredictionEngine)
+    training = await engine.train(
+        symbol, timeframe=timeframe, direction=direction,
+        lookback_bars=lookback_bars, max_holding_bars=max_holding_bars,
+    )
+    return training.to_dict()
+
+
+@router.get("/ensemble/{symbol}")
+async def predict_ensemble(
+    symbol: str, timeframe: str = "D", direction: str = "long"
+) -> dict:
+    """Fresh ensemble prediction (training on first call if not already
+    cached) from a newly frozen snapshot: probability, confidence,
+    uncertainty, disagreement score, and per-model explanations."""
+    engine = container.resolve(EnsemblePredictionEngine)
+    prediction = await engine.predict(symbol, timeframe=timeframe, direction=direction)
+    return prediction.to_dict()
+
+
+@router.get("/ensemble/{symbol}/history")
+async def ensemble_history(
+    symbol: str, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted ensemble prediction history, newest first."""
+    engine = container.resolve(EnsemblePredictionEngine)
+    return await engine.recent(symbol=symbol, limit=limit)

@@ -74,6 +74,7 @@ def wire_default_services() -> None:
     from app.market.angel_one import AngelOneAdapter
     from app.market.broker import BrokerInterface
     from app.prediction.candidates import CandidateGenerationEngine
+    from app.prediction.ensemble import EnsemblePredictionEngine
     from app.prediction.labeling import TripleBarrierLabelingEngine
     from app.prediction.multi_horizon import MultiHorizonPredictionEngine
     from app.prediction.opportunity import OpportunityDetectionEngine
@@ -303,5 +304,14 @@ def wire_default_services() -> None:
         TripleBarrierLabelingEngine,
         lambda: TripleBarrierLabelingEngine(
             session_factory=get_session_factory(), cache=container.resolve(CacheService)
+        ),
+    )
+    container.register(
+        EnsemblePredictionEngine,
+        lambda: EnsemblePredictionEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            labeling_engine=container.resolve(TripleBarrierLabelingEngine),
+            snapshot_engine=container.resolve(FeatureSnapshotEngine),
         ),
     )
