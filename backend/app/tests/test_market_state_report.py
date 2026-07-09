@@ -128,6 +128,11 @@ async def test_report_as_of_returns_none_without_a_session() -> None:
     assert result is None
 
 
+async def test_list_reports_returns_empty_without_a_session() -> None:
+    engine = MarketStateReportEngine()
+    assert await engine.list_reports("NIFTY") == []
+
+
 async def test_persist_is_a_noop_without_a_session() -> None:
     engine = MarketStateReportEngine()
     report = build_market_state_report(

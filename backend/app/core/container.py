@@ -58,6 +58,14 @@ def wire_default_services() -> None:
     from app.features.timefeat import TimeFeatureEngine
     from app.features.volatility import VolatilityFeatureEngine
     from app.features.volume import VolumeFeatureEngine
+    from app.intelligence.analogs import HistoricalAnalogEngine
+    from app.intelligence.breadth import BreadthIntelligenceEngine
+    from app.intelligence.confidence import MarketConfidenceEngine
+    from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
+    from app.intelligence.regime import BayesianRegimeDetector
+    from app.intelligence.report import MarketStateReportEngine
+    from app.intelligence.sector import SectorIntelligenceEngine
+    from app.intelligence.trend import TrendIntelligenceEngine
     from app.market.angel_one import AngelOneAdapter
     from app.market.broker import BrokerInterface
 
@@ -185,4 +193,36 @@ def wire_default_services() -> None:
             bus=container.resolve(EventBus),
             cache=container.resolve(CacheService),
         ),
+    )
+    container.register(
+        TrendIntelligenceEngine,
+        lambda: TrendIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        BreadthIntelligenceEngine,
+        lambda: BreadthIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        SectorIntelligenceEngine,
+        lambda: SectorIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        InstitutionalFlowIntelligenceEngine,
+        lambda: InstitutionalFlowIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        HistoricalAnalogEngine,
+        lambda: HistoricalAnalogEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        MarketConfidenceEngine,
+        lambda: MarketConfidenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        MarketStateReportEngine,
+        lambda: MarketStateReportEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        BayesianRegimeDetector,
+        lambda: BayesianRegimeDetector(session_factory=get_session_factory()),
     )

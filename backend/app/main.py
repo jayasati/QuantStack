@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app.api.collectors import router as collectors_router
 from app.api.features import router as features_router
 from app.api.health import router as health_router
+from app.api.intelligence import router as intelligence_router
 from app.collectors.registry import CollectorRegistry
 from app.core.config import get_settings
 from app.core.container import container, wire_default_services
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(collectors_router)
     app.include_router(features_router)
+    app.include_router(intelligence_router)
     return app
 
 

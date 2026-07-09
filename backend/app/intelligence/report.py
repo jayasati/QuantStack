@@ -244,3 +244,23 @@ class MarketStateReportEngine(IntelligenceComponent):
                 .limit(1)
             )
             return result.scalar_one_or_none()
+
+    async def list_reports(self, symbol: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Persisted reports for `symbol`, most recent first."""
+        if self._sessions is None:
+            return []
+        from sqlalchemy import desc, select
+
+        from app.database.tables import MarketEvent
+
+        async with self._sessions() as session:
+            result = await session.execute(
+                select(MarketEvent.data)
+                .where(
+                    MarketEvent.event_type == REPORT_EVENT_TYPE,
+                    MarketEvent.data["symbol"].astext == symbol,
+                )
+                .order_by(desc(MarketEvent.created_at))
+                .limit(limit)
+            )
+            return list(result.scalars().all())
