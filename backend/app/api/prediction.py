@@ -1,9 +1,10 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.3)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.4)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
 from app.prediction.candidates import CandidateGenerationEngine
+from app.prediction.multi_horizon import MultiHorizonPredictionEngine
 from app.prediction.opportunity import OpportunityDetectionEngine
 from app.prediction.snapshot import FeatureSnapshotEngine
 
@@ -61,3 +62,23 @@ async def snapshot_history(
     """Persisted snapshot history, optionally filtered by symbol, newest first."""
     engine = container.resolve(FeatureSnapshotEngine)
     return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/horizons/{symbol}")
+async def predict_horizons(symbol: str) -> dict:
+    """Fresh multi-horizon probability-of-up-move prediction (5min/15min/
+    30min/1hour/end_of_day/next_day), captured from a new frozen snapshot."""
+    engine = container.resolve(MultiHorizonPredictionEngine)
+    prediction = await engine.predict(symbol)
+    return prediction.to_dict()
+
+
+@router.get("/horizons/{symbol}/history")
+async def horizon_history(
+    symbol: str,
+    horizon: str | None = None,
+    limit: int = Query(default=50, ge=1, le=500),
+) -> list[dict]:
+    """Persisted per-horizon probability history, newest first."""
+    engine = container.resolve(MultiHorizonPredictionEngine)
+    return await engine.recent(symbol=symbol, horizon=horizon, limit=limit)
