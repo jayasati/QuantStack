@@ -85,6 +85,7 @@ def wire_default_services() -> None:
     from app.prediction.conviction import ConvictionEngine
     from app.prediction.duplicate import DuplicateSignalEngine
     from app.prediction.ensemble import EnsemblePredictionEngine
+    from app.prediction.explainability import ExplainabilityReportEngine
     from app.prediction.historical_similarity import HistoricalSimilarityEngine
     from app.prediction.labeling import TripleBarrierLabelingEngine
     from app.prediction.lifecycle import OpportunityLifecycleManager
@@ -446,4 +447,19 @@ def wire_default_services() -> None:
     container.register(
         OpportunityLifecycleManager,
         lambda: OpportunityLifecycleManager(session_factory=get_session_factory()),
+    )
+    container.register(
+        ExplainabilityReportEngine,
+        lambda: ExplainabilityReportEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            ensemble_engine=container.resolve(EnsemblePredictionEngine),
+            calibration_engine=container.resolve(ProbabilityCalibrationEngine),
+            market_context_engine=container.resolve(MarketContextAdjustmentEngine),
+            conviction_engine=container.resolve(ConvictionEngine),
+            agreement_engine=container.resolve(ModelAgreementEngine),
+            historical_similarity_engine=container.resolve(HistoricalSimilarityEngine),
+            snapshot_engine=container.resolve(FeatureSnapshotEngine),
+            report_engine=container.resolve(MarketStateReportEngine),
+        ),
     )

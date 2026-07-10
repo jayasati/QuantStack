@@ -1,4 +1,4 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.15)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.16)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -9,6 +9,7 @@ from app.prediction.candidates import CandidateGenerationEngine
 from app.prediction.conviction import ConvictionEngine
 from app.prediction.duplicate import DuplicateSignalEngine
 from app.prediction.ensemble import EnsemblePredictionEngine
+from app.prediction.explainability import ExplainabilityReportEngine
 from app.prediction.historical_similarity import HistoricalSimilarityEngine
 from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabelingEngine
 from app.prediction.lifecycle import (
@@ -480,3 +481,25 @@ async def lifecycle_history(
     """Raw transition log for one lifecycle, newest first."""
     manager = container.resolve(OpportunityLifecycleManager)
     return await manager.recent(lifecycle_id=lifecycle_id, limit=limit)
+
+
+@router.get("/explainability/{symbol}")
+async def explainability_report(
+    symbol: str, timeframe: str = "D", direction: str = "long"
+) -> dict:
+    """Top SHAP Features, Market Regime, Historical Analogs, Model
+    Agreement, Confidence Breakdown, Conviction Breakdown, Reason Codes,
+    and a Natural Language Summary -- every qualified trade should carry
+    one of these."""
+    engine = container.resolve(ExplainabilityReportEngine)
+    report = await engine.generate(symbol, timeframe=timeframe, direction=direction)
+    return report.to_dict()
+
+
+@router.get("/explainability/{symbol}/history")
+async def explainability_history(
+    symbol: str, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted explainability-report history, newest first."""
+    engine = container.resolve(ExplainabilityReportEngine)
+    return await engine.recent(symbol=symbol, limit=limit)

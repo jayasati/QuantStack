@@ -47,6 +47,13 @@ ensemble = [
     "xgboost>=2.0",
     "catboost>=1.2",
 ]
+# Real SHAP values for the Explainability Report (app/prediction/explainability.py,
+# Prompt 5.16). If not installed, Top SHAP Features falls back to
+# ensemble.py's own feature-importance proxy explanation:
+#   pip install shap
+explainability = [
+    "shap>=0.45",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
