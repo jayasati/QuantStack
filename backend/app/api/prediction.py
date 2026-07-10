@@ -1,4 +1,4 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.11)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.12)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -13,6 +13,7 @@ from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabel
 from app.prediction.market_context import MarketContextAdjustmentEngine
 from app.prediction.multi_horizon import MultiHorizonPredictionEngine
 from app.prediction.opportunity import OpportunityDetectionEngine
+from app.prediction.qualification import TradeQualificationEngine
 from app.prediction.snapshot import FeatureSnapshotEngine
 
 router = APIRouter(prefix="/prediction", tags=["prediction"])
@@ -302,4 +303,35 @@ async def conviction_history(
 ) -> list[dict]:
     """Persisted conviction history, newest first."""
     engine = container.resolve(ConvictionEngine)
+    return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/qualification/candidates")
+async def qualification_for_candidates() -> list[dict]:
+    """Qualification result for every candidate in a fresh Top-20 scan
+    (Prompt 5.2). Only qualified trades should continue downstream."""
+    engine = container.resolve(TradeQualificationEngine)
+    results = await engine.evaluate_top_candidates()
+    return [r.to_dict() for r in results]
+
+
+@router.get("/qualification/{symbol}")
+async def trade_qualification(
+    symbol: str, timeframe: str = "D", direction: str = "long"
+) -> dict:
+    """Rejects the trade if liquidity is too low, spread is too large,
+    event risk is too high, model disagreement is high, feature quality
+    is poor, market confidence is poor, or historical analog reliability
+    is poor -- with explicit rejection reasons."""
+    engine = container.resolve(TradeQualificationEngine)
+    result = await engine.evaluate(symbol, timeframe=timeframe, direction=direction)
+    return result.to_dict()
+
+
+@router.get("/qualification/{symbol}/history")
+async def qualification_history(
+    symbol: str, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted qualification history, newest first."""
+    engine = container.resolve(TradeQualificationEngine)
     return await engine.recent(symbol=symbol, limit=limit)

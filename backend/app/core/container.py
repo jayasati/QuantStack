@@ -89,6 +89,7 @@ def wire_default_services() -> None:
     from app.prediction.market_context import MarketContextAdjustmentEngine
     from app.prediction.multi_horizon import MultiHorizonPredictionEngine
     from app.prediction.opportunity import OpportunityDetectionEngine
+    from app.prediction.qualification import TradeQualificationEngine
     from app.prediction.snapshot import FeatureSnapshotEngine
 
     settings = get_settings()
@@ -402,6 +403,19 @@ def wire_default_services() -> None:
             liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
             relative_strength_engine=container.resolve(RelativeStrengthIntelligenceEngine),
             agreement_engine=container.resolve(ModelAgreementEngine),
+            candidate_engine=container.resolve(CandidateGenerationEngine),
+        ),
+    )
+    container.register(
+        TradeQualificationEngine,
+        lambda: TradeQualificationEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
+            event_engine=container.resolve(EventIntelligenceEngine),
+            agreement_engine=container.resolve(ModelAgreementEngine),
+            market_confidence_engine=container.resolve(MarketConfidenceEngine),
+            historical_similarity_engine=container.resolve(HistoricalSimilarityEngine),
             candidate_engine=container.resolve(CandidateGenerationEngine),
         ),
     )
