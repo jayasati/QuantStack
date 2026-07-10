@@ -34,6 +34,7 @@ engine honestly returns the identity calibration (calibrated ==
 raw, confidence 0.0) rather than fitting a method no data supports.
 """
 
+import asyncio
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -286,7 +287,10 @@ class ProbabilityCalibrationEngine:
             symbol, timeframe=timeframe, direction=direction,
             lookback_bars=lookback_bars, max_holding_bars=max_holding_bars,
         )
-        result = choose_best_calibration(training.calibration_pairs)
+        # Three model fits (Platt/Isotonic/Temperature) are individually
+        # cheap but still CPU-bound and blocking -- offloaded for the same
+        # reason ensemble.py's own training is (see _fit_and_calibrate).
+        result = await asyncio.to_thread(choose_best_calibration, training.calibration_pairs)
         self._calibrations[(symbol, timeframe, direction)] = result
         return result
 

@@ -40,6 +40,7 @@ string (algorithm set + training timestamp + sample count), not a
 retrievable handle.
 """
 
+import asyncio
 import bisect
 import math
 from collections.abc import Mapping, Sequence
@@ -365,6 +366,32 @@ def blended_probabilities(models: Sequence[TrainedModel], X: np.ndarray) -> list
     return ((per_model * weights).sum(axis=0) / total_weight).tolist()
 
 
+def _fit_and_calibrate(
+    rows: Sequence[TrainingRow], means: Mapping[str, float]
+) -> tuple[list[TrainedModel], int, list[tuple[float, int]]]:
+    """Synchronous, CPU-bound: fits every model (train_models -- six
+    estimator.fit() calls) and builds the out-of-sample calibration set
+    (blended_probabilities over the holdout). Bundled into one function so
+    EnsemblePredictionEngine.train() can dispatch the whole unit of
+    blocking work to a worker thread via asyncio.to_thread in a single
+    call, rather than freezing the event loop for the full training
+    duration -- scikit-learn/LightGBM/XGBoost/CatBoost all release the GIL
+    during their actual fit/predict computation, so this yields real
+    concurrency, not just cosmetic scheduling."""
+    models, split = train_models(rows, means=means)
+    holdout_rows = rows[split:]
+    calibration_pairs: list[tuple[float, int]] = []
+    if models and holdout_rows:
+        X_holdout = np.array([
+            [row.features.get(f, means[f]) for f in FEATURE_NAMES] for row in holdout_rows
+        ])
+        probabilities = blended_probabilities(models, X_holdout)
+        calibration_pairs = list(
+            zip(probabilities, [row.label for row in holdout_rows], strict=True)
+        )
+    return models, split, calibration_pairs
+
+
 # --- Explanations ---------------------------------------------------------
 
 
@@ -601,17 +628,12 @@ class EnsemblePredictionEngine:
             )
         else:
             means, stds = feature_stats(rows)
-            models, split = train_models(rows, means=means)
-            holdout_rows = rows[split:]
-            calibration_pairs: list[tuple[float, int]] = []
-            if models and holdout_rows:
-                X_holdout = np.array([
-                    [row.features.get(f, means[f]) for f in FEATURE_NAMES] for row in holdout_rows
-                ])
-                probabilities = blended_probabilities(models, X_holdout)
-                calibration_pairs = list(
-                    zip(probabilities, [row.label for row in holdout_rows], strict=True)
-                )
+            # Offloaded to a worker thread: fitting six models is CPU-bound
+            # and would otherwise block the entire event loop for the full
+            # training duration (see _fit_and_calibrate's own docstring).
+            models, split, calibration_pairs = await asyncio.to_thread(
+                _fit_and_calibrate, rows, means
+            )
             training = EnsembleTraining(
                 symbol=symbol, timeframe=timeframe, direction=direction,
                 trained_at=trained_at, n_samples=len(rows), n_holdout=len(rows) - split,

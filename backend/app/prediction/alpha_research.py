@@ -50,6 +50,7 @@ startup, which this module deliberately doesn't depend on, to stay
 self-contained and testable without a running app).
 """
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -324,8 +325,13 @@ class AlphaResearchEngine:
             quality_labels, feature_series, feature_names=challenger_names
         )
 
-        champion_accuracy = _mean_holdout_accuracy(champion_rows, champion_names)
-        challenger_accuracy = _mean_holdout_accuracy(challenger_rows, challenger_names)
+        # Both fits are CPU-bound (train_models -> estimator.fit()) and
+        # independent of each other -- offloaded to worker threads and run
+        # concurrently rather than blocking the event loop twice in a row.
+        champion_accuracy, challenger_accuracy = await asyncio.gather(
+            asyncio.to_thread(_mean_holdout_accuracy, champion_rows, champion_names),
+            asyncio.to_thread(_mean_holdout_accuracy, challenger_rows, challenger_names),
+        )
 
         improvement = None
         winner = "insufficient_data"
