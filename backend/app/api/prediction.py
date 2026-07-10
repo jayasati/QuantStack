@@ -1,8 +1,9 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.7)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.8)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
+from app.prediction.agreement import ModelAgreementEngine
 from app.prediction.calibration import ProbabilityCalibrationEngine
 from app.prediction.candidates import CandidateGenerationEngine
 from app.prediction.ensemble import EnsemblePredictionEngine
@@ -194,4 +195,26 @@ async def calibration_history(
 ) -> list[dict]:
     """Persisted calibrated-prediction history, newest first."""
     engine = container.resolve(ProbabilityCalibrationEngine)
+    return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/agreement/{symbol}")
+async def model_agreement(
+    symbol: str, timeframe: str = "D", direction: str = "long"
+) -> dict:
+    """Fresh model-agreement evaluation over a fresh ensemble prediction:
+    prediction variance, agreement %, confidence spread, consensus
+    probability, and model reliability. `proceed` is the trading gate --
+    only high-agreement predictions should proceed."""
+    engine = container.resolve(ModelAgreementEngine)
+    result = await engine.evaluate(symbol, timeframe=timeframe, direction=direction)
+    return result.to_dict()
+
+
+@router.get("/agreement/{symbol}/history")
+async def agreement_history(
+    symbol: str, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted model-agreement history, newest first."""
+    engine = container.resolve(ModelAgreementEngine)
     return await engine.recent(symbol=symbol, limit=limit)

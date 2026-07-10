@@ -73,6 +73,7 @@ def wire_default_services() -> None:
     from app.intelligence.trend import TrendIntelligenceEngine
     from app.market.angel_one import AngelOneAdapter
     from app.market.broker import BrokerInterface
+    from app.prediction.agreement import ModelAgreementEngine
     from app.prediction.calibration import ProbabilityCalibrationEngine
     from app.prediction.candidates import CandidateGenerationEngine
     from app.prediction.ensemble import EnsemblePredictionEngine
@@ -319,6 +320,14 @@ def wire_default_services() -> None:
     container.register(
         ProbabilityCalibrationEngine,
         lambda: ProbabilityCalibrationEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            ensemble_engine=container.resolve(EnsemblePredictionEngine),
+        ),
+    )
+    container.register(
+        ModelAgreementEngine,
+        lambda: ModelAgreementEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
             ensemble_engine=container.resolve(EnsemblePredictionEngine),
