@@ -89,6 +89,7 @@ def wire_default_services() -> None:
     from app.prediction.market_context import MarketContextAdjustmentEngine
     from app.prediction.multi_horizon import MultiHorizonPredictionEngine
     from app.prediction.opportunity import OpportunityDetectionEngine
+    from app.prediction.priority import SignalPriorityEngine
     from app.prediction.qualification import TradeQualificationEngine
     from app.prediction.snapshot import FeatureSnapshotEngine
 
@@ -417,5 +418,18 @@ def wire_default_services() -> None:
             market_confidence_engine=container.resolve(MarketConfidenceEngine),
             historical_similarity_engine=container.resolve(HistoricalSimilarityEngine),
             candidate_engine=container.resolve(CandidateGenerationEngine),
+        ),
+    )
+    container.register(
+        SignalPriorityEngine,
+        lambda: SignalPriorityEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            candidate_engine=container.resolve(CandidateGenerationEngine),
+            qualification_engine=container.resolve(TradeQualificationEngine),
+            conviction_engine=container.resolve(ConvictionEngine),
+            liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
+            relative_strength_engine=container.resolve(RelativeStrengthIntelligenceEngine),
+            historical_similarity_engine=container.resolve(HistoricalSimilarityEngine),
         ),
     )

@@ -1,4 +1,4 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.12)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.13)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -13,6 +13,7 @@ from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabel
 from app.prediction.market_context import MarketContextAdjustmentEngine
 from app.prediction.multi_horizon import MultiHorizonPredictionEngine
 from app.prediction.opportunity import OpportunityDetectionEngine
+from app.prediction.priority import TOP_N_DEFAULT, SignalPriorityEngine
 from app.prediction.qualification import TradeQualificationEngine
 from app.prediction.snapshot import FeatureSnapshotEngine
 
@@ -334,4 +335,25 @@ async def qualification_history(
 ) -> list[dict]:
     """Persisted qualification history, newest first."""
     engine = container.resolve(TradeQualificationEngine)
+    return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/priority")
+async def signal_priority(top_n: int = Query(default=TOP_N_DEFAULT, ge=1, le=20)) -> list[dict]:
+    """A fresh Top-20 candidate scan, filtered to only qualified trades
+    (Prompt 5.12), ranked across 8 factors (Conviction, Opportunity
+    Quality, Risk, Liquidity, Sector Leadership, Historical Reliability,
+    Expected Reward, Expected Opportunity Lifetime), Top N returned."""
+    engine = container.resolve(SignalPriorityEngine)
+    signals = await engine.rank(top_n=top_n)
+    return [s.to_dict() for s in signals]
+
+
+@router.get("/priority/history")
+async def signal_priority_history(
+    symbol: str | None = None, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted signal-priority history, optionally filtered by symbol,
+    newest first."""
+    engine = container.resolve(SignalPriorityEngine)
     return await engine.recent(symbol=symbol, limit=limit)
