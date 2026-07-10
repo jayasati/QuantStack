@@ -80,6 +80,7 @@ def wire_default_services() -> None:
     from app.market.angel_one import AngelOneAdapter
     from app.market.broker import BrokerInterface
     from app.prediction.agreement import ModelAgreementEngine
+    from app.prediction.alpha_research import AlphaResearchEngine
     from app.prediction.calibration import ProbabilityCalibrationEngine
     from app.prediction.candidates import CandidateGenerationEngine
     from app.prediction.conviction import ConvictionEngine
@@ -462,5 +463,14 @@ def wire_default_services() -> None:
             snapshot_engine=container.resolve(FeatureSnapshotEngine),
             report_engine=container.resolve(MarketStateReportEngine),
             qualification_engine=container.resolve(TradeQualificationEngine),
+        ),
+    )
+    container.register(
+        AlphaResearchEngine,
+        lambda: AlphaResearchEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            labeling_engine=container.resolve(TripleBarrierLabelingEngine),
+            ensemble_engine=container.resolve(EnsemblePredictionEngine),
         ),
     )

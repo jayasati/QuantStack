@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
 from app.prediction.agreement import ModelAgreementEngine
+from app.prediction.alpha_research import AlphaResearchEngine
 from app.prediction.calibration import ProbabilityCalibrationEngine
 from app.prediction.candidates import CandidateGenerationEngine
 from app.prediction.conviction import ConvictionEngine
@@ -523,3 +524,63 @@ async def explainability_history(
     """Persisted explainability-report history, newest first."""
     engine = container.resolve(ExplainabilityReportEngine)
     return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/research/leaderboard/features")
+async def alpha_research_feature_leaderboard(
+    top_n: int = Query(default=20, ge=1, le=100)
+) -> list[dict]:
+    """Top persisted feature evaluations by predictive power, across
+    every symbol/timeframe ever evaluated (Volume 5.5)."""
+    engine = container.resolve(AlphaResearchEngine)
+    return await engine.feature_leaderboard(top_n=top_n)
+
+
+@router.get("/research/leaderboard/comparisons")
+async def alpha_research_comparison_leaderboard(
+    top_n: int = Query(default=20, ge=1, le=100)
+) -> list[dict]:
+    """Top persisted champion-vs-challenger model comparisons by
+    improvement, across every symbol ever compared (Volume 5.5)."""
+    engine = container.resolve(AlphaResearchEngine)
+    return await engine.comparison_leaderboard(top_n=top_n)
+
+
+@router.get("/research/{symbol}/features")
+async def alpha_research_features(
+    symbol: str, timeframe: str = "D", direction: str = "long"
+) -> list[dict]:
+    """Evaluates candidate features (not in the production ensemble's own
+    feature set) against real Triple Barrier outcomes, ranked by
+    predictive power, with a feature-decay read."""
+    engine = container.resolve(AlphaResearchEngine)
+    evaluations = await engine.evaluate_candidate_features(
+        symbol, timeframe=timeframe, direction=direction
+    )
+    return [e.to_dict() for e in evaluations]
+
+
+@router.get("/research/{symbol}/recommendations")
+async def alpha_research_recommendations(
+    symbol: str, timeframe: str = "D", direction: str = "long"
+) -> list[dict]:
+    """Candidate features recommended for production inclusion: strong,
+    non-decaying predictive power, not already in production."""
+    engine = container.resolve(AlphaResearchEngine)
+    recommendations = await engine.recommend_features(
+        symbol, timeframe=timeframe, direction=direction
+    )
+    return [r.to_dict() for r in recommendations]
+
+
+@router.get("/research/{symbol}/compare")
+async def alpha_research_compare(
+    symbol: str, timeframe: str = "D", direction: str = "long"
+) -> dict:
+    """Champion (production feature set) vs. challenger (production +
+    candidate features) ensemble comparison over the same labels."""
+    engine = container.resolve(AlphaResearchEngine)
+    result = await engine.compare_against_production(
+        symbol, timeframe=timeframe, direction=direction
+    )
+    return result.to_dict()
