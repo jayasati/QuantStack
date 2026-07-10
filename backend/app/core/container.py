@@ -70,8 +70,10 @@ def wire_default_services() -> None:
     from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
     from app.intelligence.liquidity import LiquidityIntelligenceEngine
     from app.intelligence.regime import BayesianRegimeDetector
+    from app.intelligence.relative import RelativeStrengthIntelligenceEngine
     from app.intelligence.report import MarketStateReportEngine
     from app.intelligence.sector import SectorIntelligenceEngine
+    from app.intelligence.structure import MarketStructureIntelligenceEngine
     from app.intelligence.transitions import RegimeTransitionEngine
     from app.intelligence.trend import TrendIntelligenceEngine
     from app.intelligence.volatility import VolatilityIntelligenceEngine
@@ -80,6 +82,7 @@ def wire_default_services() -> None:
     from app.prediction.agreement import ModelAgreementEngine
     from app.prediction.calibration import ProbabilityCalibrationEngine
     from app.prediction.candidates import CandidateGenerationEngine
+    from app.prediction.conviction import ConvictionEngine
     from app.prediction.ensemble import EnsemblePredictionEngine
     from app.prediction.historical_similarity import HistoricalSimilarityEngine
     from app.prediction.labeling import TripleBarrierLabelingEngine
@@ -264,6 +267,14 @@ def wire_default_services() -> None:
         lambda: SectorIntelligenceEngine(session_factory=get_session_factory()),
     )
     container.register(
+        MarketStructureIntelligenceEngine,
+        lambda: MarketStructureIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        RelativeStrengthIntelligenceEngine,
+        lambda: RelativeStrengthIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
         InstitutionalFlowIntelligenceEngine,
         lambda: InstitutionalFlowIntelligenceEngine(session_factory=get_session_factory()),
     )
@@ -376,5 +387,21 @@ def wire_default_services() -> None:
             regime_transition_engine=container.resolve(RegimeTransitionEngine),
             institutional_flow_engine=container.resolve(InstitutionalFlowIntelligenceEngine),
             volatility_engine=container.resolve(VolatilityIntelligenceEngine),
+        ),
+    )
+    container.register(
+        ConvictionEngine,
+        lambda: ConvictionEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            calibration_engine=container.resolve(ProbabilityCalibrationEngine),
+            market_context_engine=container.resolve(MarketContextAdjustmentEngine),
+            historical_similarity_engine=container.resolve(HistoricalSimilarityEngine),
+            institutional_flow_engine=container.resolve(InstitutionalFlowIntelligenceEngine),
+            market_structure_engine=container.resolve(MarketStructureIntelligenceEngine),
+            liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
+            relative_strength_engine=container.resolve(RelativeStrengthIntelligenceEngine),
+            agreement_engine=container.resolve(ModelAgreementEngine),
+            candidate_engine=container.resolve(CandidateGenerationEngine),
         ),
     )

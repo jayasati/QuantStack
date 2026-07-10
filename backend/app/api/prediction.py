@@ -1,4 +1,4 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.10)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.11)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -6,6 +6,7 @@ from app.core.container import container
 from app.prediction.agreement import ModelAgreementEngine
 from app.prediction.calibration import ProbabilityCalibrationEngine
 from app.prediction.candidates import CandidateGenerationEngine
+from app.prediction.conviction import ConvictionEngine
 from app.prediction.ensemble import EnsemblePredictionEngine
 from app.prediction.historical_similarity import HistoricalSimilarityEngine
 from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabelingEngine
@@ -271,4 +272,34 @@ async def market_context_history(
 ) -> list[dict]:
     """Persisted market-context-adjustment history, newest first."""
     engine = container.resolve(MarketContextAdjustmentEngine)
+    return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/conviction/candidates")
+async def conviction_for_candidates() -> list[dict]:
+    """Conviction Score/Confidence/Stability/Trend/Grade for every
+    candidate in a fresh Top-20 scan (Prompt 5.2)."""
+    engine = container.resolve(ConvictionEngine)
+    results = await engine.evaluate_top_candidates()
+    return [r.to_dict() for r in results]
+
+
+@router.get("/conviction/{symbol}")
+async def conviction(symbol: str, timeframe: str = "D", direction: str = "long") -> dict:
+    """Blends all 8 evidence sources (Calibrated Probability, Market
+    Context, Historical Analog, Institutional Flow, Market Structure,
+    Liquidity, Sector Strength, Model Agreement) into a Conviction Score,
+    Confidence, Stability, Trend, and Grade, with every contribution
+    explained."""
+    engine = container.resolve(ConvictionEngine)
+    result = await engine.evaluate(symbol, timeframe=timeframe, direction=direction)
+    return result.to_dict()
+
+
+@router.get("/conviction/{symbol}/history")
+async def conviction_history(
+    symbol: str, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted conviction history, newest first."""
+    engine = container.resolve(ConvictionEngine)
     return await engine.recent(symbol=symbol, limit=limit)
