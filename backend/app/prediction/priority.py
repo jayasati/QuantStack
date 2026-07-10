@@ -194,6 +194,12 @@ class RankedSignal:
     conviction_grade: str
     as_of: datetime
     factors: list[PriorityFactor] = field(default_factory=list)
+    # The originating TradeCandidate's own reason string (Prompt 5.2) --
+    # carried through so a downstream consumer (Prompt 5.14's Duplicate
+    # Signal Engine, which needs to recognize "this is another breakout
+    # signal") doesn't have to re-fetch or re-derive it. Empty when no
+    # candidate reason was available.
+    reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -206,6 +212,7 @@ class RankedSignal:
             "conviction_grade": self.conviction_grade,
             "as_of": self.as_of.isoformat(),
             "factors": [f.to_dict() for f in self.factors],
+            "reason": self.reason,
         }
 
 
@@ -280,7 +287,7 @@ class SignalPriorityEngine:
                 priority_score=priority_score, data_completeness=data_completeness,
                 conviction_score=conviction.conviction_score,
                 conviction_grade=conviction.conviction_grade, as_of=candidate.as_of,
-                factors=factors,
+                factors=factors, reason=candidate.reason,
             ))
 
         scored.sort(key=lambda signal: signal.priority_score, reverse=True)

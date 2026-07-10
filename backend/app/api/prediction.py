@@ -1,4 +1,4 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.13)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.14)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -7,6 +7,7 @@ from app.prediction.agreement import ModelAgreementEngine
 from app.prediction.calibration import ProbabilityCalibrationEngine
 from app.prediction.candidates import CandidateGenerationEngine
 from app.prediction.conviction import ConvictionEngine
+from app.prediction.duplicate import DuplicateSignalEngine
 from app.prediction.ensemble import EnsemblePredictionEngine
 from app.prediction.historical_similarity import HistoricalSimilarityEngine
 from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabelingEngine
@@ -357,3 +358,20 @@ async def signal_priority_history(
     newest first."""
     engine = container.resolve(SignalPriorityEngine)
     return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/signals")
+async def deduplicated_signals(top_n: int = Query(default=TOP_N_DEFAULT, ge=1, le=20)) -> dict:
+    """A fresh ranked Top-N scan, de-duplicated: repeated opportunities,
+    correlated stocks, repeated breakouts, and sector duplication are
+    suppressed (with explicit reasons), keeping the batch diverse."""
+    engine = container.resolve(DuplicateSignalEngine)
+    result = await engine.rank_and_filter(top_n=top_n)
+    return result.to_dict()
+
+
+@router.get("/signals/history")
+async def deduplicated_signals_history(limit: int = Query(default=50, ge=1, le=500)) -> list[dict]:
+    """Persisted duplicate-filter history, newest first."""
+    engine = container.resolve(DuplicateSignalEngine)
+    return await engine.recent(limit=limit)

@@ -83,6 +83,7 @@ def wire_default_services() -> None:
     from app.prediction.calibration import ProbabilityCalibrationEngine
     from app.prediction.candidates import CandidateGenerationEngine
     from app.prediction.conviction import ConvictionEngine
+    from app.prediction.duplicate import DuplicateSignalEngine
     from app.prediction.ensemble import EnsemblePredictionEngine
     from app.prediction.historical_similarity import HistoricalSimilarityEngine
     from app.prediction.labeling import TripleBarrierLabelingEngine
@@ -431,5 +432,13 @@ def wire_default_services() -> None:
             liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
             relative_strength_engine=container.resolve(RelativeStrengthIntelligenceEngine),
             historical_similarity_engine=container.resolve(HistoricalSimilarityEngine),
+        ),
+    )
+    container.register(
+        DuplicateSignalEngine,
+        lambda: DuplicateSignalEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            priority_engine=container.resolve(SignalPriorityEngine),
         ),
     )
