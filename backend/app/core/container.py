@@ -66,11 +66,15 @@ def wire_default_services() -> None:
     from app.intelligence.analogs import HistoricalAnalogEngine
     from app.intelligence.breadth import BreadthIntelligenceEngine
     from app.intelligence.confidence import MarketConfidenceEngine
+    from app.intelligence.events import EventIntelligenceEngine
     from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
+    from app.intelligence.liquidity import LiquidityIntelligenceEngine
     from app.intelligence.regime import BayesianRegimeDetector
     from app.intelligence.report import MarketStateReportEngine
     from app.intelligence.sector import SectorIntelligenceEngine
+    from app.intelligence.transitions import RegimeTransitionEngine
     from app.intelligence.trend import TrendIntelligenceEngine
+    from app.intelligence.volatility import VolatilityIntelligenceEngine
     from app.market.angel_one import AngelOneAdapter
     from app.market.broker import BrokerInterface
     from app.prediction.agreement import ModelAgreementEngine
@@ -79,6 +83,7 @@ def wire_default_services() -> None:
     from app.prediction.ensemble import EnsemblePredictionEngine
     from app.prediction.historical_similarity import HistoricalSimilarityEngine
     from app.prediction.labeling import TripleBarrierLabelingEngine
+    from app.prediction.market_context import MarketContextAdjustmentEngine
     from app.prediction.multi_horizon import MultiHorizonPredictionEngine
     from app.prediction.opportunity import OpportunityDetectionEngine
     from app.prediction.snapshot import FeatureSnapshotEngine
@@ -263,6 +268,22 @@ def wire_default_services() -> None:
         lambda: InstitutionalFlowIntelligenceEngine(session_factory=get_session_factory()),
     )
     container.register(
+        LiquidityIntelligenceEngine,
+        lambda: LiquidityIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        EventIntelligenceEngine,
+        lambda: EventIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        VolatilityIntelligenceEngine,
+        lambda: VolatilityIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        RegimeTransitionEngine,
+        lambda: RegimeTransitionEngine(session_factory=get_session_factory()),
+    )
+    container.register(
         HistoricalAnalogEngine,
         lambda: HistoricalAnalogEngine(session_factory=get_session_factory()),
     )
@@ -341,5 +362,19 @@ def wire_default_services() -> None:
             cache=container.resolve(CacheService),
             analog_engine=container.resolve(HistoricalAnalogEngine),
             candidate_engine=container.resolve(CandidateGenerationEngine),
+        ),
+    )
+    container.register(
+        MarketContextAdjustmentEngine,
+        lambda: MarketContextAdjustmentEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            calibration_engine=container.resolve(ProbabilityCalibrationEngine),
+            market_confidence_engine=container.resolve(MarketConfidenceEngine),
+            liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
+            event_engine=container.resolve(EventIntelligenceEngine),
+            regime_transition_engine=container.resolve(RegimeTransitionEngine),
+            institutional_flow_engine=container.resolve(InstitutionalFlowIntelligenceEngine),
+            volatility_engine=container.resolve(VolatilityIntelligenceEngine),
         ),
     )

@@ -1,4 +1,4 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.9)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.10)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -9,6 +9,7 @@ from app.prediction.candidates import CandidateGenerationEngine
 from app.prediction.ensemble import EnsemblePredictionEngine
 from app.prediction.historical_similarity import HistoricalSimilarityEngine
 from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabelingEngine
+from app.prediction.market_context import MarketContextAdjustmentEngine
 from app.prediction.multi_horizon import MultiHorizonPredictionEngine
 from app.prediction.opportunity import OpportunityDetectionEngine
 from app.prediction.snapshot import FeatureSnapshotEngine
@@ -248,4 +249,26 @@ async def similarity_history(
 ) -> list[dict]:
     """Persisted historical-similarity history, newest first."""
     engine = container.resolve(HistoricalSimilarityEngine)
+    return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/context/{symbol}")
+async def market_context_adjustment(
+    symbol: str, timeframe: str = "D", direction: str = "long"
+) -> dict:
+    """Adjusts the calibrated probability (Prompt 5.7) using Market
+    Confidence, Liquidity, Event Risk, Regime Stability, Institutional
+    Participation, and Volatility. Confidence is reduced whenever market
+    quality deteriorates."""
+    engine = container.resolve(MarketContextAdjustmentEngine)
+    result = await engine.evaluate(symbol, timeframe=timeframe, direction=direction)
+    return result.to_dict()
+
+
+@router.get("/context/{symbol}/history")
+async def market_context_history(
+    symbol: str, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted market-context-adjustment history, newest first."""
+    engine = container.resolve(MarketContextAdjustmentEngine)
     return await engine.recent(symbol=symbol, limit=limit)
