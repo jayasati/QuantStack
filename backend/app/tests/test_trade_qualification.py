@@ -12,6 +12,7 @@ from app.prediction.qualification import (
     MIN_FEATURE_QUALITY,
     MIN_LIQUIDITY_SCORE,
     MIN_MARKET_CONFIDENCE_SCORE,
+    QualificationResult,
     TradeQualificationEngine,
     check_event_risk,
     check_feature_quality,
@@ -209,6 +210,28 @@ async def test_evaluate_top_candidates_runs_cleanly_without_a_db() -> None:
     engine = TradeQualificationEngine(session_factory=None)
     results = await engine.evaluate_top_candidates()
     assert results == []  # no DB -> no candidates generated -> nothing to evaluate
+
+
+async def test_qualified_trades_filters_to_only_qualified_results(monkeypatch) -> None:
+    engine = TradeQualificationEngine(session_factory=None)
+
+    async def fake_evaluate_top_candidates():
+        return [
+            QualificationResult(symbol="A", direction="long", as_of=BASE_TS, qualified=True),
+            QualificationResult(
+                symbol="B", direction="long", as_of=BASE_TS, qualified=False,
+                rejection_reasons=["Liquidity too low: 10/100 (floor 30)."],
+            ),
+        ]
+
+    monkeypatch.setattr(engine, "evaluate_top_candidates", fake_evaluate_top_candidates)
+    results = await engine.qualified_trades()
+    assert [r.symbol for r in results] == ["A"]
+
+
+async def test_qualified_trades_runs_cleanly_without_a_db() -> None:
+    engine = TradeQualificationEngine(session_factory=None)
+    assert await engine.qualified_trades() == []
 
 
 async def test_recent_returns_empty_list_without_a_session_factory() -> None:

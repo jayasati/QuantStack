@@ -182,3 +182,41 @@ async def test_generate_confidence_breakdown_has_all_four_stages() -> None:
 async def test_recent_returns_empty_list_without_a_session_factory() -> None:
     engine = ExplainabilityReportEngine(session_factory=None)
     assert await engine.recent("NIFTY") == []
+
+
+# --- generate_for_qualified_candidates: Chapter 18's own gap ------------
+
+
+async def test_generate_for_qualified_candidates_reports_only_qualified_trades(
+    monkeypatch,
+) -> None:
+    """Chapter 18: "Explainability reports accompany every qualified
+    trade." One report per qualified result, none for rejected ones."""
+    from app.prediction.qualification import QualificationResult
+
+    engine = ExplainabilityReportEngine(session_factory=None)
+
+    async def fake_qualified_trades():
+        return [
+            QualificationResult(symbol="A", direction="long", as_of=BASE_TS, qualified=True),
+            QualificationResult(symbol="B", direction="short", as_of=BASE_TS, qualified=True),
+        ]
+
+    generated: list[tuple[str, str]] = []
+
+    async def fake_generate(symbol, timeframe="D", direction="long"):
+        generated.append((symbol, direction))
+        return await ExplainabilityReportEngine.generate(engine, symbol, direction=direction)
+
+    monkeypatch.setattr(engine._qualification, "qualified_trades", fake_qualified_trades)
+    monkeypatch.setattr(engine, "generate", fake_generate)
+
+    reports = await engine.generate_for_qualified_candidates()
+    assert generated == [("A", "long"), ("B", "short")]
+    assert [r.symbol for r in reports] == ["A", "B"]
+
+
+async def test_generate_for_qualified_candidates_runs_cleanly_without_a_db() -> None:
+    engine = ExplainabilityReportEngine(session_factory=None)
+    reports = await engine.generate_for_qualified_candidates()
+    assert reports == []  # no DB -> no candidates -> nothing qualified

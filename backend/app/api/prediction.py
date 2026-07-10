@@ -323,6 +323,15 @@ async def qualification_for_candidates() -> list[dict]:
     return [r.to_dict() for r in results]
 
 
+@router.get("/qualification/qualified")
+async def qualified_trades() -> list[dict]:
+    """Chapter 17's own "Qualified Trades" surface: a fresh Top-20 scan,
+    filtered down to only the trades that actually qualified."""
+    engine = container.resolve(TradeQualificationEngine)
+    results = await engine.qualified_trades()
+    return [r.to_dict() for r in results]
+
+
 @router.get("/qualification/{symbol}")
 async def trade_qualification(
     symbol: str, timeframe: str = "D", direction: str = "long"
@@ -481,6 +490,17 @@ async def lifecycle_history(
     """Raw transition log for one lifecycle, newest first."""
     manager = container.resolve(OpportunityLifecycleManager)
     return await manager.recent(lifecycle_id=lifecycle_id, limit=limit)
+
+
+@router.get("/explainability/qualified")
+async def explainability_for_qualified_candidates() -> list[dict]:
+    """Chapter 18's own acceptance criterion: "Explainability reports
+    accompany every qualified trade." A fresh Top-20 scan, qualified via
+    Prompt 5.12's own gate, and one full report generated for each trade
+    that actually qualifies."""
+    engine = container.resolve(ExplainabilityReportEngine)
+    reports = await engine.generate_for_qualified_candidates()
+    return [r.to_dict() for r in reports]
 
 
 @router.get("/explainability/{symbol}")

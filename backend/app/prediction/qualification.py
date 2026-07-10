@@ -262,6 +262,14 @@ class TradeQualificationEngine:
         candidates = await self._candidates.generate()
         return await self.evaluate_candidates(candidates)
 
+    async def qualified_trades(self) -> list[QualificationResult]:
+        """Chapter 17's own "Qualified Trades" surface: a fresh Top-20
+        scan, filtered down to only the trades that actually qualified --
+        distinct from `evaluate_top_candidates()`, which returns every
+        result including rejections."""
+        results = await self.evaluate_top_candidates()
+        return [result for result in results if result.qualified]
+
     async def _spread_pct(self, symbol: str) -> float | None:
         latest = await self.store.latest(symbol, QUOTE_TIMEFRAME)
         entry = latest.get("liquidity_spread_pct")

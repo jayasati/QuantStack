@@ -461,5 +461,6 @@ def wire_default_services() -> None:
             historical_similarity_engine=container.resolve(HistoricalSimilarityEngine),
             snapshot_engine=container.resolve(FeatureSnapshotEngine),
             report_engine=container.resolve(MarketStateReportEngine),
+            qualification_engine=container.resolve(TradeQualificationEngine),
         ),
     )

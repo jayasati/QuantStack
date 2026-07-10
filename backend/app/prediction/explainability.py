@@ -78,6 +78,7 @@ from app.prediction.historical_similarity import (
     HistoricalSimilarityResult,
 )
 from app.prediction.market_context import MarketContextAdjustmentEngine
+from app.prediction.qualification import TradeQualificationEngine
 from app.prediction.snapshot import FeatureSnapshotEngine
 
 logger = get_logger(__name__)
@@ -299,6 +300,7 @@ class ExplainabilityReportEngine:
         historical_similarity_engine: HistoricalSimilarityEngine | None = None,
         snapshot_engine: FeatureSnapshotEngine | None = None,
         report_engine: MarketStateReportEngine | None = None,
+        qualification_engine: TradeQualificationEngine | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
@@ -324,6 +326,9 @@ class ExplainabilityReportEngine:
             session_factory=session_factory, cache=cache, settings=self._settings,
         )
         self._report = report_engine or MarketStateReportEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._qualification = qualification_engine or TradeQualificationEngine(
             session_factory=session_factory, cache=cache, settings=self._settings,
         )
 
@@ -371,6 +376,19 @@ class ExplainabilityReportEngine:
         )
         await self._persist(report)
         return report
+
+    async def generate_for_qualified_candidates(self) -> list[ExplainabilityReport]:
+        """Chapter 18's own acceptance criterion: "Explainability reports
+        accompany every qualified trade." A fresh Top-20 scan, qualified
+        via Prompt 5.12's own gate, and one report generated for each
+        trade that actually qualifies -- the real code path that makes
+        that criterion true, not just an on-demand endpoint a caller has
+        to remember to hit separately."""
+        qualifications = await self._qualification.qualified_trades()
+        return [
+            await self.generate(result.symbol, direction=result.direction)
+            for result in qualifications
+        ]
 
     async def _persist(self, report: ExplainabilityReport) -> None:
         if self._sessions is None:
