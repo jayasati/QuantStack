@@ -1,4 +1,4 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.14)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.15)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -11,6 +11,11 @@ from app.prediction.duplicate import DuplicateSignalEngine
 from app.prediction.ensemble import EnsemblePredictionEngine
 from app.prediction.historical_similarity import HistoricalSimilarityEngine
 from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabelingEngine
+from app.prediction.lifecycle import (
+    InvalidTransitionError,
+    LifecycleState,
+    OpportunityLifecycleManager,
+)
 from app.prediction.market_context import MarketContextAdjustmentEngine
 from app.prediction.multi_horizon import MultiHorizonPredictionEngine
 from app.prediction.opportunity import OpportunityDetectionEngine
@@ -375,3 +380,103 @@ async def deduplicated_signals_history(limit: int = Query(default=50, ge=1, le=5
     """Persisted duplicate-filter history, newest first."""
     engine = container.resolve(DuplicateSignalEngine)
     return await engine.recent(limit=limit)
+
+
+@router.get("/lifecycle/detect")
+async def lifecycle_detect(symbol: str, direction: str = "long") -> dict:
+    """Mints a new lifecycle_id at the 'detected' stage."""
+    manager = container.resolve(OpportunityLifecycleManager)
+    state = await manager.detect(symbol, direction)
+    return state.to_dict()
+
+
+def _lifecycle_or_404(state: LifecycleState | None) -> dict:
+    if state is None:
+        raise HTTPException(status_code=404, detail="unknown lifecycle_id")
+    return state.to_dict()
+
+
+@router.get("/lifecycle/{lifecycle_id}")
+async def lifecycle_get(lifecycle_id: str) -> dict:
+    """Current reconstructed state of one lifecycle."""
+    manager = container.resolve(OpportunityLifecycleManager)
+    return _lifecycle_or_404(await manager.get(lifecycle_id))
+
+
+@router.get("/lifecycle/{lifecycle_id}/confirm")
+async def lifecycle_confirm(lifecycle_id: str) -> dict:
+    manager = container.resolve(OpportunityLifecycleManager)
+    try:
+        state = await manager.confirm(lifecycle_id)
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.to_dict()
+
+
+@router.get("/lifecycle/{lifecycle_id}/qualify")
+async def lifecycle_qualify(lifecycle_id: str) -> dict:
+    manager = container.resolve(OpportunityLifecycleManager)
+    try:
+        state = await manager.qualify(lifecycle_id)
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.to_dict()
+
+
+@router.get("/lifecycle/{lifecycle_id}/sent")
+async def lifecycle_sent(lifecycle_id: str) -> dict:
+    manager = container.resolve(OpportunityLifecycleManager)
+    try:
+        state = await manager.mark_sent(lifecycle_id)
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.to_dict()
+
+
+@router.get("/lifecycle/{lifecycle_id}/monitor")
+async def lifecycle_monitor(lifecycle_id: str) -> dict:
+    manager = container.resolve(OpportunityLifecycleManager)
+    try:
+        state = await manager.monitor(lifecycle_id)
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.to_dict()
+
+
+@router.get("/lifecycle/{lifecycle_id}/expire")
+async def lifecycle_expire(lifecycle_id: str, reason: str) -> dict:
+    manager = container.resolve(OpportunityLifecycleManager)
+    try:
+        state = await manager.expire(lifecycle_id, reason=reason)
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.to_dict()
+
+
+@router.get("/lifecycle/{lifecycle_id}/succeed")
+async def lifecycle_succeed(lifecycle_id: str) -> dict:
+    manager = container.resolve(OpportunityLifecycleManager)
+    try:
+        state = await manager.succeed(lifecycle_id)
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.to_dict()
+
+
+@router.get("/lifecycle/{lifecycle_id}/fail")
+async def lifecycle_fail(lifecycle_id: str) -> dict:
+    manager = container.resolve(OpportunityLifecycleManager)
+    try:
+        state = await manager.fail(lifecycle_id)
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state.to_dict()
+
+
+@router.get("/lifecycle/{lifecycle_id}/history")
+async def lifecycle_history(
+    lifecycle_id: str, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Raw transition log for one lifecycle, newest first."""
+    manager = container.resolve(OpportunityLifecycleManager)
+    return await manager.recent(lifecycle_id=lifecycle_id, limit=limit)

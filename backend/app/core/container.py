@@ -87,6 +87,7 @@ def wire_default_services() -> None:
     from app.prediction.ensemble import EnsemblePredictionEngine
     from app.prediction.historical_similarity import HistoricalSimilarityEngine
     from app.prediction.labeling import TripleBarrierLabelingEngine
+    from app.prediction.lifecycle import OpportunityLifecycleManager
     from app.prediction.market_context import MarketContextAdjustmentEngine
     from app.prediction.multi_horizon import MultiHorizonPredictionEngine
     from app.prediction.opportunity import OpportunityDetectionEngine
@@ -441,4 +442,8 @@ def wire_default_services() -> None:
             cache=container.resolve(CacheService),
             priority_engine=container.resolve(SignalPriorityEngine),
         ),
+    )
+    container.register(
+        OpportunityLifecycleManager,
+        lambda: OpportunityLifecycleManager(session_factory=get_session_factory()),
     )
