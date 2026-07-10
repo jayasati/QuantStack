@@ -1,5 +1,6 @@
 """Tests for the Opportunity Lifecycle Manager (Volume 5, Prompt 5.15)."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -12,6 +13,7 @@ from app.prediction.lifecycle import (
     LifecycleState,
     OpportunityLifecycleManager,
     apply_transition,
+    replay_transitions,
 )
 
 BASE_TS = datetime(2026, 7, 1, tzinfo=UTC)
@@ -185,3 +187,145 @@ async def test_manager_advance_without_a_db_raises_unknown_lifecycle() -> None:
 async def test_recent_returns_empty_list_without_a_session_factory() -> None:
     manager = OpportunityLifecycleManager(session_factory=None)
     assert await manager.recent() == []
+
+
+# --- replay_transitions: self-healing against a corrupted log ---------------
+
+
+def _row(stage: str, at: datetime, **extra) -> dict:
+    return {"stage": stage, "at": at.isoformat(), "symbol": "NIFTY", "direction": "long", **extra}
+
+
+def test_replay_transitions_reconstructs_a_clean_log() -> None:
+    rows = [
+        _row("detected", BASE_TS),
+        _row("confirmed", BASE_TS + timedelta(minutes=1)),
+        _row("qualified", BASE_TS + timedelta(minutes=2)),
+    ]
+    state = replay_transitions(rows, "lc-1")
+    assert state is not None
+    assert state.stage == "qualified"
+
+
+def test_replay_transitions_skips_a_duplicate_consecutive_stage_row() -> None:
+    """The exact corruption pattern a racing/retried _advance() call used
+    to produce: two consecutive rows at the same stage. Replay must skip
+    the duplicate rather than raising, so the record stays readable."""
+    rows = [
+        _row("detected", BASE_TS),
+        _row("confirmed", BASE_TS + timedelta(minutes=1)),
+        _row("confirmed", BASE_TS + timedelta(minutes=1, seconds=5)),  # the duplicate write
+        _row("qualified", BASE_TS + timedelta(minutes=2)),
+    ]
+    state = replay_transitions(rows, "lc-1")
+    assert state is not None
+    assert state.stage == "qualified"  # replay proceeded past the duplicate, not corrupted
+
+
+def test_replay_transitions_on_empty_rows_is_none() -> None:
+    assert replay_transitions([], "lc-1") is None
+
+
+def test_replay_transitions_still_raises_on_a_genuinely_invalid_sequence() -> None:
+    """Only an exact duplicate-of-the-current-stage is tolerated -- a real
+    skipped-stage sequence (not a duplicate) is still a genuine error,
+    not silently swallowed."""
+    rows = [_row("detected", BASE_TS), _row("sent", BASE_TS + timedelta(minutes=1))]
+    with pytest.raises(InvalidTransitionError):
+        replay_transitions(rows, "lc-1")
+
+
+# --- _advance: idempotency guard against duplicate/retried calls ------------
+
+
+async def test_advance_is_idempotent_for_a_duplicate_call_at_the_current_stage(
+    monkeypatch,
+) -> None:
+    """A retried/duplicate call re-requesting the stage already reached
+    must be a safe no-op -- no new row written, no exception raised."""
+    manager = OpportunityLifecycleManager(session_factory=None)
+    confirmed = apply_transition(
+        apply_transition(None, "detected", BASE_TS, symbol="NIFTY", direction="long"),
+        "confirmed", BASE_TS + timedelta(minutes=1),
+    )
+    persisted = []
+
+    async def fake_get(lifecycle_id: str) -> LifecycleState:
+        return confirmed
+
+    async def fake_persist(new_state: LifecycleState, at: datetime) -> None:
+        persisted.append(new_state.stage)
+
+    monkeypatch.setattr(manager, "get", fake_get)
+    monkeypatch.setattr(manager, "_persist", fake_persist)
+
+    result = await manager.confirm(confirmed.lifecycle_id)
+    assert result.stage == "confirmed"
+    assert persisted == []  # nothing written -- the idempotent no-op path, not a fresh transition
+
+
+async def test_advance_still_advances_normally_when_not_a_duplicate(monkeypatch) -> None:
+    manager = OpportunityLifecycleManager(session_factory=None)
+    state = apply_transition(None, "detected", BASE_TS, symbol="NIFTY", direction="long")
+    persisted = []
+
+    async def fake_get(lifecycle_id: str) -> LifecycleState:
+        return state
+
+    async def fake_persist(new_state: LifecycleState, at: datetime) -> None:
+        persisted.append(new_state.stage)
+
+    monkeypatch.setattr(manager, "get", fake_get)
+    monkeypatch.setattr(manager, "_persist", fake_persist)
+
+    result = await manager.confirm(state.lifecycle_id)
+    assert result.stage == "confirmed"
+    assert persisted == ["confirmed"]
+
+
+# --- _advance: lock serializes concurrent calls for the same id -------------
+
+
+async def test_lock_for_returns_the_same_lock_for_the_same_id() -> None:
+    manager = OpportunityLifecycleManager(session_factory=None)
+    assert manager._lock_for("lc-1") is manager._lock_for("lc-1")
+
+
+async def test_lock_for_returns_different_locks_for_different_ids() -> None:
+    manager = OpportunityLifecycleManager(session_factory=None)
+    assert manager._lock_for("lc-1") is not manager._lock_for("lc-2")
+
+
+async def test_concurrent_duplicate_calls_do_not_corrupt_state(monkeypatch) -> None:
+    """The exact scenario from the bug report: two concurrent calls to
+    confirm() for the SAME lifecycle_id (a retried request, a duplicate
+    delivery -- made likelier by every lifecycle route being a GET).
+    Without the lock, both would read "detected" at once and both write a
+    "confirmed" row -- two consecutive identical-stage rows, corrupting
+    future replay. With the lock + idempotency guard, the second call
+    sees the first's write and takes the no-op path: exactly one row
+    written, no exception, both callers get a valid "confirmed" state."""
+    manager = OpportunityLifecycleManager(session_factory=None)
+    backing_store = {
+        "state": apply_transition(None, "detected", BASE_TS, symbol="NIFTY", direction="long"),
+    }
+    persisted_stages = []
+
+    async def fake_get(lifecycle_id: str) -> LifecycleState:
+        await asyncio.sleep(0.01)  # force a real yield, so a race WOULD show up unguarded
+        return backing_store["state"]
+
+    async def fake_persist(new_state: LifecycleState, at: datetime) -> None:
+        await asyncio.sleep(0)
+        persisted_stages.append(new_state.stage)
+        backing_store["state"] = new_state
+
+    monkeypatch.setattr(manager, "get", fake_get)
+    monkeypatch.setattr(manager, "_persist", fake_persist)
+
+    lifecycle_id = backing_store["state"].lifecycle_id
+    results = await asyncio.gather(
+        manager.confirm(lifecycle_id), manager.confirm(lifecycle_id),
+    )
+    assert all(r.stage == "confirmed" for r in results)
+    assert persisted_stages == ["confirmed"]  # only ONE write -- the second was the no-op

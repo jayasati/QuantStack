@@ -31,6 +31,28 @@ maintained "current state" row -- the append-only ledger IS the source of
 truth, the same shape this codebase's other append-only histories
 (Market Confidence's score history, Bayesian Regime belief history) use.
 
+Concurrency: `_advance()` is a read-then-write (read current state, compute
+the next one, append it) with no natural atomicity of its own -- two
+concurrent calls to the same transition (a retried request, a duplicate
+webhook delivery) could otherwise both read the same prior stage and both
+append a valid-looking row, leaving TWO consecutive rows at the same
+stage. That doesn't just look redundant: replaying the log afterwards hits
+the second identical-stage row with `state.stage` already at that stage,
+fails the "advance exactly one stage" check, and raises -- permanently,
+since the corrupted rows never leave the log and every future `get()`
+replays the same failure. Two independent guards close this:
+- Every `_advance()` call for a given `lifecycle_id` is serialized through
+  an in-process `asyncio.Lock`, so a concurrent call always sees the
+  other's write before doing its own read.
+- Re-requesting the stage a lifecycle is already at is treated as an
+  idempotent no-op (return the current state, write nothing) rather than
+  a fresh transition -- this is what makes a duplicate/retried call safe
+  instead of corrupting.
+`get()` additionally skips a persisted row that repeats the immediately
+preceding stage during replay, rather than raising -- a self-healing
+read path for any lifecycle_id that was corrupted by this exact pattern
+before the fix above existed, so no record is permanently unreadable.
+
 The five measured fields:
 - Detection Delay: confirmed_at - detected_at. The doc doesn't define
   this against a system where "the market event" and "detection" are
@@ -53,7 +75,9 @@ The five measured fields:
   actually knows what happened.
 """
 
+import asyncio
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -179,12 +203,44 @@ def apply_transition(
     )
 
 
+def replay_transitions(
+    rows: Sequence[Mapping[str, Any]], lifecycle_id: str
+) -> LifecycleState | None:
+    """Pure reconstruction of current state from persisted transition
+    rows (oldest first) -- no DB access. Skips a row that repeats the
+    immediately preceding stage rather than replaying it through
+    `apply_transition` (which would raise): a self-healing read path for
+    any lifecycle_id a past write-side race already left with a
+    duplicate-consecutive-stage row, so no record is permanently
+    unreadable."""
+    if not rows:
+        return None
+
+    state: LifecycleState | None = None
+    for row in rows:
+        if state is not None and row["stage"] == state.stage:
+            continue
+        state = apply_transition(
+            state, row["stage"], datetime.fromisoformat(row["at"]),
+            symbol=row.get("symbol"), direction=row.get("direction"),
+            lifecycle_id=lifecycle_id,
+            expiration_reason=row.get("expiration_reason"), outcome=row.get("outcome"),
+        )
+    return state
+
+
 class OpportunityLifecycleManager:
     name = "opportunity_lifecycle_manager"
 
     def __init__(self, session_factory: Any = None, settings: Settings | None = None) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        # One lock per lifecycle_id, created lazily -- serializes concurrent
+        # _advance() calls for the SAME id so a race can never write two
+        # transitions off the same stale read. Dict access itself needs no
+        # extra guard: asyncio is single-threaded and nothing below awaits
+        # between the `in` check and the assignment.
+        self._locks: dict[str, asyncio.Lock] = {}
 
     async def detect(
         self, symbol: str, direction: str, at: datetime | None = None
@@ -221,6 +277,13 @@ class OpportunityLifecycleManager:
     ) -> LifecycleState:
         return await self._advance(lifecycle_id, "failed", at, outcome=outcome)
 
+    def _lock_for(self, lifecycle_id: str) -> asyncio.Lock:
+        lock = self._locks.get(lifecycle_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[lifecycle_id] = lock
+        return lock
+
     async def _advance(
         self,
         lifecycle_id: str,
@@ -230,19 +293,30 @@ class OpportunityLifecycleManager:
         expiration_reason: str | None = None,
         outcome: str | None = None,
     ) -> LifecycleState:
-        state = await self.get(lifecycle_id)
-        if state is None:
-            raise InvalidTransitionError(f"unknown lifecycle_id '{lifecycle_id}'")
-        at = at or datetime.now(UTC)
-        new_state = apply_transition(
-            state, stage, at, expiration_reason=expiration_reason, outcome=outcome,
-        )
-        await self._persist(new_state, at=at)
-        return new_state
+        async with self._lock_for(lifecycle_id):
+            state = await self.get(lifecycle_id)
+            if state is None:
+                raise InvalidTransitionError(f"unknown lifecycle_id '{lifecycle_id}'")
+
+            if state.stage == stage:
+                # Idempotent no-op: a retried/duplicate call re-requesting
+                # the stage this lifecycle is already at. Returning the
+                # current state (rather than re-running apply_transition,
+                # which would either raise on a terminal stage or append a
+                # second identical-stage row) is what makes a duplicate
+                # call safe instead of corrupting the log.
+                return state
+
+            at = at or datetime.now(UTC)
+            new_state = apply_transition(
+                state, stage, at, expiration_reason=expiration_reason, outcome=outcome,
+            )
+            await self._persist(new_state, at=at)
+            return new_state
 
     async def get(self, lifecycle_id: str) -> LifecycleState | None:
-        """Reconstructs current state by replaying every persisted
-        transition for this lifecycle_id, oldest first."""
+        """Fetches the persisted transition log for this lifecycle_id and
+        reconstructs current state via `replay_transitions`."""
         if self._sessions is None:
             return None
         from sqlalchemy import select
@@ -259,18 +333,7 @@ class OpportunityLifecycleManager:
                 .order_by(MarketEvent.id)
             )
             rows = result.scalars().all()
-        if not rows:
-            return None
-
-        state: LifecycleState | None = None
-        for row in rows:
-            state = apply_transition(
-                state, row["stage"], datetime.fromisoformat(row["at"]),
-                symbol=row.get("symbol"), direction=row.get("direction"),
-                lifecycle_id=lifecycle_id,
-                expiration_reason=row.get("expiration_reason"), outcome=row.get("outcome"),
-            )
-        return state
+        return replay_transitions(rows, lifecycle_id)
 
     async def _persist(self, state: LifecycleState, at: datetime) -> None:
         if self._sessions is None:
