@@ -1,4 +1,4 @@
-"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.8)."""
+"""Prediction & Conviction API (Volume 5, Prompts 5.1-5.9)."""
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -7,6 +7,7 @@ from app.prediction.agreement import ModelAgreementEngine
 from app.prediction.calibration import ProbabilityCalibrationEngine
 from app.prediction.candidates import CandidateGenerationEngine
 from app.prediction.ensemble import EnsemblePredictionEngine
+from app.prediction.historical_similarity import HistoricalSimilarityEngine
 from app.prediction.labeling import DEFAULT_MAX_HOLDING_BARS, TripleBarrierLabelingEngine
 from app.prediction.multi_horizon import MultiHorizonPredictionEngine
 from app.prediction.opportunity import OpportunityDetectionEngine
@@ -217,4 +218,34 @@ async def agreement_history(
 ) -> list[dict]:
     """Persisted model-agreement history, newest first."""
     engine = container.resolve(ModelAgreementEngine)
+    return await engine.recent(symbol=symbol, limit=limit)
+
+
+@router.get("/similarity/candidates")
+async def historical_similarity_for_candidates() -> list[dict]:
+    """Historical similarity for every candidate in a fresh Top-20 scan
+    (Prompt 5.2)."""
+    engine = container.resolve(HistoricalSimilarityEngine)
+    results = await engine.evaluate_top_candidates()
+    return [r.to_dict() for r in results]
+
+
+@router.get("/similarity/{symbol}")
+async def historical_similarity(
+    symbol: str, direction: str = "long"
+) -> dict:
+    """Top 20 historical analogs for one (symbol, direction): historical
+    win rate, average return, worst drawdown, best run-up, and the
+    probability distribution of subsequent returns."""
+    engine = container.resolve(HistoricalSimilarityEngine)
+    result = await engine.evaluate(symbol, direction=direction)
+    return result.to_dict()
+
+
+@router.get("/similarity/{symbol}/history")
+async def similarity_history(
+    symbol: str, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Persisted historical-similarity history, newest first."""
+    engine = container.resolve(HistoricalSimilarityEngine)
     return await engine.recent(symbol=symbol, limit=limit)

@@ -77,6 +77,7 @@ def wire_default_services() -> None:
     from app.prediction.calibration import ProbabilityCalibrationEngine
     from app.prediction.candidates import CandidateGenerationEngine
     from app.prediction.ensemble import EnsemblePredictionEngine
+    from app.prediction.historical_similarity import HistoricalSimilarityEngine
     from app.prediction.labeling import TripleBarrierLabelingEngine
     from app.prediction.multi_horizon import MultiHorizonPredictionEngine
     from app.prediction.opportunity import OpportunityDetectionEngine
@@ -331,5 +332,14 @@ def wire_default_services() -> None:
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
             ensemble_engine=container.resolve(EnsemblePredictionEngine),
+        ),
+    )
+    container.register(
+        HistoricalSimilarityEngine,
+        lambda: HistoricalSimilarityEngine(
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            analog_engine=container.resolve(HistoricalAnalogEngine),
+            candidate_engine=container.resolve(CandidateGenerationEngine),
         ),
     )
