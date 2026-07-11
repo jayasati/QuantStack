@@ -32,8 +32,10 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core.cache import CacheService
+from app.core.config import Settings
 from app.intelligence.analogs import HistoricalAnalogEngine
-from app.intelligence.base import IntelligenceComponent, IntelligenceResult
+from app.intelligence.base import IntelligenceComponent, IntelligenceResult, SessionFactory
 from app.intelligence.breadth import BreadthIntelligenceEngine
 from app.intelligence.composite import assess_composite
 from app.intelligence.confidence import MarketConfidenceEngine
@@ -147,10 +149,64 @@ def build_market_state_report(
 class MarketStateReportEngine(IntelligenceComponent):
     name = "market_state_report_engine"
 
+    def __init__(
+        self,
+        session_factory: SessionFactory | None = None,
+        cache: CacheService | None = None,
+        settings: Settings | None = None,
+        trend_engine: TrendIntelligenceEngine | None = None,
+        volatility_engine: VolatilityIntelligenceEngine | None = None,
+        breadth_engine: BreadthIntelligenceEngine | None = None,
+        liquidity_engine: LiquidityIntelligenceEngine | None = None,
+        macro_engine: MacroIntelligenceEngine | None = None,
+        sector_engine: SectorIntelligenceEngine | None = None,
+        institutional_flow_engine: InstitutionalFlowIntelligenceEngine | None = None,
+        correlation_engine: CorrelationIntelligenceEngine | None = None,
+        market_structure_engine: MarketStructureIntelligenceEngine | None = None,
+        event_engine: EventIntelligenceEngine | None = None,
+        confidence_engine: MarketConfidenceEngine | None = None,
+        analog_engine: HistoricalAnalogEngine | None = None,
+    ) -> None:
+        super().__init__(session_factory=session_factory, cache=cache, settings=settings)
+        self._trend = trend_engine or TrendIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._volatility = volatility_engine or VolatilityIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._breadth = breadth_engine or BreadthIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._liquidity = liquidity_engine or LiquidityIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._macro = macro_engine or MacroIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._sector = sector_engine or SectorIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._institutional_flow = institutional_flow_engine or InstitutionalFlowIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._correlation = correlation_engine or CorrelationIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._market_structure = market_structure_engine or MarketStructureIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._events = event_engine or EventIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._confidence = confidence_engine or MarketConfidenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._analogs = analog_engine or HistoricalAnalogEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+
     async def generate(self, symbol: str | None = None) -> MarketStateReport:
         symbol = symbol or self._settings.feature_benchmark_symbol
-        sessions = self._sessions
-        settings = self._settings
 
         async def safe(coro):
             try:
@@ -162,34 +218,18 @@ class MarketStateReportEngine(IntelligenceComponent):
             trend, volatility, breadth, liquidity, macro, sector, flow,
             correlation, structure, events, confidence, analogs,
         ) = await asyncio.gather(
-            safe(TrendIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(VolatilityIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(BreadthIntelligenceEngine(session_factory=sessions, settings=settings).assess()),
-            safe(LiquidityIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(MacroIntelligenceEngine(session_factory=sessions, settings=settings).assess()),
-            safe(SectorIntelligenceEngine(session_factory=sessions, settings=settings).assess()),
-            safe(InstitutionalFlowIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess()),
-            safe(CorrelationIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess()),
-            safe(MarketStructureIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(EventIntelligenceEngine(session_factory=sessions, settings=settings).assess()),
-            safe(MarketConfidenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(HistoricalAnalogEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
+            safe(self._trend.assess(symbol=symbol)),
+            safe(self._volatility.assess(symbol=symbol)),
+            safe(self._breadth.assess()),
+            safe(self._liquidity.assess(symbol=symbol)),
+            safe(self._macro.assess()),
+            safe(self._sector.assess()),
+            safe(self._institutional_flow.assess()),
+            safe(self._correlation.assess()),
+            safe(self._market_structure.assess(symbol=symbol)),
+            safe(self._events.assess()),
+            safe(self._confidence.assess(symbol=symbol)),
+            safe(self._analogs.assess(symbol=symbol)),
         )
 
         component_results: dict[str, IntelligenceResult | None] = {

@@ -65,10 +65,13 @@ def wire_default_services() -> None:
     from app.features.volume import VolumeFeatureEngine
     from app.intelligence.analogs import HistoricalAnalogEngine
     from app.intelligence.breadth import BreadthIntelligenceEngine
+    from app.intelligence.composite import CompositeMarketIntelligenceEngine
     from app.intelligence.confidence import MarketConfidenceEngine
+    from app.intelligence.correlation import CorrelationIntelligenceEngine
     from app.intelligence.events import EventIntelligenceEngine
     from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
     from app.intelligence.liquidity import LiquidityIntelligenceEngine
+    from app.intelligence.macro import MacroIntelligenceEngine
     from app.intelligence.regime import BayesianRegimeDetector
     from app.intelligence.relative import RelativeStrengthIntelligenceEngine
     from app.intelligence.report import MarketStateReportEngine
@@ -297,6 +300,14 @@ def wire_default_services() -> None:
         lambda: VolatilityIntelligenceEngine(session_factory=get_session_factory()),
     )
     container.register(
+        MacroIntelligenceEngine,
+        lambda: MacroIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
+        CorrelationIntelligenceEngine,
+        lambda: CorrelationIntelligenceEngine(session_factory=get_session_factory()),
+    )
+    container.register(
         RegimeTransitionEngine,
         lambda: RegimeTransitionEngine(session_factory=get_session_factory()),
     )
@@ -306,11 +317,47 @@ def wire_default_services() -> None:
     )
     container.register(
         MarketConfidenceEngine,
-        lambda: MarketConfidenceEngine(session_factory=get_session_factory()),
+        lambda: MarketConfidenceEngine(
+            session_factory=get_session_factory(),
+            regime_transition_engine=container.resolve(RegimeTransitionEngine),
+            breadth_engine=container.resolve(BreadthIntelligenceEngine),
+            institutional_flow_engine=container.resolve(InstitutionalFlowIntelligenceEngine),
+            correlation_engine=container.resolve(CorrelationIntelligenceEngine),
+        ),
     )
     container.register(
         MarketStateReportEngine,
-        lambda: MarketStateReportEngine(session_factory=get_session_factory()),
+        lambda: MarketStateReportEngine(
+            session_factory=get_session_factory(),
+            trend_engine=container.resolve(TrendIntelligenceEngine),
+            volatility_engine=container.resolve(VolatilityIntelligenceEngine),
+            breadth_engine=container.resolve(BreadthIntelligenceEngine),
+            liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
+            macro_engine=container.resolve(MacroIntelligenceEngine),
+            sector_engine=container.resolve(SectorIntelligenceEngine),
+            institutional_flow_engine=container.resolve(InstitutionalFlowIntelligenceEngine),
+            correlation_engine=container.resolve(CorrelationIntelligenceEngine),
+            market_structure_engine=container.resolve(MarketStructureIntelligenceEngine),
+            event_engine=container.resolve(EventIntelligenceEngine),
+            confidence_engine=container.resolve(MarketConfidenceEngine),
+            analog_engine=container.resolve(HistoricalAnalogEngine),
+        ),
+    )
+    container.register(
+        CompositeMarketIntelligenceEngine,
+        lambda: CompositeMarketIntelligenceEngine(
+            session_factory=get_session_factory(),
+            trend_engine=container.resolve(TrendIntelligenceEngine),
+            volatility_engine=container.resolve(VolatilityIntelligenceEngine),
+            breadth_engine=container.resolve(BreadthIntelligenceEngine),
+            liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
+            macro_engine=container.resolve(MacroIntelligenceEngine),
+            sector_engine=container.resolve(SectorIntelligenceEngine),
+            institutional_flow_engine=container.resolve(InstitutionalFlowIntelligenceEngine),
+            correlation_engine=container.resolve(CorrelationIntelligenceEngine),
+            market_structure_engine=container.resolve(MarketStructureIntelligenceEngine),
+            event_engine=container.resolve(EventIntelligenceEngine),
+        ),
     )
     container.register(
         BayesianRegimeDetector,
@@ -318,7 +365,18 @@ def wire_default_services() -> None:
     )
     container.register(
         OpportunityDetectionEngine,
-        lambda: OpportunityDetectionEngine(session_factory=get_session_factory()),
+        lambda: OpportunityDetectionEngine(
+            session_factory=get_session_factory(),
+            trend_engine=container.resolve(TrendIntelligenceEngine),
+            market_structure_engine=container.resolve(MarketStructureIntelligenceEngine),
+            institutional_flow_engine=container.resolve(InstitutionalFlowIntelligenceEngine),
+            relative_strength_engine=container.resolve(RelativeStrengthIntelligenceEngine),
+            volatility_engine=container.resolve(VolatilityIntelligenceEngine),
+            event_engine=container.resolve(EventIntelligenceEngine),
+            regime_detector=container.resolve(BayesianRegimeDetector),
+            regime_transition_engine=container.resolve(RegimeTransitionEngine),
+            report_engine=container.resolve(MarketStateReportEngine),
+        ),
     )
     container.register(
         FeatureSnapshotEngine,

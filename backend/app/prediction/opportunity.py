@@ -216,14 +216,47 @@ class OpportunityDetectionEngine:
         self,
         session_factory: Any = None,
         settings: Settings | None = None,
+        trend_engine: TrendIntelligenceEngine | None = None,
+        market_structure_engine: MarketStructureIntelligenceEngine | None = None,
+        institutional_flow_engine: InstitutionalFlowIntelligenceEngine | None = None,
+        relative_strength_engine: RelativeStrengthIntelligenceEngine | None = None,
+        volatility_engine: VolatilityIntelligenceEngine | None = None,
+        event_engine: EventIntelligenceEngine | None = None,
+        regime_detector: BayesianRegimeDetector | None = None,
+        regime_transition_engine: RegimeTransitionEngine | None = None,
+        report_engine: MarketStateReportEngine | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._trend = trend_engine or TrendIntelligenceEngine(
+            session_factory=session_factory, settings=self._settings,
+        )
+        self._market_structure = market_structure_engine or MarketStructureIntelligenceEngine(
+            session_factory=session_factory, settings=self._settings,
+        )
+        self._institutional_flow = institutional_flow_engine or InstitutionalFlowIntelligenceEngine(
+            session_factory=session_factory, settings=self._settings,
+        )
+        self._relative_strength = relative_strength_engine or RelativeStrengthIntelligenceEngine(
+            session_factory=session_factory, settings=self._settings,
+        )
+        self._volatility = volatility_engine or VolatilityIntelligenceEngine(
+            session_factory=session_factory, settings=self._settings,
+        )
+        self._events = event_engine or EventIntelligenceEngine(
+            session_factory=session_factory, settings=self._settings,
+        )
+        self._regime_detector = regime_detector or BayesianRegimeDetector(
+            session_factory=session_factory, settings=self._settings,
+        )
+        self._regime_transitions = regime_transition_engine or RegimeTransitionEngine(
+            session_factory=session_factory, settings=self._settings,
+        )
+        self._report_engine = report_engine or MarketStateReportEngine(
+            session_factory=session_factory, settings=self._settings,
+        )
 
     async def detect(self, symbol: str) -> OpportunityCandidate | None:
-        settings = self._settings
-        sessions = self._sessions
-
         async def safe(coro: Any) -> IntelligenceResult | None:
             try:
                 return await coro
@@ -240,41 +273,26 @@ class OpportunityDetectionEngine:
         confidence_task = asyncio.ensure_future(self._market_confidence(symbol))
 
         trend, structure, flow, relative, volatility, events = await asyncio.gather(
-            safe(TrendIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(MarketStructureIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(InstitutionalFlowIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess()),
-            safe(RelativeStrengthIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(VolatilityIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(EventIntelligenceEngine(session_factory=sessions, settings=settings).assess()),
+            safe(self._trend.assess(symbol=symbol)),
+            safe(self._market_structure.assess(symbol=symbol)),
+            safe(self._institutional_flow.assess()),
+            safe(self._relative_strength.assess(symbol=symbol)),
+            safe(self._volatility.assess(symbol=symbol)),
+            safe(self._events.assess()),
         )
         confidence_report = await confidence_task
 
-        detector = BayesianRegimeDetector(session_factory=sessions, settings=settings)
         trend_transition = None
         structure_transition = None
         if trend is not None:
-            await detector.update_from_result("trend", symbol, "D", trend)
+            await self._regime_detector.update_from_result("trend", symbol, "D", trend)
             trend_transition = await safe(
-                RegimeTransitionEngine(session_factory=sessions, settings=settings).assess(
-                    component="trend", symbol=symbol
-                )
+                self._regime_transitions.assess(component="trend", symbol=symbol)
             )
         if structure is not None:
-            await detector.update_from_result("market_structure", symbol, "D", structure)
+            await self._regime_detector.update_from_result("market_structure", symbol, "D", structure)
             structure_transition = await safe(
-                RegimeTransitionEngine(session_factory=sessions, settings=settings).assess(
-                    component="market_structure", symbol=symbol
-                )
+                self._regime_transitions.assess(component="market_structure", symbol=symbol)
             )
 
         component_results: dict[str, IntelligenceResult | None] = {
@@ -305,10 +323,7 @@ class OpportunityDetectionEngine:
     async def _market_confidence(self, symbol: str) -> float | None:
         if self._sessions is None:
             return None
-        report_engine = MarketStateReportEngine(
-            session_factory=self._sessions, settings=self._settings
-        )
-        latest = await report_engine.report_as_of(symbol, datetime.now(UTC))
+        latest = await self._report_engine.report_as_of(symbol, datetime.now(UTC))
         if not latest:
             return None
         return (latest.get("market_confidence") or {}).get("score")

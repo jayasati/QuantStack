@@ -37,10 +37,13 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from statistics import fmean
 
+from app.core.cache import CacheService
+from app.core.config import Settings
 from app.intelligence.base import (
     Contribution,
     IntelligenceComponent,
     IntelligenceResult,
+    SessionFactory,
     clamp,
     normalize_states,
     slope,
@@ -158,28 +161,44 @@ def assess_market_confidence(
 class MarketConfidenceEngine(IntelligenceComponent):
     name = "market_confidence_engine"
 
+    def __init__(
+        self,
+        session_factory: SessionFactory | None = None,
+        cache: CacheService | None = None,
+        settings: Settings | None = None,
+        regime_transition_engine: RegimeTransitionEngine | None = None,
+        breadth_engine: BreadthIntelligenceEngine | None = None,
+        institutional_flow_engine: InstitutionalFlowIntelligenceEngine | None = None,
+        correlation_engine: CorrelationIntelligenceEngine | None = None,
+    ) -> None:
+        super().__init__(session_factory=session_factory, cache=cache, settings=settings)
+        self._regime_transitions = regime_transition_engine or RegimeTransitionEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._breadth = breadth_engine or BreadthIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._institutional_flow = institutional_flow_engine or InstitutionalFlowIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._correlation = correlation_engine or CorrelationIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+
     async def assess(self, symbol: str | None = None) -> IntelligenceResult:
         symbol = symbol or self._settings.feature_benchmark_symbol
 
         data_quality = await self._data_quality()
         feature_quality = await self._feature_quality()
 
-        regime = await RegimeTransitionEngine(
-            session_factory=self._sessions, settings=self._settings
-        ).assess(symbol=symbol)
+        regime = await self._regime_transitions.assess(symbol=symbol)
         regime_certainty = clamp(1 - regime.score / 100, 0.0, 1.0)
 
-        breadth = await BreadthIntelligenceEngine(
-            session_factory=self._sessions, settings=self._settings
-        ).assess()
+        breadth = await self._breadth.assess()
 
-        flow = await InstitutionalFlowIntelligenceEngine(
-            session_factory=self._sessions, settings=self._settings
-        ).assess()
+        flow = await self._institutional_flow.assess()
 
-        correlation = await CorrelationIntelligenceEngine(
-            session_factory=self._sessions, settings=self._settings
-        ).assess()
+        correlation = await self._correlation.assess()
         correlation_stability = correlation.metrics.get("correlation_stability")
 
         inputs: dict[str, float | None] = {

@@ -40,10 +40,13 @@ import asyncio
 from collections.abc import Mapping
 from statistics import fmean
 
+from app.core.cache import CacheService
+from app.core.config import Settings
 from app.intelligence.base import (
     Contribution,
     IntelligenceComponent,
     IntelligenceResult,
+    SessionFactory,
     clamp,
     normalize_states,
 )
@@ -170,10 +173,56 @@ def assess_composite(
 class CompositeMarketIntelligenceEngine(IntelligenceComponent):
     name = "composite_market_intelligence"
 
+    def __init__(
+        self,
+        session_factory: SessionFactory | None = None,
+        cache: CacheService | None = None,
+        settings: Settings | None = None,
+        trend_engine: TrendIntelligenceEngine | None = None,
+        volatility_engine: VolatilityIntelligenceEngine | None = None,
+        breadth_engine: BreadthIntelligenceEngine | None = None,
+        liquidity_engine: LiquidityIntelligenceEngine | None = None,
+        macro_engine: MacroIntelligenceEngine | None = None,
+        sector_engine: SectorIntelligenceEngine | None = None,
+        institutional_flow_engine: InstitutionalFlowIntelligenceEngine | None = None,
+        correlation_engine: CorrelationIntelligenceEngine | None = None,
+        market_structure_engine: MarketStructureIntelligenceEngine | None = None,
+        event_engine: EventIntelligenceEngine | None = None,
+    ) -> None:
+        super().__init__(session_factory=session_factory, cache=cache, settings=settings)
+        self._trend = trend_engine or TrendIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._volatility = volatility_engine or VolatilityIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._breadth = breadth_engine or BreadthIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._liquidity = liquidity_engine or LiquidityIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._macro = macro_engine or MacroIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._sector = sector_engine or SectorIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._institutional_flow = institutional_flow_engine or InstitutionalFlowIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._correlation = correlation_engine or CorrelationIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._market_structure = market_structure_engine or MarketStructureIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+        self._events = event_engine or EventIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
+
     async def assess(self, symbol: str | None = None) -> IntelligenceResult:
         symbol = symbol or self._settings.feature_benchmark_symbol
-        sessions = self._sessions
-        settings = self._settings
 
         async def safe(coro):
             try:
@@ -185,28 +234,16 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
             trend, volatility, breadth, liquidity, macro,
             sector, flow, correlation, structure, events,
         ) = await asyncio.gather(
-            safe(TrendIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(VolatilityIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(BreadthIntelligenceEngine(session_factory=sessions, settings=settings).assess()),
-            safe(LiquidityIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(MacroIntelligenceEngine(session_factory=sessions, settings=settings).assess()),
-            safe(SectorIntelligenceEngine(session_factory=sessions, settings=settings).assess()),
-            safe(InstitutionalFlowIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess()),
-            safe(CorrelationIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess()),
-            safe(MarketStructureIntelligenceEngine(
-                session_factory=sessions, settings=settings
-            ).assess(symbol=symbol)),
-            safe(EventIntelligenceEngine(session_factory=sessions, settings=settings).assess()),
+            safe(self._trend.assess(symbol=symbol)),
+            safe(self._volatility.assess(symbol=symbol)),
+            safe(self._breadth.assess()),
+            safe(self._liquidity.assess(symbol=symbol)),
+            safe(self._macro.assess()),
+            safe(self._sector.assess()),
+            safe(self._institutional_flow.assess()),
+            safe(self._correlation.assess()),
+            safe(self._market_structure.assess(symbol=symbol)),
+            safe(self._events.assess()),
         )
 
         component_results: dict[str, IntelligenceResult | None] = {
