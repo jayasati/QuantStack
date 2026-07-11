@@ -265,60 +265,87 @@ def wire_default_services() -> None:
     )
     container.register(
         TrendIntelligenceEngine,
-        lambda: TrendIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: TrendIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         BreadthIntelligenceEngine,
-        lambda: BreadthIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: BreadthIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         SectorIntelligenceEngine,
-        lambda: SectorIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: SectorIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         MarketStructureIntelligenceEngine,
-        lambda: MarketStructureIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: MarketStructureIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         RelativeStrengthIntelligenceEngine,
-        lambda: RelativeStrengthIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: RelativeStrengthIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         InstitutionalFlowIntelligenceEngine,
-        lambda: InstitutionalFlowIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: InstitutionalFlowIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         LiquidityIntelligenceEngine,
-        lambda: LiquidityIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: LiquidityIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         EventIntelligenceEngine,
-        lambda: EventIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: EventIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         VolatilityIntelligenceEngine,
-        lambda: VolatilityIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: VolatilityIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         MacroIntelligenceEngine,
-        lambda: MacroIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: MacroIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         CorrelationIntelligenceEngine,
-        lambda: CorrelationIntelligenceEngine(session_factory=get_session_factory()),
+        lambda: CorrelationIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         RegimeTransitionEngine,
-        lambda: RegimeTransitionEngine(session_factory=get_session_factory()),
+        lambda: RegimeTransitionEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         HistoricalAnalogEngine,
-        lambda: HistoricalAnalogEngine(session_factory=get_session_factory()),
+        lambda: HistoricalAnalogEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         MarketConfidenceEngine,
         lambda: MarketConfidenceEngine(
             session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
             regime_transition_engine=container.resolve(RegimeTransitionEngine),
             breadth_engine=container.resolve(BreadthIntelligenceEngine),
             institutional_flow_engine=container.resolve(InstitutionalFlowIntelligenceEngine),
@@ -329,6 +356,7 @@ def wire_default_services() -> None:
         MarketStateReportEngine,
         lambda: MarketStateReportEngine(
             session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
             trend_engine=container.resolve(TrendIntelligenceEngine),
             volatility_engine=container.resolve(VolatilityIntelligenceEngine),
             breadth_engine=container.resolve(BreadthIntelligenceEngine),
@@ -347,6 +375,7 @@ def wire_default_services() -> None:
         CompositeMarketIntelligenceEngine,
         lambda: CompositeMarketIntelligenceEngine(
             session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
             trend_engine=container.resolve(TrendIntelligenceEngine),
             volatility_engine=container.resolve(VolatilityIntelligenceEngine),
             breadth_engine=container.resolve(BreadthIntelligenceEngine),
@@ -361,12 +390,15 @@ def wire_default_services() -> None:
     )
     container.register(
         BayesianRegimeDetector,
-        lambda: BayesianRegimeDetector(session_factory=get_session_factory()),
+        lambda: BayesianRegimeDetector(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         OpportunityDetectionEngine,
         lambda: OpportunityDetectionEngine(
             session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
             trend_engine=container.resolve(TrendIntelligenceEngine),
             market_structure_engine=container.resolve(MarketStructureIntelligenceEngine),
             institutional_flow_engine=container.resolve(InstitutionalFlowIntelligenceEngine),
@@ -388,6 +420,7 @@ def wire_default_services() -> None:
         CandidateGenerationEngine,
         lambda: CandidateGenerationEngine(
             session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
             detector=container.resolve(OpportunityDetectionEngine),
             snapshot_engine=container.resolve(FeatureSnapshotEngine),
         ),
@@ -505,7 +538,9 @@ def wire_default_services() -> None:
     )
     container.register(
         OpportunityLifecycleManager,
-        lambda: OpportunityLifecycleManager(session_factory=get_session_factory()),
+        lambda: OpportunityLifecycleManager(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
     )
     container.register(
         ExplainabilityReportEngine,

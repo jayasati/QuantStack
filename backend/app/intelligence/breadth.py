@@ -237,4 +237,5 @@ class BreadthIntelligenceEngine(IntelligenceComponent):
         features = await self.latest_values(MARKET_SYMBOL, BREADTH_TIMEFRAME)
         result = assess_breadth(features)
         result.metrics["symbol"] = MARKET_SYMBOL
+        await self._publish_assessment(MARKET_SYMBOL, result)
         return result

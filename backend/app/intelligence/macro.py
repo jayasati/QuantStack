@@ -112,4 +112,6 @@ class MacroIntelligenceEngine(IntelligenceComponent):
         for factor in FACTOR_UNIVERSE:
             features = await self.latest_values(factor, MACRO_TIMEFRAME)
             factor_scores[factor] = features.get("macro_score")
-        return assess_macro(factor_scores)
+        result = assess_macro(factor_scores)
+        await self._publish_assessment(None, result)
+        return result

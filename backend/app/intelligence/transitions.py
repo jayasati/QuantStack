@@ -191,4 +191,16 @@ class RegimeTransitionEngine(IntelligenceComponent):
         result.metrics["target_component"] = component
         result.metrics["symbol"] = symbol
         result.metrics["timeframe"] = timeframe
+        await self._publish(
+            f"intelligence.{self.name}.assessed",
+            {
+                "component": component,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "score": result.score,
+                "confidence": result.confidence,
+                "alert": result.metrics.get("alert"),
+                "as_of": result.as_of.isoformat(),
+            },
+        )
         return result

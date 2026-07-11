@@ -83,6 +83,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.core.config import Settings, get_settings
+from app.events.bus import Event, EventBus
 
 EVENT_TYPE = "opportunity_lifecycle.transition"
 
@@ -232,9 +233,15 @@ def replay_transitions(
 class OpportunityLifecycleManager:
     name = "opportunity_lifecycle_manager"
 
-    def __init__(self, session_factory: Any = None, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        session_factory: Any = None,
+        settings: Settings | None = None,
+        bus: EventBus | None = None,
+    ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         # One lock per lifecycle_id, created lazily -- serializes concurrent
         # _advance() calls for the SAME id so a race can never write two
         # transitions off the same stale read. Dict access itself needs no
@@ -336,24 +343,23 @@ class OpportunityLifecycleManager:
         return replay_transitions(rows, lifecycle_id)
 
     async def _persist(self, state: LifecycleState, at: datetime) -> None:
+        payload = {
+            "lifecycle_id": state.lifecycle_id,
+            "symbol": state.symbol,
+            "direction": state.direction,
+            "stage": state.stage,
+            "at": at.isoformat(),
+            "expiration_reason": state.expiration_reason,
+            "outcome": state.outcome,
+        }
+        if self._bus is not None:
+            await self._bus.publish(Event(type=EVENT_TYPE, payload=payload, source=self.name))
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent
 
         async with self._sessions() as session:
-            session.add(MarketEvent(
-                event_type=EVENT_TYPE,
-                source=self.name,
-                data={
-                    "lifecycle_id": state.lifecycle_id,
-                    "symbol": state.symbol,
-                    "direction": state.direction,
-                    "stage": state.stage,
-                    "at": at.isoformat(),
-                    "expiration_reason": state.expiration_reason,
-                    "outcome": state.outcome,
-                },
-            ))
+            session.add(MarketEvent(event_type=EVENT_TYPE, source=self.name, data=payload))
             await session.commit()
 
     async def recent(

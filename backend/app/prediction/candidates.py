@@ -27,6 +27,7 @@ from typing import Any
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.events.bus import Event, EventBus
 from app.intelligence.base import IntelligenceResult
 from app.prediction.opportunity import OpportunityCandidate, OpportunityDetectionEngine
 from app.prediction.snapshot import FeatureSnapshotEngine
@@ -210,13 +211,15 @@ class CandidateGenerationEngine:
         self,
         session_factory: Any = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         detector: OpportunityDetectionEngine | None = None,
         snapshot_engine: FeatureSnapshotEngine | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self._detector = detector or OpportunityDetectionEngine(
-            session_factory=session_factory, settings=self._settings
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
         self._snapshots = snapshot_engine or FeatureSnapshotEngine(
             session_factory=session_factory, settings=self._settings
@@ -234,6 +237,10 @@ class CandidateGenerationEngine:
         return candidates
 
     async def _persist(self, candidate: TradeCandidate) -> None:
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(type=EVENT_TYPE, payload=candidate.to_dict(), source=self.name)
+            )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent

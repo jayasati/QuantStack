@@ -42,6 +42,7 @@ from statistics import fmean
 
 from app.core.cache import CacheService
 from app.core.config import Settings
+from app.events.bus import EventBus
 from app.intelligence.base import (
     Contribution,
     IntelligenceComponent,
@@ -178,6 +179,7 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
         session_factory: SessionFactory | None = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         trend_engine: TrendIntelligenceEngine | None = None,
         volatility_engine: VolatilityIntelligenceEngine | None = None,
         breadth_engine: BreadthIntelligenceEngine | None = None,
@@ -189,36 +191,36 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
         market_structure_engine: MarketStructureIntelligenceEngine | None = None,
         event_engine: EventIntelligenceEngine | None = None,
     ) -> None:
-        super().__init__(session_factory=session_factory, cache=cache, settings=settings)
+        super().__init__(session_factory=session_factory, cache=cache, settings=settings, bus=bus)
         self._trend = trend_engine or TrendIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._volatility = volatility_engine or VolatilityIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._breadth = breadth_engine or BreadthIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._liquidity = liquidity_engine or LiquidityIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._macro = macro_engine or MacroIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._sector = sector_engine or SectorIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._institutional_flow = institutional_flow_engine or InstitutionalFlowIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._correlation = correlation_engine or CorrelationIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._market_structure = market_structure_engine or MarketStructureIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._events = event_engine or EventIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
 
     async def assess(self, symbol: str | None = None) -> IntelligenceResult:
@@ -260,4 +262,5 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
         }
         result = assess_composite(component_results)
         result.metrics["symbol"] = symbol
+        await self._publish_assessment(symbol, result)
         return result

@@ -274,4 +274,6 @@ class SectorIntelligenceEngine(IntelligenceComponent):
             if len(history) >= 2:
                 previous_leadership[sector] = history[0]
         market_features = await self.latest_values(MARKET_SYMBOL, SECTOR_TIMEFRAME)
-        return assess_sectors(per_sector_features, market_features, previous_leadership)
+        result = assess_sectors(per_sector_features, market_features, previous_leadership)
+        await self._publish_assessment(None, result)
+        return result

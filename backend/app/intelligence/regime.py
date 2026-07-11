@@ -94,6 +94,18 @@ class BayesianRegimeDetector(IntelligenceComponent):
             prior.states if prior else None, likelihood, evidence_confidence
         )
         await self._store_belief(component, symbol, timeframe, posterior, observation_count)
+        await self._publish(
+            BELIEF_EVENT_TYPE,
+            {
+                "component": component,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "observation_count": observation_count,
+                "dominant_state": (
+                    max(posterior, key=lambda s: posterior[s]) if posterior else None
+                ),
+            },
+        )
 
         dominant = max(posterior, key=lambda s: posterior[s]) if posterior else "unknown"
         maturity = clamp(observation_count / MATURITY_TARGET, 0.0, 1.0)

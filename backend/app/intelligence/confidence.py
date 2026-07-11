@@ -39,6 +39,7 @@ from statistics import fmean
 
 from app.core.cache import CacheService
 from app.core.config import Settings
+from app.events.bus import EventBus
 from app.intelligence.base import (
     Contribution,
     IntelligenceComponent,
@@ -166,23 +167,24 @@ class MarketConfidenceEngine(IntelligenceComponent):
         session_factory: SessionFactory | None = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         regime_transition_engine: RegimeTransitionEngine | None = None,
         breadth_engine: BreadthIntelligenceEngine | None = None,
         institutional_flow_engine: InstitutionalFlowIntelligenceEngine | None = None,
         correlation_engine: CorrelationIntelligenceEngine | None = None,
     ) -> None:
-        super().__init__(session_factory=session_factory, cache=cache, settings=settings)
+        super().__init__(session_factory=session_factory, cache=cache, settings=settings, bus=bus)
         self._regime_transitions = regime_transition_engine or RegimeTransitionEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._breadth = breadth_engine or BreadthIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._institutional_flow = institutional_flow_engine or InstitutionalFlowIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._correlation = correlation_engine or CorrelationIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
 
     async def assess(self, symbol: str | None = None) -> IntelligenceResult:
@@ -214,6 +216,7 @@ class MarketConfidenceEngine(IntelligenceComponent):
         result = assess_market_confidence(inputs, history)
         await self._store_score(symbol, result.score)
         result.metrics["symbol"] = symbol
+        await self._publish_assessment(symbol, result)
         return result
 
     async def _data_quality(self) -> float | None:

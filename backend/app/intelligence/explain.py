@@ -96,6 +96,7 @@ class ExplainabilityStore(IntelligenceComponent):
         """Build and persist the explainability record for `result`."""
         record = explain(component, symbol, timeframe, result)
         await self._persist(record)
+        await self._publish(EXPLAINABILITY_EVENT_TYPE, record.to_dict())
         return record
 
     async def _persist(self, record: ExplainabilityRecord) -> None:

@@ -312,4 +312,5 @@ class HistoricalAnalogEngine(IntelligenceComponent):
         result = assess_historical_analogs(current_vector, historical, outcomes)
         result.metrics["symbol"] = symbol
         result.metrics["as_of"] = current_ts
+        await self._publish_assessment(symbol, result)
         return result

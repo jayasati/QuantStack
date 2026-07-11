@@ -216,4 +216,5 @@ class TrendIntelligenceEngine(IntelligenceComponent):
         )
         result = assess_trend(features, direction_history)
         result.metrics["symbol"] = symbol
+        await self._publish_assessment(symbol, result)
         return result

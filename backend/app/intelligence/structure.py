@@ -153,4 +153,5 @@ class MarketStructureIntelligenceEngine(IntelligenceComponent):
         features = await self.latest_values(symbol, timeframe)
         result = assess_market_structure(features)
         result.metrics["symbol"] = symbol
+        await self._publish_assessment(symbol, result)
         return result

@@ -34,6 +34,7 @@ from typing import Any
 
 from app.core.cache import CacheService
 from app.core.config import Settings
+from app.events.bus import EventBus
 from app.intelligence.analogs import HistoricalAnalogEngine
 from app.intelligence.base import IntelligenceComponent, IntelligenceResult, SessionFactory
 from app.intelligence.breadth import BreadthIntelligenceEngine
@@ -154,6 +155,7 @@ class MarketStateReportEngine(IntelligenceComponent):
         session_factory: SessionFactory | None = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         trend_engine: TrendIntelligenceEngine | None = None,
         volatility_engine: VolatilityIntelligenceEngine | None = None,
         breadth_engine: BreadthIntelligenceEngine | None = None,
@@ -167,42 +169,42 @@ class MarketStateReportEngine(IntelligenceComponent):
         confidence_engine: MarketConfidenceEngine | None = None,
         analog_engine: HistoricalAnalogEngine | None = None,
     ) -> None:
-        super().__init__(session_factory=session_factory, cache=cache, settings=settings)
+        super().__init__(session_factory=session_factory, cache=cache, settings=settings, bus=bus)
         self._trend = trend_engine or TrendIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._volatility = volatility_engine or VolatilityIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._breadth = breadth_engine or BreadthIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._liquidity = liquidity_engine or LiquidityIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._macro = macro_engine or MacroIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._sector = sector_engine or SectorIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._institutional_flow = institutional_flow_engine or InstitutionalFlowIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._correlation = correlation_engine or CorrelationIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._market_structure = market_structure_engine or MarketStructureIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._events = event_engine or EventIntelligenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._confidence = confidence_engine or MarketConfidenceEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
         self._analogs = analog_engine or HistoricalAnalogEngine(
-            session_factory=session_factory, cache=cache, settings=self._settings,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
 
     async def generate(self, symbol: str | None = None) -> MarketStateReport:
@@ -248,6 +250,16 @@ class MarketStateReportEngine(IntelligenceComponent):
             symbol, datetime.now(UTC), component_results, confidence, analogs
         )
         await self._persist(report)
+        await self._publish(
+            REPORT_EVENT_TYPE,
+            {
+                "symbol": symbol,
+                "composite_intelligence_score": report.composite_intelligence_score,
+                "expected_opportunity": report.expected_opportunity,
+                "expected_risk": report.expected_risk,
+                "as_of": report.as_of.isoformat(),
+            },
+        )
         return report
 
     async def _persist(self, report: MarketStateReport) -> None:

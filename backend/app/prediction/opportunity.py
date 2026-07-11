@@ -46,6 +46,7 @@ from typing import Any
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.events.bus import Event, EventBus
 from app.intelligence.base import IntelligenceResult
 from app.intelligence.events import EventIntelligenceEngine
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
@@ -216,6 +217,7 @@ class OpportunityDetectionEngine:
         self,
         session_factory: Any = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         trend_engine: TrendIntelligenceEngine | None = None,
         market_structure_engine: MarketStructureIntelligenceEngine | None = None,
         institutional_flow_engine: InstitutionalFlowIntelligenceEngine | None = None,
@@ -228,32 +230,33 @@ class OpportunityDetectionEngine:
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self._trend = trend_engine or TrendIntelligenceEngine(
-            session_factory=session_factory, settings=self._settings,
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
         self._market_structure = market_structure_engine or MarketStructureIntelligenceEngine(
-            session_factory=session_factory, settings=self._settings,
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
         self._institutional_flow = institutional_flow_engine or InstitutionalFlowIntelligenceEngine(
-            session_factory=session_factory, settings=self._settings,
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
         self._relative_strength = relative_strength_engine or RelativeStrengthIntelligenceEngine(
-            session_factory=session_factory, settings=self._settings,
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
         self._volatility = volatility_engine or VolatilityIntelligenceEngine(
-            session_factory=session_factory, settings=self._settings,
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
         self._events = event_engine or EventIntelligenceEngine(
-            session_factory=session_factory, settings=self._settings,
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
         self._regime_detector = regime_detector or BayesianRegimeDetector(
-            session_factory=session_factory, settings=self._settings,
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
         self._regime_transitions = regime_transition_engine or RegimeTransitionEngine(
-            session_factory=session_factory, settings=self._settings,
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
         self._report_engine = report_engine or MarketStateReportEngine(
-            session_factory=session_factory, settings=self._settings,
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
 
     async def detect(self, symbol: str) -> OpportunityCandidate | None:
@@ -338,6 +341,10 @@ class OpportunityDetectionEngine:
         return candidates
 
     async def _persist(self, candidate: OpportunityCandidate) -> None:
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(type=EVENT_TYPE, payload=candidate.to_dict(), source=self.name)
+            )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent

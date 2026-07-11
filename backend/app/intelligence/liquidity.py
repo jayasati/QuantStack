@@ -213,4 +213,5 @@ class LiquidityIntelligenceEngine(IntelligenceComponent):
         daily_features = await self.latest_values(symbol, DAILY_TIMEFRAME)
         result = assess_liquidity({**quote_features, **daily_features})
         result.metrics["symbol"] = symbol
+        await self._publish_assessment(symbol, result)
         return result

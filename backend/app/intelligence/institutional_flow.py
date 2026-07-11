@@ -215,4 +215,5 @@ class InstitutionalFlowIntelligenceEngine(IntelligenceComponent):
         features = await self.latest_values(MARKET_SYMBOL, FLOW_TIMEFRAME)
         result = assess_institutional_flow(features)
         result.metrics["symbol"] = MARKET_SYMBOL
+        await self._publish_assessment(MARKET_SYMBOL, result)
         return result

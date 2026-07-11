@@ -237,4 +237,6 @@ class CorrelationIntelligenceEngine(IntelligenceComponent):
                 )
                 constituents.append(daily_series(rows))
             asset_daily_series[asset] = average_daily_series(constituents)
-        return assess_correlations(asset_daily_series)
+        result = assess_correlations(asset_daily_series)
+        await self._publish_assessment(None, result)
+        return result

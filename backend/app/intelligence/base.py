@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.events.bus import Event, EventBus
 from app.features.store import FeatureStore
 
 logger = get_logger(__name__)
@@ -95,9 +96,11 @@ class IntelligenceComponent:
         session_factory: SessionFactory | None = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._sessions = session_factory
+        self._bus = bus
         self.store = FeatureStore(session_factory=session_factory, cache=cache)
 
     async def latest_values(self, symbol: str, timeframe: str) -> dict[str, float]:
@@ -120,3 +123,24 @@ class IntelligenceComponent:
 
     async def assess(self) -> IntelligenceResult:
         raise NotImplementedError
+
+    async def _publish(self, event_type: str, payload: dict[str, Any]) -> None:
+        """Emit a domain event for this assessment, if a bus was wired in
+        (Volume 1 §10: inter-module communication flows through events, not
+        just direct downstream calls)."""
+        if self._bus is None:
+            return
+        await self._bus.publish(Event(type=event_type, payload=payload, source=self.name))
+
+    async def _publish_assessment(self, symbol: str | None, result: IntelligenceResult) -> None:
+        dominant = max(result.states, key=lambda s: result.states[s]) if result.states else None
+        await self._publish(
+            f"intelligence.{self.name}.assessed",
+            {
+                "symbol": symbol,
+                "score": result.score,
+                "confidence": result.confidence,
+                "dominant_state": dominant,
+                "as_of": result.as_of.isoformat(),
+            },
+        )

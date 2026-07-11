@@ -189,4 +189,5 @@ class EventIntelligenceEngine(IntelligenceComponent):
         features = await self.latest_values(MARKET_SYMBOL, EVENTS_TIMEFRAME)
         result = assess_event_risk(features)
         result.metrics["symbol"] = MARKET_SYMBOL
+        await self._publish_assessment(MARKET_SYMBOL, result)
         return result

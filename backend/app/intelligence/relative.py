@@ -168,4 +168,5 @@ class RelativeStrengthIntelligenceEngine(IntelligenceComponent):
         features = await self.latest_values(symbol, timeframe)
         result = assess_relative_strength(features)
         result.metrics["symbol"] = symbol
+        await self._publish_assessment(symbol, result)
         return result
