@@ -130,7 +130,7 @@ async def label_history(
     return await engine.recent(symbol=symbol, label=label, limit=limit)
 
 
-@router.get("/ensemble/{symbol}/train")
+@router.post("/ensemble/{symbol}/train")
 async def train_ensemble(
     symbol: str,
     timeframe: str = "D",
@@ -169,7 +169,7 @@ async def ensemble_history(
     return await engine.recent(symbol=symbol, limit=limit)
 
 
-@router.get("/calibration/{symbol}/train")
+@router.post("/calibration/{symbol}/train")
 async def train_calibration(
     symbol: str,
     timeframe: str = "D",
@@ -393,7 +393,7 @@ async def deduplicated_signals_history(limit: int = Query(default=50, ge=1, le=5
     return await engine.recent(limit=limit)
 
 
-@router.get("/lifecycle/detect")
+@router.post("/lifecycle/detect")
 async def lifecycle_detect(symbol: str, direction: str = "long") -> dict:
     """Mints a new lifecycle_id at the 'detected' stage."""
     manager = container.resolve(OpportunityLifecycleManager)
@@ -414,7 +414,7 @@ async def lifecycle_get(lifecycle_id: str) -> dict:
     return _lifecycle_or_404(await manager.get(lifecycle_id))
 
 
-@router.get("/lifecycle/{lifecycle_id}/confirm")
+@router.post("/lifecycle/{lifecycle_id}/confirm")
 async def lifecycle_confirm(lifecycle_id: str) -> dict:
     manager = container.resolve(OpportunityLifecycleManager)
     try:
@@ -424,7 +424,7 @@ async def lifecycle_confirm(lifecycle_id: str) -> dict:
     return state.to_dict()
 
 
-@router.get("/lifecycle/{lifecycle_id}/qualify")
+@router.post("/lifecycle/{lifecycle_id}/qualify")
 async def lifecycle_qualify(lifecycle_id: str) -> dict:
     manager = container.resolve(OpportunityLifecycleManager)
     try:
@@ -434,7 +434,7 @@ async def lifecycle_qualify(lifecycle_id: str) -> dict:
     return state.to_dict()
 
 
-@router.get("/lifecycle/{lifecycle_id}/sent")
+@router.post("/lifecycle/{lifecycle_id}/sent")
 async def lifecycle_sent(lifecycle_id: str) -> dict:
     manager = container.resolve(OpportunityLifecycleManager)
     try:
@@ -444,7 +444,7 @@ async def lifecycle_sent(lifecycle_id: str) -> dict:
     return state.to_dict()
 
 
-@router.get("/lifecycle/{lifecycle_id}/monitor")
+@router.post("/lifecycle/{lifecycle_id}/monitor")
 async def lifecycle_monitor(lifecycle_id: str) -> dict:
     manager = container.resolve(OpportunityLifecycleManager)
     try:
@@ -454,7 +454,7 @@ async def lifecycle_monitor(lifecycle_id: str) -> dict:
     return state.to_dict()
 
 
-@router.get("/lifecycle/{lifecycle_id}/expire")
+@router.post("/lifecycle/{lifecycle_id}/expire")
 async def lifecycle_expire(lifecycle_id: str, reason: str) -> dict:
     manager = container.resolve(OpportunityLifecycleManager)
     try:
@@ -464,7 +464,7 @@ async def lifecycle_expire(lifecycle_id: str, reason: str) -> dict:
     return state.to_dict()
 
 
-@router.get("/lifecycle/{lifecycle_id}/succeed")
+@router.post("/lifecycle/{lifecycle_id}/succeed")
 async def lifecycle_succeed(lifecycle_id: str) -> dict:
     manager = container.resolve(OpportunityLifecycleManager)
     try:
@@ -474,7 +474,7 @@ async def lifecycle_succeed(lifecycle_id: str) -> dict:
     return state.to_dict()
 
 
-@router.get("/lifecycle/{lifecycle_id}/fail")
+@router.post("/lifecycle/{lifecycle_id}/fail")
 async def lifecycle_fail(lifecycle_id: str) -> dict:
     manager = container.resolve(OpportunityLifecycleManager)
     try:
