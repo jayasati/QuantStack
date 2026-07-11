@@ -28,6 +28,7 @@ from app.features.structure import MarketStructureEngine
 from app.features.timefeat import TimeFeatureEngine
 from app.features.volatility import VolatilityFeatureEngine
 from app.features.volume import VolumeFeatureEngine
+from app.intelligence.report import MarketStateReportEngine
 from app.market.broker import BrokerInterface
 from app.prediction.candidates import CandidateGenerationEngine
 from app.scheduler.service import start_scheduler
@@ -100,6 +101,33 @@ async def lifespan(app: FastAPI):
         trigger="interval",
         seconds=settings.feature_health_interval,
         id="features.health",
+        replace_existing=True,
+    )
+
+    # CandidateGenerationEngine.generate() reads each watchlist symbol's
+    # Market State Report via report_as_of() -- a persisted-read, not a live
+    # compute -- so without a scheduled writer that report (and therefore
+    # market_confidence) silently stays None forever in an unattended
+    # deployment where nobody polls GET /intelligence/state/{symbol}.
+    report_engine = container.resolve(MarketStateReportEngine)
+
+    async def market_intelligence_sweep() -> None:
+        """Regenerate and persist a Market State Report for every watchlist
+        symbol, keeping candidate generation's report_as_of() reads fresh."""
+        for symbol in settings.watchlist:
+            try:
+                await report_engine.generate(symbol)
+            except Exception as exc:
+                logger.error(
+                    "market intelligence sweep failed",
+                    extra={"symbol": symbol, "error": str(exc)},
+                )
+
+    scheduler.add_job(
+        market_intelligence_sweep,
+        trigger="interval",
+        seconds=settings.market_intelligence_interval,
+        id="intelligence.market_state_sweep",
         replace_existing=True,
     )
 

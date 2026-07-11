@@ -113,6 +113,11 @@ class Settings(BaseSettings):
     # exchange holiday calendar (ISO dates).
     # Feature quality + drift sweep interval, seconds (Prompts 3.14/3.15).
     feature_health_interval: int = 21600
+    # Market State Report regeneration interval, seconds (Volume 4, Prompt
+    # 4.15). Must run at least as often as feature_engine_interval since
+    # scheduled candidate generation reads the persisted report, not a live
+    # compute -- a stale/missing report silently zeroes out market_confidence.
+    market_intelligence_interval: int = 300
     feature_expiry_weekday: int = 1
     feature_budget_window_days: int = 5
     feature_market_holidays: list[str] = Field(
