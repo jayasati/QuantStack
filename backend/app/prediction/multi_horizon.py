@@ -41,6 +41,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.events.bus import Event, EventBus
 from app.features.intraday_risk import SESSION_MINUTES
 from app.intelligence.trend import assess_trend
 from app.intelligence.volatility import assess_volatility
@@ -178,10 +179,12 @@ class MultiHorizonPredictionEngine:
         self,
         session_factory: Any = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         snapshot_engine: FeatureSnapshotEngine | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self._snapshots = snapshot_engine or FeatureSnapshotEngine(
             session_factory=session_factory, settings=self._settings
         )
@@ -225,21 +228,30 @@ class MultiHorizonPredictionEngine:
         """Every probability stored independently: one row per horizon,
         not one bundled blob, so "all 5min probabilities for NIFTY over
         time" is a direct query."""
+        payloads = [
+            {
+                "symbol": prediction.symbol,
+                "snapshot_id": prediction.snapshot_id,
+                "as_of": prediction.as_of.isoformat(),
+                **horizon_probability.to_dict(),
+            }
+            for horizon_probability in prediction.horizons
+        ]
+        if self._bus is not None:
+            for payload in payloads:
+                await self._bus.publish(
+                    Event(type=EVENT_TYPE, payload=payload, source=self.name)
+                )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent
 
         async with self._sessions() as session:
-            for horizon_probability in prediction.horizons:
+            for payload in payloads:
                 session.add(MarketEvent(
                     event_type=EVENT_TYPE,
                     source=self.name,
-                    data={
-                        "symbol": prediction.symbol,
-                        "snapshot_id": prediction.snapshot_id,
-                        "as_of": prediction.as_of.isoformat(),
-                        **horizon_probability.to_dict(),
-                    },
+                    data=payload,
                 ))
             await session.commit()
 

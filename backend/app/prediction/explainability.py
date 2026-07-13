@@ -60,6 +60,7 @@ import numpy as np
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.events.bus import Event, EventBus
 from app.intelligence.report import MarketStateReportEngine
 from app.prediction.agreement import AgreementResult, ModelAgreementEngine
 from app.prediction.calibration import ProbabilityCalibrationEngine
@@ -292,6 +293,7 @@ class ExplainabilityReportEngine:
         session_factory: Any = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         ensemble_engine: EnsemblePredictionEngine | None = None,
         calibration_engine: ProbabilityCalibrationEngine | None = None,
         market_context_engine: MarketContextAdjustmentEngine | None = None,
@@ -304,6 +306,7 @@ class ExplainabilityReportEngine:
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self._ensemble = ensemble_engine or EnsemblePredictionEngine(
             session_factory=session_factory, cache=cache, settings=self._settings,
         )
@@ -391,6 +394,10 @@ class ExplainabilityReportEngine:
         ]
 
     async def _persist(self, report: ExplainabilityReport) -> None:
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(type=EVENT_TYPE, payload=report.to_dict(), source=self.name)
+            )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent

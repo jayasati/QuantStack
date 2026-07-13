@@ -116,7 +116,7 @@ Three structured objects carry state through the pipeline:
 - **Broker**: Angel One SmartAPI behind a broker-abstraction interface (future Zerodha/IBKR adapters swap in without touching business logic).
 - **Storage**: PostgreSQL for relational state, Redis for online features and caching, Parquet for offline feature history.
 - **ML**: LightGBM, CatBoost, XGBoost, Random Forest ensembles with Bayesian calibration; SHAP for explainability; MLflow/DVC for experiment and data versioning.
-- **Messaging**: Event bus with retries, dead-letter queue, idempotency, and tracing; all inter-module communication is event-driven.
+- **Messaging**: Event bus with retries, dead-letter queue, idempotency, and tracing; every intelligence/prediction engine publishes its results as an observability/audit event, while the synchronous scoring pipeline itself calls modules directly via DI for latency and determinism (see [Volume 1 §10](volumes/volume-1.md)).
 - **AI**: Multi-model LLM gateway (fast/reasoning/offline) constrained by governance rules and fact verification against platform evidence.
 - **Operations**: Docker → Kubernetes, Terraform IaC, CI/CD with canary/blue-green, OpenTelemetry + Prometheus + Grafana observability.
 

@@ -57,6 +57,7 @@ from typing import Any
 
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
+from app.events.bus import Event, EventBus
 from app.features.liquidity import SPREAD_SCORE_CEILING_PCT
 from app.features.store import FeatureStore
 from app.intelligence.base import IntelligenceResult
@@ -198,6 +199,7 @@ class TradeQualificationEngine:
         session_factory: Any = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         liquidity_engine: LiquidityIntelligenceEngine | None = None,
         event_engine: EventIntelligenceEngine | None = None,
         agreement_engine: ModelAgreementEngine | None = None,
@@ -207,6 +209,7 @@ class TradeQualificationEngine:
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self.store = FeatureStore(session_factory=session_factory, cache=cache)
         self._liquidity = liquidity_engine or LiquidityIntelligenceEngine(
             session_factory=session_factory, cache=cache, settings=self._settings,
@@ -278,6 +281,10 @@ class TradeQualificationEngine:
         return entry.get("value")
 
     async def _persist(self, result: QualificationResult) -> None:
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(type=EVENT_TYPE, payload=result.to_dict(), source=self.name)
+            )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent

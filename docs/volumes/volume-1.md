@@ -216,13 +216,28 @@ Business logic never knows which broker is used.
 
 ## 10. Event Bus
 
-Everything communicates through events. Example flow:
+The event bus is the **observability and audit spine**, not the call path for
+scoring. Every intelligence and prediction engine publishes a domain event
+(e.g. `intelligence.<name>.assessed`, `ensemble_prediction.result`,
+`trade_candidate.generated`) each time it produces a result, so the full
+decision history is queryable and consumers (dashboards, alerting, future
+async subscribers) can tap in without touching the scoring path. Example
+flow of *events emitted*, not function calls:
 
 ```text
 Price Updated → Normalization → Feature Update → Prediction → Signal → Telegram
 ```
 
-No module should directly invoke downstream modules.
+Within the synchronous scoring pipeline itself (feature engines →
+intelligence engines → prediction/ensemble/conviction engines → candidate
+generation), modules call each other directly via constructor DI, not
+through the bus. This is deliberate: intraday F&O scoring needs a
+deterministic, low-latency call chain, and routing it through async
+pub/sub would trade that away for a decoupling benefit this system doesn't
+need internally. "No module should directly invoke downstream modules"
+applies across service/process boundaries (e.g. a future standalone
+alerting or portfolio service reacting to published events) — not within
+the in-process scoring pipeline.
 
 ## 11. Logging Strategy
 

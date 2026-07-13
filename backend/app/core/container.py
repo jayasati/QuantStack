@@ -413,7 +413,9 @@ def wire_default_services() -> None:
     container.register(
         FeatureSnapshotEngine,
         lambda: FeatureSnapshotEngine(
-            session_factory=get_session_factory(), cache=container.resolve(CacheService)
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
         ),
     )
     container.register(
@@ -429,13 +431,16 @@ def wire_default_services() -> None:
         MultiHorizonPredictionEngine,
         lambda: MultiHorizonPredictionEngine(
             session_factory=get_session_factory(),
+            bus=container.resolve(EventBus),
             snapshot_engine=container.resolve(FeatureSnapshotEngine),
         ),
     )
     container.register(
         TripleBarrierLabelingEngine,
         lambda: TripleBarrierLabelingEngine(
-            session_factory=get_session_factory(), cache=container.resolve(CacheService)
+            session_factory=get_session_factory(),
+            cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
         ),
     )
     container.register(
@@ -443,6 +448,7 @@ def wire_default_services() -> None:
         lambda: EnsemblePredictionEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             labeling_engine=container.resolve(TripleBarrierLabelingEngine),
             snapshot_engine=container.resolve(FeatureSnapshotEngine),
         ),
@@ -452,6 +458,7 @@ def wire_default_services() -> None:
         lambda: ProbabilityCalibrationEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             ensemble_engine=container.resolve(EnsemblePredictionEngine),
         ),
     )
@@ -460,6 +467,7 @@ def wire_default_services() -> None:
         lambda: ModelAgreementEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             ensemble_engine=container.resolve(EnsemblePredictionEngine),
         ),
     )
@@ -468,6 +476,7 @@ def wire_default_services() -> None:
         lambda: HistoricalSimilarityEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             analog_engine=container.resolve(HistoricalAnalogEngine),
             candidate_engine=container.resolve(CandidateGenerationEngine),
         ),
@@ -477,6 +486,7 @@ def wire_default_services() -> None:
         lambda: MarketContextAdjustmentEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             calibration_engine=container.resolve(ProbabilityCalibrationEngine),
             market_confidence_engine=container.resolve(MarketConfidenceEngine),
             liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
@@ -491,6 +501,7 @@ def wire_default_services() -> None:
         lambda: ConvictionEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             calibration_engine=container.resolve(ProbabilityCalibrationEngine),
             market_context_engine=container.resolve(MarketContextAdjustmentEngine),
             historical_similarity_engine=container.resolve(HistoricalSimilarityEngine),
@@ -507,6 +518,7 @@ def wire_default_services() -> None:
         lambda: TradeQualificationEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             liquidity_engine=container.resolve(LiquidityIntelligenceEngine),
             event_engine=container.resolve(EventIntelligenceEngine),
             agreement_engine=container.resolve(ModelAgreementEngine),
@@ -520,6 +532,7 @@ def wire_default_services() -> None:
         lambda: SignalPriorityEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             candidate_engine=container.resolve(CandidateGenerationEngine),
             qualification_engine=container.resolve(TradeQualificationEngine),
             conviction_engine=container.resolve(ConvictionEngine),
@@ -533,6 +546,7 @@ def wire_default_services() -> None:
         lambda: DuplicateSignalEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             priority_engine=container.resolve(SignalPriorityEngine),
         ),
     )
@@ -547,6 +561,7 @@ def wire_default_services() -> None:
         lambda: ExplainabilityReportEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             ensemble_engine=container.resolve(EnsemblePredictionEngine),
             calibration_engine=container.resolve(ProbabilityCalibrationEngine),
             market_context_engine=container.resolve(MarketContextAdjustmentEngine),
@@ -563,6 +578,7 @@ def wire_default_services() -> None:
         lambda: AlphaResearchEngine(
             session_factory=get_session_factory(),
             cache=container.resolve(CacheService),
+            bus=container.resolve(EventBus),
             labeling_engine=container.resolve(TripleBarrierLabelingEngine),
             ensemble_engine=container.resolve(EnsemblePredictionEngine),
         ),

@@ -59,6 +59,7 @@ from typing import Any
 
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
+from app.events.bus import Event, EventBus
 from app.features.store import FeatureStore
 from app.prediction.ensemble import (
     DEFAULT_MAX_HOLDING_BARS,
@@ -242,11 +243,13 @@ class AlphaResearchEngine:
         session_factory: Any = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         labeling_engine: TripleBarrierLabelingEngine | None = None,
         ensemble_engine: EnsemblePredictionEngine | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self.store = FeatureStore(session_factory=session_factory, cache=cache)
         self._labeling = labeling_engine or TripleBarrierLabelingEngine(
             session_factory=session_factory, cache=cache, settings=self._settings,
@@ -382,23 +385,33 @@ class AlphaResearchEngine:
     async def _persist_evaluations(
         self, symbol: str, evaluations: Sequence[FeatureEvaluation]
     ) -> None:
+        payloads = [
+            {"symbol": symbol, "as_of": datetime.now(UTC).isoformat(), **evaluation.to_dict()}
+            for evaluation in evaluations
+        ]
+        if self._bus is not None:
+            for payload in payloads:
+                await self._bus.publish(
+                    Event(type=FEATURE_EVENT_TYPE, payload=payload, source=self.name)
+                )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent
 
         async with self._sessions() as session:
-            for evaluation in evaluations:
+            for payload in payloads:
                 session.add(MarketEvent(
                     event_type=FEATURE_EVENT_TYPE,
                     source=self.name,
-                    data={
-                        "symbol": symbol, "as_of": datetime.now(UTC).isoformat(),
-                        **evaluation.to_dict(),
-                    },
+                    data=payload,
                 ))
             await session.commit()
 
     async def _persist_comparison(self, result: ModelComparisonResult) -> None:
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(type=COMPARISON_EVENT_TYPE, payload=result.to_dict(), source=self.name)
+            )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent

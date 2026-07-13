@@ -65,6 +65,7 @@ from typing import Any
 
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
+from app.events.bus import Event, EventBus
 from app.features.store import FeatureStore
 from app.intelligence.base import IntelligenceResult, clamp
 from app.intelligence.liquidity import LiquidityIntelligenceEngine
@@ -224,6 +225,7 @@ class SignalPriorityEngine:
         session_factory: Any = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         candidate_engine: CandidateGenerationEngine | None = None,
         qualification_engine: TradeQualificationEngine | None = None,
         conviction_engine: ConvictionEngine | None = None,
@@ -233,6 +235,7 @@ class SignalPriorityEngine:
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self.store = FeatureStore(session_factory=session_factory, cache=cache)
         self._candidates = candidate_engine or CandidateGenerationEngine(
             session_factory=session_factory, settings=self._settings,
@@ -306,6 +309,11 @@ class SignalPriorityEngine:
         return entry.get("value")
 
     async def _persist_all(self, signals: Sequence[RankedSignal]) -> None:
+        if self._bus is not None:
+            for signal in signals:
+                await self._bus.publish(
+                    Event(type=EVENT_TYPE, payload=signal.to_dict(), source=self.name)
+                )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent

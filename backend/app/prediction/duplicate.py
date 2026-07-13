@@ -48,6 +48,7 @@ from typing import Any
 
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
+from app.events.bus import Event, EventBus
 from app.features.normalize import rolling_correlation
 from app.features.store import FeatureStore
 from app.prediction.priority import TOP_N_DEFAULT, RankedSignal, SignalPriorityEngine
@@ -123,10 +124,12 @@ class DuplicateSignalEngine:
         session_factory: Any = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         priority_engine: SignalPriorityEngine | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self.store = FeatureStore(session_factory=session_factory, cache=cache)
         self._priority = priority_engine or SignalPriorityEngine(
             session_factory=session_factory, cache=cache, settings=self._settings,
@@ -221,6 +224,10 @@ class DuplicateSignalEngine:
         return pairwise_correlation(returns_a, returns_b)
 
     async def _persist(self, result: DuplicateFilterResult) -> None:
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(type=EVENT_TYPE, payload=result.to_dict(), source=self.name)
+            )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent

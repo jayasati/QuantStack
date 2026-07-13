@@ -57,6 +57,7 @@ from zoneinfo import ZoneInfo
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.events.bus import Event, EventBus
 from app.features.schema import Candle
 from app.features.store import FeatureStore
 
@@ -333,9 +334,11 @@ class TripleBarrierLabelingEngine:
         session_factory: Any = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self.store = FeatureStore(session_factory=session_factory, cache=cache)
 
     async def label_history(
@@ -435,7 +438,14 @@ class TripleBarrierLabelingEngine:
     async def _persist(self, labels: list[Label]) -> None:
         """Store labels separately from features: a dedicated event_type,
         never the feature_store table. One row per label."""
-        if self._sessions is None or not labels:
+        if not labels:
+            return
+        if self._bus is not None:
+            for label in labels:
+                await self._bus.publish(
+                    Event(type=EVENT_TYPE, payload=label.to_dict(), source=self.name)
+                )
+        if self._sessions is None:
             return
         from app.database.tables import MarketEvent
 

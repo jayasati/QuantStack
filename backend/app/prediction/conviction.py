@@ -73,6 +73,7 @@ from typing import Any
 
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
+from app.events.bus import Event, EventBus
 from app.intelligence.base import IntelligenceResult, clamp, slope
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
 from app.intelligence.liquidity import LiquidityIntelligenceEngine
@@ -305,6 +306,7 @@ class ConvictionEngine:
         session_factory: Any = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         calibration_engine: ProbabilityCalibrationEngine | None = None,
         market_context_engine: MarketContextAdjustmentEngine | None = None,
         historical_similarity_engine: HistoricalSimilarityEngine | None = None,
@@ -317,6 +319,7 @@ class ConvictionEngine:
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self._calibration = calibration_engine or ProbabilityCalibrationEngine(
             session_factory=session_factory, cache=cache, settings=self._settings,
         )
@@ -417,6 +420,10 @@ class ConvictionEngine:
         ]
 
     async def _persist(self, result: ConvictionResult) -> None:
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(type=EVENT_TYPE, payload=result.to_dict(), source=self.name)
+            )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent

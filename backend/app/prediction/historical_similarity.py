@@ -50,6 +50,7 @@ import numpy as np
 
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
+from app.events.bus import Event, EventBus
 from app.intelligence.analogs import HistoricalAnalogEngine
 from app.intelligence.base import IntelligenceResult
 from app.prediction.candidates import CandidateGenerationEngine, TradeCandidate
@@ -172,11 +173,13 @@ class HistoricalSimilarityEngine:
         session_factory: Any = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
         analog_engine: HistoricalAnalogEngine | None = None,
         candidate_engine: CandidateGenerationEngine | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self._analogs = analog_engine or HistoricalAnalogEngine(
             session_factory=session_factory, cache=cache, settings=self._settings,
         )
@@ -206,6 +209,10 @@ class HistoricalSimilarityEngine:
         return await self.evaluate_candidates(candidates)
 
     async def _persist(self, result: HistoricalSimilarityResult) -> None:
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(type=EVENT_TYPE, payload=result.to_dict(), source=self.name)
+            )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent

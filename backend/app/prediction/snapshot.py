@@ -38,6 +38,7 @@ from typing import Any
 
 from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
+from app.events.bus import Event, EventBus
 from app.features.store import FeatureStore
 from app.intelligence.report import MarketStateReportEngine
 
@@ -82,12 +83,14 @@ class FeatureSnapshotEngine:
         session_factory: Any = None,
         cache: CacheService | None = None,
         settings: Settings | None = None,
+        bus: EventBus | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
+        self._bus = bus
         self.store = FeatureStore(session_factory=session_factory, cache=cache)
         self._report_engine = MarketStateReportEngine(
-            session_factory=session_factory, settings=self._settings
+            session_factory=session_factory, settings=self._settings, bus=bus,
         )
 
     async def capture(self, symbol: str, timeframe: str = "D") -> FeatureSnapshot:
@@ -131,6 +134,10 @@ class FeatureSnapshotEngine:
             return {name: version for name, version in result.all() if name and version}
 
     async def _persist(self, snapshot: FeatureSnapshot) -> None:
+        if self._bus is not None:
+            await self._bus.publish(
+                Event(type=EVENT_TYPE, payload=snapshot.to_dict(), source=self.name)
+            )
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent
