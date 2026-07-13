@@ -10,6 +10,7 @@ import asyncio
 from datetime import datetime
 from typing import Any
 
+import certifi
 import httpx
 
 from app.core.alerts import AlertService, AlertSeverity
@@ -48,7 +49,9 @@ class AngelOneAdapter(BrokerInterface):
         alerts: AlertService | None = None,
     ) -> None:
         self._settings = settings
-        self._client = client or httpx.AsyncClient(base_url=BASE_URL, timeout=15.0)
+        self._client = client or httpx.AsyncClient(
+            base_url=BASE_URL, timeout=15.0, verify=certifi.where()
+        )
         self._max_retries = max_retries if max_retries is not None else settings.max_retry
         self._jwt_token: str | None = None
         self._refresh_token: str | None = None

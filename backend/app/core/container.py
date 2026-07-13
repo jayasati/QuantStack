@@ -40,7 +40,7 @@ def wire_default_services() -> None:
     """Register production implementations. Called once at application startup."""
     from app.collectors.pipeline import DefaultCollectorPipeline
     from app.collectors.registry import CollectorRegistry
-    from app.core.alerts import AlertService, EventBusAlertSink, LoggingAlertSink
+    from app.core.alerts import AlertService, AlertSink, EventBusAlertSink, LoggingAlertSink
     from app.core.cache import CacheService
     from app.core.circuit_breaker import CircuitBreakerRegistry
     from app.core.config import get_settings
@@ -99,6 +99,7 @@ def wire_default_services() -> None:
     from app.prediction.priority import SignalPriorityEngine
     from app.prediction.qualification import TradeQualificationEngine
     from app.prediction.snapshot import FeatureSnapshotEngine
+    from app.telegram.sink import TelegramAlertSink
 
     settings = get_settings()
     container.register(EventBus, EventBus)
@@ -111,12 +112,14 @@ def wire_default_services() -> None:
             recovery_timeout=settings.circuit_breaker_recovery_seconds,
         ),
     )
-    container.register(
-        AlertService,
-        lambda: AlertService(
-            sinks=[LoggingAlertSink(), EventBusAlertSink(container.resolve(EventBus))]
-        ),
-    )
+
+    def _build_alert_sinks() -> list[AlertSink]:
+        sinks: list[AlertSink] = [LoggingAlertSink(), EventBusAlertSink(container.resolve(EventBus))]
+        if settings.telegram_token and settings.telegram_chat_id:
+            sinks.append(TelegramAlertSink(settings.telegram_token, settings.telegram_chat_id))
+        return sinks
+
+    container.register(AlertService, lambda: AlertService(sinks=_build_alert_sinks()))
     container.register(
         BrokerInterface,
         lambda: AngelOneAdapter(

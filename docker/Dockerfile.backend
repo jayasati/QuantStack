@@ -12,6 +12,12 @@ COPY configs configs
 COPY scripts/start-backend.sh scripts/start-backend.sh
 RUN chmod +x scripts/start-backend.sh && pip install --no-cache-dir ./backend
 
+RUN groupadd --system quantstack && useradd --system --gid quantstack --home /repo quantstack \
+    && chown -R quantstack:quantstack /repo
+USER quantstack
+
 WORKDIR /repo/backend
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=4)" || exit 1
 CMD ["/repo/scripts/start-backend.sh"]

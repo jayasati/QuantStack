@@ -141,6 +141,7 @@ class Settings(BaseSettings):
     angel_one_pin: str | None = None
     angel_one_totp_secret: str | None = None
     telegram_token: str | None = None
+    telegram_chat_id: str | None = None
     openai_key: str | None = None
 
     @classmethod
