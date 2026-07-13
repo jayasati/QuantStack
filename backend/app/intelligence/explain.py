@@ -22,7 +22,7 @@ this over an API.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from app.intelligence.base import IntelligenceComponent, IntelligenceResult, clamp
 
@@ -135,7 +135,7 @@ class ExplainabilityStore(IntelligenceComponent):
                 .limit(limit)
             )
             rows = result.scalars().all()
-        return list(reversed(rows))
+        return [cast(dict[str, Any], row) for row in reversed(rows) if row is not None]
 
     async def latest(
         self, component: str, symbol: str, timeframe: str

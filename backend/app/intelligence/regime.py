@@ -205,7 +205,7 @@ class BayesianRegimeDetector(IntelligenceComponent):
                 .limit(limit)
             )
             rows = result.scalars().all()
-        return [row.get("states") or {} for row in reversed(rows)]
+        return [(row or {}).get("states") or {} for row in reversed(rows)]
 
     async def _store_belief(
         self,

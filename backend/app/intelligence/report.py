@@ -106,13 +106,15 @@ def build_market_state_report(
     for name, result in component_results.items():
         if result is None or not result.states:
             continue
-        current_regimes[name] = max(result.states, key=lambda s: result.states[s])
-        probabilities[name] = dict(result.states)
+        states = result.states
+        current_regimes[name] = max(states, key=lambda s: states[s])
+        probabilities[name] = dict(states)
     if confidence_result is not None and confidence_result.states:
+        confidence_states = confidence_result.states
         current_regimes["market_confidence"] = max(
-            confidence_result.states, key=lambda s: confidence_result.states[s]
+            confidence_states, key=lambda s: confidence_states[s]
         )
-        probabilities["market_confidence"] = dict(confidence_result.states)
+        probabilities["market_confidence"] = dict(confidence_states)
 
     sector_result = component_results.get("sector")
     sector_leaders = {
@@ -315,4 +317,4 @@ class MarketStateReportEngine(IntelligenceComponent):
                 .order_by(desc(MarketEvent.created_at))
                 .limit(limit)
             )
-            return list(result.scalars().all())
+            return [row for row in result.scalars().all() if row is not None]
