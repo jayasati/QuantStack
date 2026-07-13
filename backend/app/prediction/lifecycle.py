@@ -48,6 +48,21 @@ replays the same failure. Two independent guards close this:
   idempotent no-op (return the current state, write nothing) rather than
   a fresh transition -- this is what makes a duplicate/retried call safe
   instead of corrupting.
+
+An in-process `asyncio.Lock` only excludes concurrent calls within the SAME
+OS process -- it provides zero exclusion across processes. If this app is
+ever deployed with more than one worker process (`uvicorn --workers N`,
+gunicorn, multiple pods), each process gets its own independent `_locks`
+dict, two workers can concurrently advance the same `lifecycle_id`, and the
+exact corruption this fix closed comes back with no error at deploy time to
+flag it -- the failure would only surface later, replaying a corrupted log.
+Since neither uvicorn nor gunicorn expose a reliable signal the app can
+introspect to detect its own worker count, the manager instead requires
+`Settings.deployment_workers` to be declared truthfully by whoever changes
+the deploy command, and refuses to start (`RuntimeError` at construction,
+resolved eagerly at app boot -- see `main.py`'s `lifespan`) unless it's `1`.
+Scaling out requires first replacing this lock with a cross-process one
+(e.g. a Postgres advisory lock keyed on `lifecycle_id`, or a Redis lock).
 `get()` additionally skips a persisted row that repeats the immediately
 preceding stage during replay, rather than raising -- a self-healing
 read path for any lifecycle_id that was corrupted by this exact pattern
@@ -242,6 +257,17 @@ class OpportunityLifecycleManager:
         self._sessions = session_factory
         self._settings = settings or get_settings()
         self._bus = bus
+        if self._settings.deployment_workers != 1:
+            raise RuntimeError(
+                "OpportunityLifecycleManager's asyncio.Lock only provides "
+                "exclusion within a single process (IRR Critical #2's fix), "
+                f"but Settings.deployment_workers={self._settings.deployment_workers} "
+                "declares more than one worker process. Deploying multiple "
+                "workers with this lock as-is silently reintroduces the "
+                "lifecycle race/corruption that fix closed. Replace the lock "
+                "with a cross-process one (e.g. a Postgres advisory lock "
+                "keyed on lifecycle_id, or a Redis lock) before scaling out."
+            )
         # One lock per lifecycle_id, created lazily -- serializes concurrent
         # _advance() calls for the SAME id so a race can never write two
         # transitions off the same stale read. Dict access itself needs no

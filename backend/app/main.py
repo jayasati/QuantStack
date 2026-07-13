@@ -31,6 +31,7 @@ from app.features.volume import VolumeFeatureEngine
 from app.intelligence.report import MarketStateReportEngine
 from app.market.broker import BrokerInterface
 from app.prediction.candidates import CandidateGenerationEngine
+from app.prediction.lifecycle import OpportunityLifecycleManager
 from app.scheduler.service import start_scheduler
 
 logger = get_logger(__name__)
@@ -41,6 +42,12 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(settings.log_level)
     wire_default_services()
+
+    # Resolved eagerly (not lazily on first lifecycle API call) so a
+    # deployment that adds --workers N without updating
+    # Settings.deployment_workers fails loudly at boot, not silently in
+    # production the first time two workers race a transition.
+    container.resolve(OpportunityLifecycleManager)
 
     broker = container.resolve(BrokerInterface)
     try:

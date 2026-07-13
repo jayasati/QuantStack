@@ -118,6 +118,13 @@ class Settings(BaseSettings):
     # scheduled candidate generation reads the persisted report, not a live
     # compute -- a stale/missing report silently zeroes out market_confidence.
     market_intelligence_interval: int = 300
+    # Number of OS processes serving this app (e.g. `uvicorn --workers N` /
+    # gunicorn worker count). MUST be kept truthful by whoever changes the
+    # deploy command -- OpportunityLifecycleManager's in-process asyncio.Lock
+    # (IRR Critical #2) only provides exclusion within a single process, so a
+    # value other than 1 is asserted against at startup rather than silently
+    # trusted (see prediction/lifecycle.py's startup guard).
+    deployment_workers: int = 1
     feature_expiry_weekday: int = 1
     feature_budget_window_days: int = 5
     feature_market_holidays: list[str] = Field(
