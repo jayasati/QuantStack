@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.collectors import router as collectors_router
+from app.api.dashboard import router as dashboard_router
 from app.api.features import router as features_router
 from app.api.health import router as health_router
 from app.api.intelligence import router as intelligence_router
@@ -179,6 +180,7 @@ def create_app() -> FastAPI:
     app.include_router(features_router)
     app.include_router(intelligence_router)
     app.include_router(prediction_router)
+    app.include_router(dashboard_router)
     return app
 
 

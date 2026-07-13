@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SENSEX Option Chain — Live Verification</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --call-tint:      rgba(42,120,214,0.08);   /* blue, diverging pole 1 */
+    --put-tint:       rgba(227,73,72,0.08);    /* red, diverging pole 2 */
+    --atm-bg:         rgba(237,161,0,0.14);    /* yellow — attention, not status */
+    --good:           #0ca30c;
+    --warning:        #fab219;
+    --critical:       #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+      --call-tint:      rgba(57,135,229,0.14);
+      --put-tint:       rgba(230,103,103,0.14);
+      --atm-bg:         rgba(201,133,0,0.22);
+      --good:           #0ca30c;
+      --warning:        #fab219;
+      --critical:       #e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 24px;
+  }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    max-width: 1180px;
+    margin: 0 auto 20px;
+  }
+  .header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .title-block { display: flex; align-items: baseline; gap: 14px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 700; }
+  .spot { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .spot.up { color: var(--good); }
+  .spot.down { color: var(--critical); }
+  .meta { color: var(--text-secondary); font-size: 13px; }
+  .status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .dot.live { background: var(--good); animation: pulse 1.6s ease-in-out infinite; }
+  .dot.stale { background: var(--warning); }
+  .dot.error { background: var(--critical); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .subrow { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
+  .controls {
+    display: flex; align-items: center; gap: 16px; margin: 14px 0 4px;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .controls label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  thead th {
+    text-align: right; font-weight: 600; color: var(--text-muted);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em;
+    padding: 6px 8px; border-bottom: 1px solid var(--gridline);
+    position: sticky; top: 0; background: var(--surface-1);
+  }
+  thead th.strike-col { text-align: center; }
+  tbody td {
+    text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--gridline);
+    white-space: nowrap;
+  }
+  tbody tr.call-side td.call { background: var(--call-tint); }
+  tbody tr td.strike {
+    text-align: center; font-weight: 700; color: var(--text-primary);
+    background: var(--page-plane);
+  }
+  tbody tr.atm td.strike { background: var(--atm-bg); }
+  tbody tr.itm-call td.call-oi,
+  tbody tr.itm-call td.call-ltp { background: var(--call-tint); }
+  tbody tr.itm-put td.put-oi,
+  tbody tr.itm-put td.put-ltp { background: var(--put-tint); }
+  .greek { color: var(--text-secondary); }
+  .theta { color: var(--critical); }
+  .empty-cell { color: var(--text-muted); }
+  .footer-note {
+    max-width: 1180px; margin: 0 auto; color: var(--text-muted); font-size: 12px;
+  }
+  .scroll-wrap { max-height: 70vh; overflow-y: auto; border-radius: 6px; }
+  #error-banner {
+    display: none; background: rgba(208,59,59,0.1); border: 1px solid var(--critical);
+    color: var(--critical); padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    margin-bottom: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div id="error-banner"></div>
+
+<div class="card">
+  <div class="header">
+    <div class="title-block">
+      <h1>SENSEX Option Chain</h1>
+      <span id="spot" class="spot">—</span>
+    </div>
+    <div class="status">
+      <span id="status-dot" class="dot stale"></span>
+      <span id="status-text">connecting…</span>
+    </div>
+  </div>
+  <div class="subrow">
+    Expiry: <span id="expiry">—</span>
+    &nbsp;·&nbsp; Greeks: <span id="greeks-source">—</span>
+    &nbsp;·&nbsp; Last updated: <span id="updated-at">—</span>
+  </div>
+  <div class="controls">
+    <label><input type="checkbox" id="toggle-all" /> Show all strikes (default: ±12 around spot)</label>
+    <span>Auto-refreshing every 5s — the backend itself only re-fetches BSE every ~10s</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="scroll-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Theta</th><th>Vega</th><th>Gamma</th><th>Delta</th><th>IV</th><th>OI</th><th>LTP</th>
+          <th class="strike-col">Strike</th>
+          <th>LTP</th><th>OI</th><th>IV</th><th>Delta</th><th>Gamma</th><th>Vega</th><th>Theta</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer-note">
+  Live verification view — pulls straight from the running RoutingOptionsChainSource
+  (BSE for Sensex OI/LTP/IV, Black-Scholes-computed Greeks). Not part of the product API.
+</div>
+
+<script>
+const fmt = (v, d = 2) => (v === null || v === undefined) ? '' : Number(v).toLocaleString('en-IN', {minimumFractionDigits: d, maximumFractionDigits: d});
+const fmtInt = (v) => (v === null || v === undefined) ? '' : Math.round(v).toLocaleString('en-IN');
+
+let showAll = false;
+document.getElementById('toggle-all').addEventListener('change', (e) => {
+  showAll = e.target.checked;
+  render(lastData);
+});
+
+let lastData = null;
+let lastGoodSpot = null;
+
+function cell(value, cls, digits) {
+  if (value === null || value === undefined) return `<td class="${cls || ''} empty-cell">—</td>`;
+  return `<td class="${cls || ''}">${fmt(value, digits)}</td>`;
+}
+
+function render(data) {
+  if (!data) return;
+  lastData = data;
+  const spotEl = document.getElementById('spot');
+  spotEl.textContent = fmt(data.spot, 2);
+  if (lastGoodSpot !== null) {
+    spotEl.classList.toggle('up', data.spot > lastGoodSpot);
+    spotEl.classList.toggle('down', data.spot < lastGoodSpot);
+  }
+  lastGoodSpot = data.spot;
+
+  document.getElementById('expiry').textContent = data.expiry;
+  document.getElementById('greeks-source').textContent = data.greeks_source || 'n/a';
+  document.getElementById('updated-at').textContent = new Date().toLocaleTimeString('en-IN');
+
+  let strikes = data.strikes;
+  if (!showAll) {
+    const atmIdx = strikes.reduce((best, row, i) =>
+      Math.abs(row.strike - data.spot) < Math.abs(strikes[best].strike - data.spot) ? i : best, 0);
+    strikes = strikes.slice(Math.max(0, atmIdx - 12), atmIdx + 13);
+  }
+
+  const atmStrike = strikes.reduce((best, row) =>
+    Math.abs(row.strike - data.spot) < Math.abs(best - data.spot) ? row.strike : best, strikes[0]?.strike);
+
+  const rows = strikes.map(row => {
+    const isAtm = row.strike === atmStrike;
+    const itmCall = row.strike < data.spot;
+    const itmPut = row.strike > data.spot;
+    const rowClasses = [isAtm ? 'atm' : '', itmCall ? 'itm-call' : '', itmPut ? 'itm-put' : ''].filter(Boolean).join(' ');
+    return `<tr class="${rowClasses}">
+      <td class="theta">${row.call.theta != null ? fmt(row.call.theta, 2) : '<span class="empty-cell">—</span>'}</td>
+      <td class="greek">${row.call.vega != null ? fmt(row.call.vega, 2) : '<span class="empty-cell">—</span>'}</td>
+      <td class="greek">${row.call.gamma != null ? fmt(row.call.gamma, 5) : '<span class="empty-cell">—</span>'}</td>
+      <td class="greek">${row.call.delta != null ? fmt(row.call.delta, 3) : '<span class="empty-cell">—</span>'}</td>
+      <td>${row.call.iv != null ? fmt(row.call.iv, 2) : '<span class="empty-cell">—</span>'}</td>
+      <td class="call-oi">${row.call.oi != null ? fmtInt(row.call.oi) : '<span class="empty-cell">—</span>'}</td>
+      <td class="call-ltp">${row.call.ltp != null ? fmt(row.call.ltp, 2) : '<span class="empty-cell">—</span>'}</td>
+      <td class="strike">${fmt(row.strike, 0)}</td>
+      <td class="put-ltp">${row.put.ltp != null ? fmt(row.put.ltp, 2) : '<span class="empty-cell">—</span>'}</td>
+      <td class="put-oi">${row.put.oi != null ? fmtInt(row.put.oi) : '<span class="empty-cell">—</span>'}</td>
+      <td>${row.put.iv != null ? fmt(row.put.iv, 2) : '<span class="empty-cell">—</span>'}</td>
+      <td class="greek">${row.put.delta != null ? fmt(row.put.delta, 3) : '<span class="empty-cell">—</span>'}</td>
+      <td class="greek">${row.put.gamma != null ? fmt(row.put.gamma, 5) : '<span class="empty-cell">—</span>'}</td>
+      <td class="greek">${row.put.vega != null ? fmt(row.put.vega, 2) : '<span class="empty-cell">—</span>'}</td>
+      <td class="theta">${row.put.theta != null ? fmt(row.put.theta, 2) : '<span class="empty-cell">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rows').innerHTML = rows;
+}
+
+function setStatus(state, text) {
+  const dot = document.getElementById('status-dot');
+  dot.className = 'dot ' + state;
+  document.getElementById('status-text').textContent = text;
+}
+
+async function poll() {
+  try {
+    setStatus('stale', 'refreshing…');
+    const res = await fetch('/dashboard/sensex/data');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    render(data);
+    setStatus('live', 'live');
+    document.getElementById('error-banner').style.display = 'none';
+  } catch (err) {
+    setStatus('error', 'error — retrying');
+    const banner = document.getElementById('error-banner');
+    banner.textContent = 'Fetch failed: ' + err.message + ' — is the backend running on this origin?';
+    banner.style.display = 'block';
+  }
+}
+
+poll();
+setInterval(poll, 5000);
+</script>
+</body>
+</html>
