@@ -7,6 +7,7 @@ from app.api import intelligence as intelligence_api
 from app.core.container import container
 from app.intelligence.analogs import HistoricalAnalogEngine
 from app.intelligence.breadth import BreadthIntelligenceEngine
+from app.intelligence.composite import CompositeMarketIntelligenceEngine
 from app.intelligence.confidence import MarketConfidenceEngine
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
 from app.intelligence.regime import BayesianRegimeDetector
@@ -17,7 +18,7 @@ from app.intelligence.trend import TrendIntelligenceEngine
 ENGINE_TYPES = [
     TrendIntelligenceEngine, BreadthIntelligenceEngine, SectorIntelligenceEngine,
     InstitutionalFlowIntelligenceEngine, HistoricalAnalogEngine, MarketConfidenceEngine,
-    MarketStateReportEngine, BayesianRegimeDetector,
+    MarketStateReportEngine, BayesianRegimeDetector, CompositeMarketIntelligenceEngine,
 ]
 
 
@@ -61,6 +62,16 @@ def test_market_intelligence_reports_list() -> None:
     assert body["symbol"] == "NIFTY"
     assert "reports" in body
     assert isinstance(body["reports"], list)
+
+
+def test_composite_market_intelligence() -> None:
+    client = make_client()
+    response = client.get("/intelligence/composite/NIFTY")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["component"] == "composite_market_intelligence"
+    assert "score" in body and "confidence" in body
+    assert "bullishness" in body["metrics"] and "expected_risk" in body["metrics"]
 
 
 def test_regime_history() -> None:

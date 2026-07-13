@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.core.container import container
 from app.intelligence.analogs import HistoricalAnalogEngine
 from app.intelligence.breadth import BreadthIntelligenceEngine
+from app.intelligence.composite import CompositeMarketIntelligenceEngine
 from app.intelligence.confidence import MarketConfidenceEngine
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
 from app.intelligence.regime import BayesianRegimeDetector
@@ -52,6 +53,17 @@ async def market_intelligence_reports(
     engine = container.resolve(MarketStateReportEngine)
     reports = await engine.list_reports(symbol, limit=limit)
     return {"symbol": symbol, "count": len(reports), "reports": reports}
+
+
+@router.get("/composite/{symbol}")
+async def composite_market_intelligence(symbol: str) -> dict:
+    """Composite Market Intelligence: single blended score/confidence across
+    all ten Volume 4 components (Prompt 4.14). For the full detail behind
+    that score (sector names, analog dates, reasoning strings), see
+    /intelligence/state/{symbol}."""
+    engine = container.resolve(CompositeMarketIntelligenceEngine)
+    result = await engine.assess(symbol=symbol)
+    return result.to_dict()
 
 
 @router.get("/regime/{component}/{symbol}/{timeframe}")
