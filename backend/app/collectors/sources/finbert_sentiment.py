@@ -39,11 +39,23 @@ class FinBertSentimentProvider(SentimentProvider):
 
     def _ensure_loaded(self) -> Any:
         if self._pipeline is None:
+            import os
+
+            import torch
             from transformers import (
                 AutoModelForSequenceClassification,
                 AutoTokenizer,
                 TextClassificationPipeline,
             )
+
+            # PyTorch defaults to intra-op parallelism across every visible
+            # CPU core for a single forward pass. asyncio.to_thread (see
+            # NewsIntelligenceCollector._score_all) keeps this off the event
+            # loop, but on a small/shared host that default still lets one
+            # inference call starve everything else (event loop thread,
+            # Postgres, other collectors) of OS-level CPU time. Cap it,
+            # leaving at least one core free.
+            torch.set_num_threads(max(1, (os.cpu_count() or 1) - 1))
 
             logger.info("loading finbert sentiment model", extra={"model": self._model_name})
             tokenizer = AutoTokenizer.from_pretrained(self._model_name)
