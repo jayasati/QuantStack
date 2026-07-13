@@ -16,6 +16,7 @@ rate_limits:
 watchlist:
   - NIFTY
   - BANKNIFTY
+  - SENSEX
   - RELIANCE
   - HDFCBANK
   - INFY

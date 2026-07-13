@@ -183,6 +183,40 @@ Support automatic token refresh, reconnect logic, exponential backoff, and struc
 Include comprehensive unit tests using mocked broker responses.
 ```
 
+**Implementation note — options chain and order book (verified against Angel
+One's own SmartAPI forum, 2026-07-13):**
+
+- *Options chain*: SmartAPI has no option-chain endpoint. Angel One's own
+  forum confirms it directly — "We do not provide option chain data as of
+  now, however we do provide candle data and Greeks for options"
+  ([SmartAPI Forum, Option Chain Live Data](https://smartapi.angelone.in/smartapi/forum/topic/4364/option-chain-live-data)).
+  Its Option Greek endpoint returns per-strike delta/gamma/theta/vega/IV but
+  not open interest or LTP, so it cannot serve a full chain on its own. The
+  actual chain (spot, strikes, OI, volume, LTP) comes from each instrument's
+  own listing exchange's public feed instead — the best available source
+  for that data regardless of broker — via an injectable `OptionsChainSource`
+  (`app.collectors.domains.options`). `RoutingOptionsChainSource`
+  (`app.collectors.sources.routing`) dispatches each instrument to NSE's
+  public option-chain feed (`NseOptionChainSource`) or, for BSE-listed
+  indices such as Sensex, BSE's own public feed (`BseOptionChainSource`,
+  `api.bseindia.com/BseIndiaAPI/api/DerivOptionChain_IV`, discovered and
+  verified live 2026-07-13) — NSE carries zero Sensex data since Sensex
+  options are BSE-listed, not NSE. The NSE-sourced legs are enriched
+  per-strike with Angel One's real Greeks through
+  `BrokerInterface.get_option_greeks()`; BSE's feed already carries IV
+  natively, so no enrichment step is needed there. Modeling the chain as
+  broker-agnostic is deliberate: the chain itself is public exchange data,
+  not broker-specific, so swapping the broker adapter should never require a
+  different way of fetching it.
+- *Order book / market depth*: `BrokerInterface.get_market_depth()` exists
+  and is backed by real data, not a stub — Angel One's FULL-mode quote
+  endpoint returns a genuine 5-level bid/ask depth ladder, which `Quote.depth`
+  already carries (`AngelOneAdapter.get_quote`). `LiveMarketCollector` reads
+  `quote.depth` directly off the quote it already fetched rather than calling
+  `get_market_depth()` a second time, since that method's default
+  implementation would just re-fetch the same quote — avoiding a redundant
+  SmartAPI call against the 3-request/second rate limit.
+
 ### Prompt 2.2 — Live Market Collector
 
 ```text

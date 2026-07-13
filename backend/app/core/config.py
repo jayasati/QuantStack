@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     collector_retry_attempts: int = 1
     collector_retry_delay_seconds: float = 0.2
     rate_limits: RateLimits = Field(default_factory=RateLimits)
-    watchlist: list[str] = Field(default_factory=lambda: ["NIFTY", "BANKNIFTY"])
+    watchlist: list[str] = Field(default_factory=lambda: ["NIFTY", "BANKNIFTY", "SENSEX"])
     # SmartAPI WebSocket streaming for live quotes (REST polling remains the fallback).
     enable_websocket: bool = False
     # Per-collector schedule overrides, e.g. {"news_intelligence": 300}.

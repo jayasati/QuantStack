@@ -4,8 +4,11 @@ Derives normalized option-chain features — PCR, max pain, ATM IV, IV skew,
 OI concentration, buildup classification, writing intensity, chain-wide
 exposure proxies, and ATM Greeks risk (Theta burn %, Gamma, Vega) — instead
 of publishing raw chain rows. The chain itself comes from an injectable
-``OptionsChainSource``; the default is the public NSE option-chain feed
-(``NseOptionChainSource``).
+``OptionsChainSource``; the default is ``RoutingOptionsChainSource``, which
+dispatches each instrument to the public NSE feed (``NseOptionChainSource``)
+or, for BSE-listed indices like Sensex, the public BSE feed
+(``BseOptionChainSource``) -- NSE and BSE each only carry their own
+exchange's option chain, so a single feed can't serve both.
 
 ATM Greeks risk (same-day F&O gap fill, 2026-07-09) is generic/instrument-
 level, not position-level: this codebase has no open-position tracking yet,
@@ -207,9 +210,9 @@ class OptionsIntelligenceCollector(BaseCollector):
     ) -> None:
         super().__init__()
         if source is None:
-            from app.collectors.sources.nse_options import NseOptionChainSource
+            from app.collectors.sources.routing import RoutingOptionsChainSource
 
-            source = NseOptionChainSource()
+            source = RoutingOptionsChainSource()
         self.chain_source: OptionsChainSource = source
         self.iv_history: IvHistoryProvider = iv_history or DbIvHistoryProvider()
         self.symbols: list[str] = get_settings().watchlist

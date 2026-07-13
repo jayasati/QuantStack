@@ -121,7 +121,12 @@ async def test_unconfigured_source_raises() -> None:
         await collector.collect()
 
 
-def test_default_source_is_nse() -> None:
+def test_default_source_routes_nse_and_bse() -> None:
+    from app.collectors.sources.bse_options import BseOptionChainSource
     from app.collectors.sources.nse_options import NseOptionChainSource
+    from app.collectors.sources.routing import RoutingOptionsChainSource
 
-    assert isinstance(OptionsIntelligenceCollector().chain_source, NseOptionChainSource)
+    source = OptionsIntelligenceCollector().chain_source
+    assert isinstance(source, RoutingOptionsChainSource)
+    assert isinstance(source._nse, NseOptionChainSource)
+    assert isinstance(source._bse, BseOptionChainSource)
