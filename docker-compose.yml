@@ -3,6 +3,7 @@ name: quantstack
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: quantstack
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quantstack}
@@ -20,6 +21,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
     healthcheck:
@@ -32,6 +34,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
+    restart: unless-stopped
     env_file:
       - path: .env
         required: false
