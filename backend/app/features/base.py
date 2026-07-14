@@ -6,6 +6,7 @@ load raw candles -> calculate -> quality check -> store (online + offline)
 pure calculation; everything else lives here.
 """
 
+import asyncio
 import math
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
@@ -134,7 +135,20 @@ class BaseFeatureEngine:
         if reference is not None:
             benchmark = await self._load_candles(reference, timeframe)
 
-        series = self._compute(candles, benchmark)
+        # Offloaded to a worker thread: _compute() is synchronous, pure-Python
+        # numerical work (rolling z-scores etc., see normalize.py) that can
+        # run into real CPU cost at production data volume -- found live
+        # (2026-07-14) via py-spy: VolatilityFeatureEngine's scheduled run_all()
+        # was caught blocking the single asyncio event loop inside
+        # statistics.pstdev() for seconds at a time, stalling every other
+        # concurrent request (including unrelated ones like
+        # /prediction/candidates) for the duration, regardless of how well
+        # database/connection-pool-side performance was tuned. Same fix
+        # already applied to EnsemblePredictionEngine.train() for the
+        # identical class of bug (IRR Critical #1) -- this is the shared
+        # base class every one of the 16 feature engines runs through, so
+        # fixing it here fixes it everywhere at once.
+        series = await asyncio.to_thread(self._compute, candles, benchmark)
         return await self._process_series(
             symbol, timeframe, [c.ts for c in candles], series, full=full
         )
