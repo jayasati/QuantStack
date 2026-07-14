@@ -12,7 +12,13 @@ COPY configs configs
 COPY scripts/start-backend.sh scripts/start-backend.sh
 RUN chmod +x scripts/start-backend.sh && pip install --no-cache-dir ./backend
 
-RUN groupadd --system quantstack && useradd --system --gid quantstack --home /repo quantstack \
+# Fixed UID/GID (not left to useradd's auto-assignment) so the host side of
+# the ./data bind mount can be chowned to a known, stable value -- chown -R
+# here only affects files baked into the image; /repo/data is overlaid by a
+# bind mount at runtime, so its host-side ownership is what actually governs
+# write access, and that has to be pinned to match.
+RUN groupadd --system --gid 10001 quantstack \
+    && useradd --system --uid 10001 --gid quantstack --home /repo quantstack \
     && chown -R quantstack:quantstack /repo
 USER quantstack
 
