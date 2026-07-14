@@ -28,6 +28,10 @@ dependencies = [
     # Random Forest, Extra Trees, Logistic Regression.
     "scikit-learn>=1.4",
     "numpy>=1.26",
+    # Feature Store offline archival sink (app/features/store.py._write_parquet,
+    # Volume 3 Chapter 4's "Parquet, PostgreSQL" pair). Postgres remains the
+    # sole read path; this is a best-effort export destination only.
+    "pyarrow>=17.0",
 ]
 
 [project.optional-dependencies]

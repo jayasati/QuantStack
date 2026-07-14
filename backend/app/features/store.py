@@ -2,11 +2,25 @@
 
 Offline store: PostgreSQL feature_store table, one row per feature observation,
 idempotent upserts keyed on (feature_name, feature_version, symbol, timeframe, ts).
+This remains the sole READ path (latest/history/latest_ts_map all query
+Postgres) -- every consumer (HistoricalReplayEngine, EnsemblePredictionEngine's
+training join, FeatureSelectionEngine, FeatureQualityEngine, FeatureDriftEngine)
+depends on it working exactly as it always has.
+
+Parquet archival: a second, best-effort WRITE-ONLY sink under
+data/feature_store_parquet/ (Chapter 4's "Parquet, PostgreSQL" pair) -- an
+export destination, not a query path. Failures here degrade gracefully and
+never block the Postgres/Redis writes, same as a storage failure never blocks
+event publishing elsewhere in this codebase (collectors/pipeline.py).
+
 Online store: Redis (via CacheService), latest value of every feature per
 symbol/timeframe for fast live-model lookup. Redis outages degrade gracefully —
 the offline store remains the source of truth.
 """
 
+import asyncio
+import time
+import uuid
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -16,6 +30,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.cache import CacheService
+from app.core.config import REPO_ROOT
 from app.core.logging import get_logger
 from app.database.tables import FeatureStoreRow
 from app.features.schema import FeatureValue
@@ -25,10 +40,54 @@ logger = get_logger(__name__)
 SessionFactory = Callable[[], AsyncSession] | async_sessionmaker[AsyncSession]
 
 _UPSERT_CHUNK = 500
+PARQUET_ROOT = REPO_ROOT / "data" / "feature_store_parquet"
 
 
 def _online_key(symbol: str, timeframe: str) -> str:
     return f"features:{symbol}:{timeframe}"
+
+
+def _write_parquet_sync(values: list[FeatureValue]) -> None:
+    """Synchronous, blocking Parquet write -- always called via
+    asyncio.to_thread, never directly on the event loop. pyarrow is imported
+    lazily (same pattern as FinBertSentimentProvider's lazy transformers/torch
+    import) so every process that imports this module doesn't pay pyarrow's
+    import cost unless a write actually happens.
+
+    Layout: Hive-style partitions by symbol/timeframe, one small immutable
+    "part file" per write() call (Parquet has no native row-level upsert;
+    real systems like Spark/Delta write exactly this way -- compacting many
+    small part files is a separate, later concern, not needed for a v1
+    archival sink).
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    groups: dict[tuple[str, str], list[FeatureValue]] = {}
+    for v in values:
+        groups.setdefault((v.symbol, v.timeframe), []).append(v)
+
+    part_name = f"part-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}.parquet"
+    for (symbol, timeframe), group in groups.items():
+        partition_dir = PARQUET_ROOT / f"symbol={symbol}" / f"timeframe={timeframe}"
+        partition_dir.mkdir(parents=True, exist_ok=True)
+        # symbol/timeframe are deliberately NOT repeated as stored columns --
+        # they're already fully recoverable from the Hive partition path
+        # above. Storing them again would conflict with any partition-aware
+        # reader (pyarrow.dataset/pandas/Spark all infer partition columns
+        # from the path and error on a duplicate, differently-typed column
+        # of the same name inside the file).
+        table = pa.Table.from_pylist([
+            {
+                "feature_name": v.feature_name,
+                "feature_version": v.feature_version,
+                "ts": v.ts,
+                "value": v.value,
+                "window": v.window,
+            }
+            for v in group
+        ])
+        pq.write_table(table, partition_dir / part_name)
 
 
 class FeatureStore:
@@ -45,6 +104,7 @@ class FeatureStore:
     async def write(self, values: list[FeatureValue]) -> dict[str, int]:
         offline = await self._write_offline(values)
         online = await self._write_online(values)
+        await self._write_parquet(values)
         return {"offline_rows": offline, "online_entries": online}
 
     async def _write_offline(self, values: list[FeatureValue]) -> int:
@@ -76,6 +136,23 @@ class FeatureStore:
                 )
             await session.commit()
         return len(rows)
+
+    async def _write_parquet(self, values: list[FeatureValue]) -> None:
+        """Best-effort archival write (Chapter 4's "Parquet, PostgreSQL"
+        pair) -- write-only, never a read source. Never raises: a Parquet
+        hiccup must never block the Postgres/Redis writes above, same as a
+        storage failure never blocks event publishing in
+        collectors/pipeline.py. Blocking pyarrow file I/O is offloaded to a
+        thread so it never runs on the event loop directly."""
+        if not values:
+            return
+        try:
+            await asyncio.to_thread(_write_parquet_sync, values)
+        except Exception as exc:
+            logger.error(
+                "parquet archival write failed",
+                extra={"error": str(exc), "rows": len(values)},
+            )
 
     async def _write_online(self, values: list[FeatureValue]) -> int:
         """Publish the latest observation of every feature to Redis.
