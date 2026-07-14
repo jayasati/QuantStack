@@ -92,7 +92,7 @@ class FeatureSnapshotEngine:
         self._bus = bus
         self.store = FeatureStore(session_factory=session_factory, cache=cache)
         self._report_engine = MarketStateReportEngine(
-            session_factory=session_factory, settings=self._settings, bus=bus,
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
 
     async def capture(
