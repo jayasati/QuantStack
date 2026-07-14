@@ -197,8 +197,24 @@ class FeatureStore:
         if self._sessions is None:
             return {}
         async with self._sessions() as session:
+            # Selects only the 4 columns actually used below, not the full
+            # ORM entity -- found live (2026-07-14) via py-spy: materializing
+            # up to 5000 full FeatureStoreRow objects per call (identity-map
+            # registration, instrumentation, the works) for a query that
+            # only ever reads feature_name/value/feature_version/ts before
+            # discarding each row into a plain dict was itself the dominant
+            # cost of a "slow" request, independent of query execution time
+            # (confirmed via pg_stat_activity showing Postgres idle while
+            # this ran) -- SQLAlchemy ORM row hydration is not free, and this
+            # hot path (every latest_values() call, from every intelligence
+            # engine) never needed ORM identity/mutability semantics at all.
             result = await session.execute(
-                select(FeatureStoreRow)
+                select(
+                    FeatureStoreRow.feature_name,
+                    FeatureStoreRow.value,
+                    FeatureStoreRow.feature_version,
+                    FeatureStoreRow.ts,
+                )
                 .where(
                     FeatureStoreRow.symbol == symbol,
                     FeatureStoreRow.timeframe == timeframe,
@@ -206,7 +222,7 @@ class FeatureStore:
                 .order_by(desc(FeatureStoreRow.ts))
                 .limit(5000)
             )
-            rows = result.scalars().all()
+            rows = result.all()
         payload: dict[str, Any] = {}
         for row in rows:  # rows are ts-descending: first hit per feature is the latest
             if row.feature_name not in payload:
@@ -228,7 +244,17 @@ class FeatureStore:
     ) -> list[dict[str, Any]]:
         if self._sessions is None:
             return []
-        query = select(FeatureStoreRow).where(FeatureStoreRow.feature_name == feature_name)
+        # Same fix as latest() above: select only the columns the dict
+        # comprehension below actually reads, not the full ORM entity.
+        query = select(
+            FeatureStoreRow.feature_name,
+            FeatureStoreRow.feature_version,
+            FeatureStoreRow.symbol,
+            FeatureStoreRow.timeframe,
+            FeatureStoreRow.ts,
+            FeatureStoreRow.value,
+            FeatureStoreRow.window_size,
+        ).where(FeatureStoreRow.feature_name == feature_name)
         if symbol is not None:
             query = query.where(FeatureStoreRow.symbol == symbol)
         if timeframe is not None:
@@ -237,7 +263,7 @@ class FeatureStore:
             query = query.where(FeatureStoreRow.feature_version == version)
         query = query.order_by(desc(FeatureStoreRow.ts)).offset(offset).limit(limit)
         async with self._sessions() as session:
-            rows = (await session.execute(query)).scalars().all()
+            rows = (await session.execute(query)).all()
         return [
             {
                 "feature_name": row.feature_name,
