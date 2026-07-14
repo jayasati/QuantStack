@@ -30,9 +30,21 @@ def make_client() -> TestClient:
     return TestClient(app)
 
 
-def test_current_market_state() -> None:
+def test_current_market_state_is_a_pure_read() -> None:
+    """GET /state/{symbol} no longer generates a report as a side effect
+    (that was the same GET-mutation smell flagged for Volume 5) -- with
+    nothing ever persisted (session_factory=None), it honestly 404s rather
+    than silently computing and returning a fresh one."""
     client = make_client()
     response = client.get("/intelligence/state/NIFTY")
+    assert response.status_code == 404
+
+
+def test_generate_market_state_via_post() -> None:
+    """POST /state/{symbol}/generate is the mutating counterpart -- this is
+    where report generation actually happens now."""
+    client = make_client()
+    response = client.post("/intelligence/state/NIFTY/generate")
     assert response.status_code == 200
     body = response.json()
     assert body["symbol"] == "NIFTY"

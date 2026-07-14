@@ -49,6 +49,7 @@ from app.core.logging import get_logger
 from app.events.bus import Event, EventBus
 from app.intelligence.base import IntelligenceResult
 from app.intelligence.events import EventIntelligenceEngine
+from app.intelligence.explain import ExplainabilityStore
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
 from app.intelligence.regime import BayesianRegimeDetector
 from app.intelligence.relative import RelativeStrengthIntelligenceEngine
@@ -90,6 +91,12 @@ class OpportunityCandidate:
     triggers: list[TriggerReason] = field(default_factory=list)
     priority_score: float = 0.0
     market_confidence: float | None = None
+    # The most recently persisted Composite Market Intelligence Score
+    # (Ch18) -- a genuine read of that report rather than a redundant
+    # live recompute (composite_intelligence_sweep, main.py, keeps this
+    # fresh independently of any single detect() call).
+    composite_score: float | None = None
+    composite_confidence: float | None = None
     # Transient: the live IntelligenceResults this candidate was triggered
     # from, kept in-memory only (not part of to_dict()/persistence) so
     # CandidateGenerationEngine (Prompt 5.2) can build Direction/Regime off
@@ -112,6 +119,8 @@ class OpportunityCandidate:
             ],
             "priority_score": round(self.priority_score, 4),
             "market_confidence": self.market_confidence,
+            "composite_score": self.composite_score,
+            "composite_confidence": self.composite_confidence,
         }
 
 
@@ -227,6 +236,7 @@ class OpportunityDetectionEngine:
         regime_detector: BayesianRegimeDetector | None = None,
         regime_transition_engine: RegimeTransitionEngine | None = None,
         report_engine: MarketStateReportEngine | None = None,
+        explainability_store: ExplainabilityStore | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
@@ -258,6 +268,9 @@ class OpportunityDetectionEngine:
         self._report_engine = report_engine or MarketStateReportEngine(
             session_factory=session_factory, settings=self._settings, bus=bus,
         )
+        self._explainability = explainability_store or ExplainabilityStore(
+            session_factory=session_factory, settings=self._settings, bus=bus,
+        )
 
     async def detect(self, symbol: str) -> OpportunityCandidate | None:
         async def safe(coro: Any) -> IntelligenceResult | None:
@@ -270,10 +283,11 @@ class OpportunityDetectionEngine:
                 )
                 return None
 
-        # A separate task (not folded into the gather below) so its float |
-        # None return doesn't collapse the tuple's per-position typing to a
+        # Separate tasks (not folded into the gather below) so their float |
+        # None returns don't collapse the tuple's per-position typing to a
         # union across every element.
         confidence_task = asyncio.ensure_future(self._market_confidence(symbol))
+        composite_task = asyncio.ensure_future(self._composite_context(symbol))
 
         trend, structure, flow, relative, volatility, events = await asyncio.gather(
             safe(self._trend.assess(symbol=symbol)),
@@ -284,6 +298,7 @@ class OpportunityDetectionEngine:
             safe(self._events.assess()),
         )
         confidence_report = await confidence_task
+        composite_score, composite_confidence = await composite_task
 
         trend_transition = None
         structure_transition = None
@@ -318,6 +333,8 @@ class OpportunityDetectionEngine:
             triggers=triggers,
             priority_score=priority_score(triggers),
             market_confidence=confidence_report,
+            composite_score=composite_score,
+            composite_confidence=composite_confidence,
             component_results=component_results,
         )
         await self._persist(candidate)
@@ -330,6 +347,21 @@ class OpportunityDetectionEngine:
         if not latest:
             return None
         return (latest.get("market_confidence") or {}).get("score")
+
+    async def _composite_context(self, symbol: str) -> tuple[float | None, float | None]:
+        """Read the most recently PERSISTED Composite Market Intelligence
+        Score (main.py's composite_intelligence_sweep keeps this fresh on
+        its own schedule) rather than calling CompositeMarketIntelligenceEngine
+        directly here -- this candidate already computes 6 of Composite's 11
+        components itself for trigger evaluation; a second live recompute of
+        the other 5 just to read one aggregate score would be exactly the
+        redundant-computation pattern this fix exists to avoid."""
+        if self._sessions is None:
+            return None, None
+        record = await self._explainability.latest("composite_market_intelligence", symbol, "D")
+        if not record:
+            return None, None
+        return record.get("score"), record.get("confidence")
 
     async def scan(self) -> list[OpportunityCandidate]:
         """Every watchlist symbol, concurrently, sorted by priority descending."""

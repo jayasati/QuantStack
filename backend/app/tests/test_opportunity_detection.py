@@ -158,3 +158,36 @@ async def test_scan_runs_cleanly_against_a_db_less_container() -> None:
 async def test_recent_returns_empty_list_without_a_session_factory() -> None:
     engine = OpportunityDetectionEngine(session_factory=None)
     assert await engine.recent("NIFTY") == []
+
+
+class StubExplainability:
+    def __init__(self, record):
+        self._record = record
+
+    async def latest(self, component, symbol, timeframe):
+        assert component == "composite_market_intelligence"
+        return self._record
+
+
+async def test_composite_context_reads_the_persisted_composite_score() -> None:
+    """Reads via ExplainabilityStore (populated by main.py's scheduled
+    composite_intelligence_sweep) rather than calling
+    CompositeMarketIntelligenceEngine directly -- the whole point of this
+    fix is NOT recomputing a 6th/7th time per detect() call."""
+    engine = OpportunityDetectionEngine(
+        session_factory=lambda: None,
+        explainability_store=StubExplainability({"score": 72.5, "confidence": 0.8}),
+    )
+    score, confidence = await engine._composite_context("NIFTY")
+    assert score == 72.5
+    assert confidence == 0.8
+
+
+async def test_composite_context_is_honestly_none_without_a_persisted_record() -> None:
+    engine = OpportunityDetectionEngine(
+        session_factory=lambda: None,
+        explainability_store=StubExplainability(None),
+    )
+    score, confidence = await engine._composite_context("NIFTY")
+    assert score is None
+    assert confidence is None

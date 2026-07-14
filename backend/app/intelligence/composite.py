@@ -1,20 +1,21 @@
 """Composite Market Intelligence Engine (Volume 4, Prompt 4.14).
 
 "One of the most important outputs of the entire platform" per the docs:
-aggregates all eleven other components (the original ten Volume 4 components
-plus Options, added later once OptionsIntelligenceEngine closed the gap
-between the options feature columns and this synthesis layer) into a single
+aggregates all twelve other components (the original ten Volume 4 components
+plus Options and Momentum, added later once their own engines closed the
+gaps between raw feature columns and this synthesis layer) into a single
 Market State read. The biggest orchestration in this layer — calls every
 other engine concurrently and degrades gracefully if any one of them fails,
 since a top-level synthesis component should never go down because one
 ingredient did.
 
-Seven of the eleven inputs are directional (50-centered, bull/bear, same
+Eight of the twelve inputs are directional (50-centered, bull/bear, same
 convention as Trend Intelligence): Trend, Breadth, Macro, Sector,
-Institutional Flow, Market Structure, Options. Four are magnitude-only
-(0-100, not directional): Volatility, Liquidity, Correlation, Event Risk —
-and among those, Liquidity is "higher = safer" while the other three are
-"higher = riskier", which matters for how they fold into Stability vs. Risk.
+Institutional Flow, Market Structure, Options, Momentum. Four are
+magnitude-only (0-100, not directional): Volatility, Liquidity, Correlation,
+Event Risk — and among those, Liquidity is "higher = safer" while the other
+three are "higher = riskier", which matters for how they fold into
+Stability vs. Risk.
 
 - IntelligenceResult.score      -> Overall Market Intelligence Score
                                     (50-centered, mean of the six
@@ -44,6 +45,7 @@ from statistics import fmean
 
 from app.core.cache import CacheService
 from app.core.config import Settings
+from app.core.logging import get_logger
 from app.events.bus import EventBus
 from app.intelligence.base import (
     Contribution,
@@ -58,17 +60,23 @@ from app.intelligence.correlation import CorrelationIntelligenceEngine
 from app.intelligence.events import EventIntelligenceEngine
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
 from app.intelligence.liquidity import LiquidityIntelligenceEngine
+from app.intelligence.explain import ExplainabilityStore
 from app.intelligence.macro import MacroIntelligenceEngine
+from app.intelligence.momentum import MomentumIntelligenceEngine
 from app.intelligence.options import OptionsIntelligenceEngine
+from app.intelligence.regime import BayesianRegimeDetector
 from app.intelligence.sector import SectorIntelligenceEngine
 from app.intelligence.structure import MarketStructureIntelligenceEngine
 from app.intelligence.trend import TrendIntelligenceEngine
 from app.intelligence.volatility import VolatilityIntelligenceEngine
 
+logger = get_logger(__name__)
+
 COMPONENT = "composite_market_intelligence"
 
 DIRECTIONAL_COMPONENTS: tuple[str, ...] = (
     "trend", "breadth", "macro", "sector", "institutional_flow", "market_structure", "options",
+    "momentum",
 )
 MAGNITUDE_COMPONENTS: tuple[str, ...] = ("volatility", "liquidity", "correlation", "event_risk")
 ALL_COMPONENTS: tuple[str, ...] = DIRECTIONAL_COMPONENTS + MAGNITUDE_COMPONENTS
@@ -194,6 +202,9 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
         market_structure_engine: MarketStructureIntelligenceEngine | None = None,
         event_engine: EventIntelligenceEngine | None = None,
         options_engine: OptionsIntelligenceEngine | None = None,
+        momentum_engine: MomentumIntelligenceEngine | None = None,
+        regime_detector: BayesianRegimeDetector | None = None,
+        explainability_store: ExplainabilityStore | None = None,
     ) -> None:
         super().__init__(session_factory=session_factory, cache=cache, settings=settings, bus=bus)
         self._trend = trend_engine or TrendIntelligenceEngine(
@@ -229,6 +240,15 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
         self._options = options_engine or OptionsIntelligenceEngine(
             session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
+        self._momentum = momentum_engine or MomentumIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
+        )
+        self._regime_detector = regime_detector or BayesianRegimeDetector(
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
+        )
+        self._explainability = explainability_store or ExplainabilityStore(
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
+        )
 
     async def assess(self, symbol: str | None = None) -> IntelligenceResult:
         symbol = symbol or self._settings.feature_benchmark_symbol
@@ -241,7 +261,7 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
 
         (
             trend, volatility, breadth, liquidity, macro,
-            sector, flow, correlation, structure, events, options,
+            sector, flow, correlation, structure, events, options, momentum,
         ) = await asyncio.gather(
             safe(self._trend.assess(symbol=symbol)),
             safe(self._volatility.assess(symbol=symbol)),
@@ -254,6 +274,7 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
             safe(self._market_structure.assess(symbol=symbol)),
             safe(self._events.assess()),
             safe(self._options.assess(symbol=symbol)),
+            safe(self._momentum.assess(symbol=symbol)),
         )
 
         component_results: dict[str, IntelligenceResult | None] = {
@@ -268,8 +289,39 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
             "market_structure": structure,
             "event_risk": events,
             "options": options,
+            "momentum": momentum,
         }
         result = assess_composite(component_results)
         result.metrics["symbol"] = symbol
         await self._publish_assessment(symbol, result)
+
+        # Feed every present component's own reading into the shared
+        # Bayesian regime detector (Ch15) -- previously only trend/
+        # market_structure were ever fed, exclusively from
+        # prediction/opportunity.py. Composite already computes all 11
+        # components on every assess() call, so this is the natural place
+        # to extend regime-belief tracking to the rest without any new
+        # engine calls. Record each component's own explainability record
+        # too (Ch16) -- ExplainabilityStore existed but had zero production
+        # callers; this is the natural place for that as well, since every
+        # component's full IntelligenceResult (contributions/reasoning) is
+        # already in hand here.
+        for name, component_result in component_results.items():
+            if component_result is None:
+                continue
+            try:
+                await self._regime_detector.update_from_result(
+                    name, symbol, "D", component_result
+                )
+            except Exception:
+                logger.debug("regime belief update failed", extra={"component": name})
+            try:
+                await self._explainability.record(name, symbol, "D", component_result)
+            except Exception:
+                logger.debug("explainability record failed", extra={"component": name})
+        try:
+            await self._explainability.record(self.name, symbol, "D", result)
+        except Exception:
+            logger.debug("explainability record failed", extra={"component": self.name})
+
         return result

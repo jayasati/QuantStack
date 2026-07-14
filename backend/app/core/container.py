@@ -69,9 +69,12 @@ def wire_default_services() -> None:
     from app.intelligence.confidence import MarketConfidenceEngine
     from app.intelligence.correlation import CorrelationIntelligenceEngine
     from app.intelligence.events import EventIntelligenceEngine
+    from app.intelligence.explain import ExplainabilityStore
     from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
     from app.intelligence.liquidity import LiquidityIntelligenceEngine
     from app.intelligence.macro import MacroIntelligenceEngine
+    from app.intelligence.momentum import MomentumIntelligenceEngine
+    from app.intelligence.options import OptionsIntelligenceEngine
     from app.intelligence.regime import BayesianRegimeDetector
     from app.intelligence.relative import RelativeStrengthIntelligenceEngine
     from app.intelligence.report import MarketStateReportEngine
@@ -336,6 +339,7 @@ def wire_default_services() -> None:
         RegimeTransitionEngine,
         lambda: RegimeTransitionEngine(
             session_factory=get_session_factory(), bus=container.resolve(EventBus),
+            alerts=container.resolve(AlertService),
         ),
     )
     container.register(
@@ -375,6 +379,30 @@ def wire_default_services() -> None:
         ),
     )
     container.register(
+        OptionsIntelligenceEngine,
+        lambda: OptionsIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
+    )
+    container.register(
+        MomentumIntelligenceEngine,
+        lambda: MomentumIntelligenceEngine(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
+    )
+    container.register(
+        ExplainabilityStore,
+        lambda: ExplainabilityStore(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
+    )
+    container.register(
+        BayesianRegimeDetector,
+        lambda: BayesianRegimeDetector(
+            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+        ),
+    )
+    container.register(
         CompositeMarketIntelligenceEngine,
         lambda: CompositeMarketIntelligenceEngine(
             session_factory=get_session_factory(),
@@ -389,12 +417,10 @@ def wire_default_services() -> None:
             correlation_engine=container.resolve(CorrelationIntelligenceEngine),
             market_structure_engine=container.resolve(MarketStructureIntelligenceEngine),
             event_engine=container.resolve(EventIntelligenceEngine),
-        ),
-    )
-    container.register(
-        BayesianRegimeDetector,
-        lambda: BayesianRegimeDetector(
-            session_factory=get_session_factory(), bus=container.resolve(EventBus),
+            options_engine=container.resolve(OptionsIntelligenceEngine),
+            momentum_engine=container.resolve(MomentumIntelligenceEngine),
+            regime_detector=container.resolve(BayesianRegimeDetector),
+            explainability_store=container.resolve(ExplainabilityStore),
         ),
     )
     container.register(
@@ -411,6 +437,7 @@ def wire_default_services() -> None:
             regime_detector=container.resolve(BayesianRegimeDetector),
             regime_transition_engine=container.resolve(RegimeTransitionEngine),
             report_engine=container.resolve(MarketStateReportEngine),
+            explainability_store=container.resolve(ExplainabilityStore),
         ),
     )
     container.register(
@@ -514,6 +541,7 @@ def wire_default_services() -> None:
             relative_strength_engine=container.resolve(RelativeStrengthIntelligenceEngine),
             agreement_engine=container.resolve(ModelAgreementEngine),
             candidate_engine=container.resolve(CandidateGenerationEngine),
+            options_engine=container.resolve(OptionsIntelligenceEngine),
         ),
     )
     container.register(

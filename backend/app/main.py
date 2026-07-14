@@ -31,6 +31,7 @@ from app.features.structure import MarketStructureEngine
 from app.features.timefeat import TimeFeatureEngine
 from app.features.volatility import VolatilityFeatureEngine
 from app.features.volume import VolumeFeatureEngine
+from app.intelligence.composite import CompositeMarketIntelligenceEngine
 from app.intelligence.report import MarketStateReportEngine
 from app.market.broker import BrokerInterface
 from app.prediction.candidates import CandidateGenerationEngine
@@ -140,6 +141,37 @@ async def lifespan(app: FastAPI):
         trigger="interval",
         seconds=settings.market_intelligence_interval,
         id="intelligence.market_state_sweep",
+        replace_existing=True,
+    )
+
+    # CompositeMarketIntelligenceEngine had no scheduled cycle at all --
+    # reachable only on-demand via GET /intelligence/composite/{symbol}.
+    # Scheduling it here also feeds the Bayesian regime detector (Ch15) for
+    # every one of its 11 components and records each one's explainability
+    # (Ch16) -- see CompositeMarketIntelligenceEngine.assess() -- neither of
+    # which happens as a side effect of market_intelligence_sweep above
+    # (that calls MarketStateReportEngine.generate(), which reuses the pure
+    # assess_composite() function directly rather than this engine).
+    composite_engine = container.resolve(CompositeMarketIntelligenceEngine)
+
+    async def composite_intelligence_sweep() -> None:
+        """Regenerate the Composite Market Intelligence Score for every
+        watchlist symbol, feeding regime beliefs and explainability records
+        for all 11 components along the way."""
+        for symbol in settings.watchlist:
+            try:
+                await composite_engine.assess(symbol)
+            except Exception as exc:
+                logger.error(
+                    "composite intelligence sweep failed",
+                    extra={"symbol": symbol, "error": str(exc)},
+                )
+
+    scheduler.add_job(
+        composite_intelligence_sweep,
+        trigger="interval",
+        seconds=settings.market_intelligence_interval,
+        id="intelligence.composite_sweep",
         replace_existing=True,
     )
 

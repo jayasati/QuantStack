@@ -27,6 +27,7 @@ Two signals from the recent belief window drive everything:
 
 from collections.abc import Mapping, Sequence
 
+from app.core.alerts import AlertService, AlertSeverity
 from app.intelligence.base import (
     Contribution,
     IntelligenceComponent,
@@ -176,6 +177,10 @@ def assess_regime_transition(
 class RegimeTransitionEngine(IntelligenceComponent):
     name = "regime_transition_engine"
 
+    def __init__(self, *args, alerts: AlertService | None = None, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._alerts = alerts
+
     async def assess(
         self,
         component: str = "trend",
@@ -203,4 +208,21 @@ class RegimeTransitionEngine(IntelligenceComponent):
                 "as_of": result.as_of.isoformat(),
             },
         )
+        if result.metrics.get("alert") and self._alerts is not None:
+            # Previously this only set a metric flag consumed internally by
+            # prediction/opportunity.py as a trigger reason, and published to
+            # an EventBus topic with zero subscribers -- a regime transition
+            # never actually reached a human. AlertService.fire() already
+            # fans out to every configured sink (log, EventBus, Telegram if
+            # configured) and tolerates any sink failing.
+            try:
+                await self._alerts.fire(
+                    source=self.name,
+                    severity=AlertSeverity.WARNING,
+                    message=str(result.metrics.get("alert_message") or "regime transition detected"),
+                    component=component, symbol=symbol, timeframe=timeframe,
+                    transition_probability=result.metrics.get("transition_probability"),
+                )
+            except Exception:
+                pass  # an alert must never break the caller's own assess() flow
         return result

@@ -28,7 +28,27 @@ def _parse_as_of(as_of: str) -> datetime:
 
 @router.get("/state/{symbol}")
 async def current_market_state(symbol: str) -> dict:
-    """Current Market State: generates (and persists) a fresh Market State Report."""
+    """Current Market State: the most recently PERSISTED report -- a pure
+    read, same as /state/{symbol}/history. Previously this GET generated
+    (and persisted) a fresh report on every call, the same GET-mutation
+    smell flagged for Volume 5's API -- see POST /state/{symbol}/generate
+    for the mutating path. Reports are kept fresh independently by
+    main.py's scheduled market_intelligence_sweep (every
+    market_intelligence_interval seconds for every watchlist symbol), so a
+    pure read here will almost always be recent."""
+    engine = container.resolve(MarketStateReportEngine)
+    report = await engine.report_as_of(symbol, datetime.now(UTC))
+    if report is None:
+        raise HTTPException(status_code=404, detail=f"no report yet for {symbol}")
+    return report
+
+
+@router.post("/state/{symbol}/generate")
+async def generate_market_state(symbol: str) -> dict:
+    """Generates and persists a fresh Market State Report on demand --
+    the mutating counterpart to the pure-read GET /state/{symbol} above.
+    Same POST-for-mutation convention as the Feature API (Volume 3,
+    Chapter 26)."""
     engine = container.resolve(MarketStateReportEngine)
     report = await engine.generate(symbol)
     return report.to_dict()

@@ -5,6 +5,14 @@ from app.intelligence.regime import BayesianRegimeDetector
 from app.intelligence.transitions import RegimeTransitionEngine, assess_regime_transition
 
 
+class StubAlertService:
+    def __init__(self) -> None:
+        self.fired: list[dict] = []
+
+    async def fire(self, source, severity, message, **context):
+        self.fired.append({"source": source, "severity": severity, "message": message, **context})
+
+
 def test_slope_increasing_series_is_positive() -> None:
     assert slope([1.0, 2.0, 3.0, 4.0]) == pytest.approx(1.0)
 
@@ -107,6 +115,42 @@ async def test_engine_wires_target_component_symbol_timeframe(monkeypatch) -> No
     assert result.metrics["symbol"] == "NIFTY"
     assert result.metrics["timeframe"] == "D"
     assert result.metrics["alert"] is True
+
+
+async def test_engine_routes_alert_through_alert_service(monkeypatch) -> None:
+    """Previously an alert only set a metric flag consumed internally by
+    opportunity.py and published to an EventBus topic with zero
+    subscribers -- it never reached AlertService, so it never reached a
+    human. This confirms the wiring actually calls .fire()."""
+
+    async def fake_history(self, component, symbol, timeframe, limit=20):
+        return [{"bull": 0.9 - 0.03 * i, "bear": 0.1 + 0.03 * i} for i in range(10)]
+
+    monkeypatch.setattr(BayesianRegimeDetector, "history", fake_history)
+
+    alerts = StubAlertService()
+    engine = RegimeTransitionEngine(alerts=alerts)
+    result = await engine.assess(component="trend", symbol="NIFTY", timeframe="D")
+
+    assert result.metrics["alert"] is True
+    assert len(alerts.fired) == 1
+    assert alerts.fired[0]["source"] == "regime_transition_engine"
+    assert alerts.fired[0]["symbol"] == "NIFTY"
+    assert alerts.fired[0]["component"] == "trend"
+
+
+async def test_engine_without_alert_service_does_not_raise(monkeypatch) -> None:
+    """alerts=None (the default) must still work -- same graceful-degrade
+    convention as every other optional dependency in this codebase."""
+
+    async def fake_history(self, component, symbol, timeframe, limit=20):
+        return [{"bull": 0.9 - 0.03 * i, "bear": 0.1 + 0.03 * i} for i in range(10)]
+
+    monkeypatch.setattr(BayesianRegimeDetector, "history", fake_history)
+
+    engine = RegimeTransitionEngine()  # alerts defaults to None
+    result = await engine.assess(component="trend", symbol="NIFTY", timeframe="D")
+    assert result.metrics["alert"] is True  # must not raise despite no alert sink
 
 
 async def test_engine_defaults_to_trend_and_benchmark_symbol(monkeypatch) -> None:

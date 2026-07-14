@@ -1,18 +1,82 @@
 import pytest
 
 from app.intelligence.base import IntelligenceResult
-from app.intelligence.composite import ALL_COMPONENTS, assess_composite
+from app.intelligence.composite import ALL_COMPONENTS, CompositeMarketIntelligenceEngine, assess_composite
 
 
 def fake(score: float, confidence: float = 0.7) -> IntelligenceResult:
-    return IntelligenceResult(component="fake", score=score, confidence=confidence, states={})
+    return IntelligenceResult(
+        component="fake", score=score, confidence=confidence,
+        states={"bullish": 0.6, "bearish": 0.4},
+    )
+
+
+class StubSubEngine:
+    """Minimal stand-in for any of the 11 sub-engines -- assess() accepts
+    either no args or symbol=/timeframe= kwargs, matching every real
+    engine's own assess() signature variance."""
+
+    def __init__(self, result: IntelligenceResult) -> None:
+        self._result = result
+
+    async def assess(self, *args, **kwargs) -> IntelligenceResult:
+        return self._result
+
+
+class StubRegimeDetector:
+    def __init__(self) -> None:
+        self.fed: list[tuple[str, str, str]] = []
+
+    async def update_from_result(
+        self, component: str, symbol: str, timeframe: str, result: IntelligenceResult
+    ) -> None:
+        self.fed.append((component, symbol, timeframe))
+
+
+class StubExplainabilityStore:
+    def __init__(self) -> None:
+        self.recorded: list[tuple[str, str, str]] = []
+
+    async def record(
+        self, component: str, symbol: str, timeframe: str, result: IntelligenceResult
+    ) -> None:
+        self.recorded.append((component, symbol, timeframe))
+
+
+def make_engine(regime_detector: StubRegimeDetector, explainability: StubExplainabilityStore):
+    stub = StubSubEngine(fake(65.0))
+    return CompositeMarketIntelligenceEngine(
+        trend_engine=stub, volatility_engine=stub, breadth_engine=stub,
+        liquidity_engine=stub, macro_engine=stub, sector_engine=stub,
+        institutional_flow_engine=stub, correlation_engine=stub,
+        market_structure_engine=stub, event_engine=stub, options_engine=stub,
+        momentum_engine=stub,
+        regime_detector=regime_detector, explainability_store=explainability,
+    )
+
+
+async def test_assess_feeds_regime_detector_for_every_present_component() -> None:
+    regime_detector = StubRegimeDetector()
+    engine = make_engine(regime_detector, StubExplainabilityStore())
+    await engine.assess(symbol="NIFTY")
+    fed_components = {c for c, _, _ in regime_detector.fed}
+    assert fed_components == set(ALL_COMPONENTS)
+    assert all(symbol == "NIFTY" and timeframe == "D" for _, symbol, timeframe in regime_detector.fed)
+
+
+async def test_assess_records_explainability_for_every_component_plus_itself() -> None:
+    explainability = StubExplainabilityStore()
+    engine = make_engine(StubRegimeDetector(), explainability)
+    await engine.assess(symbol="NIFTY")
+    recorded_components = {c for c, _, _ in explainability.recorded}
+    assert recorded_components == set(ALL_COMPONENTS) | {"composite_market_intelligence"}
 
 
 def bullish_calm_universe(**overrides) -> dict[str, IntelligenceResult]:
     results = {
         "trend": fake(80.0), "breadth": fake(80.0), "macro": fake(80.0),
         "sector": fake(80.0), "institutional_flow": fake(80.0), "market_structure": fake(80.0),
-        "options": fake(80.0),
+        "options": fake(80.0), "momentum": fake(80.0),
         "volatility": fake(20.0), "liquidity": fake(80.0),
         "correlation": fake(20.0), "event_risk": fake(10.0),
     }
@@ -24,7 +88,7 @@ def bearish_stressed_universe(**overrides) -> dict[str, IntelligenceResult]:
     results = {
         "trend": fake(20.0), "breadth": fake(20.0), "macro": fake(20.0),
         "sector": fake(20.0), "institutional_flow": fake(20.0), "market_structure": fake(20.0),
-        "options": fake(20.0),
+        "options": fake(20.0), "momentum": fake(20.0),
         "volatility": fake(80.0), "liquidity": fake(20.0),
         "correlation": fake(80.0), "event_risk": fake(80.0),
     }
@@ -84,7 +148,7 @@ def test_missing_components_reduce_data_completeness_and_confidence() -> None:
     del partial["correlation"]
     full = assess_composite(bullish_calm_universe())
     result = assess_composite(partial)
-    assert result.metrics["components_present"] == 9
+    assert result.metrics["components_present"] == 10
     assert result.confidence < full.confidence
 
 
