@@ -86,6 +86,23 @@ LEVEL_ANCHORS: dict[str, float] = {
 }
 LEVEL_BAND = 0.3
 
+# Tolerance for "unchanged" when deciding whether to re-feed the regime
+# detector -- states are deterministic pure-function outputs of the same
+# underlying features, so an unchanged input reproduces bit-identical
+# floats; this only needs to be loose enough to not misfire on that.
+_STATES_UNCHANGED_EPSILON = 1e-9
+
+
+def _states_changed(previous: dict[str, float] | None, current: Mapping[str, float]) -> bool:
+    """True if `current` is materially different from `previous` (or there
+    is no previous reading yet, in which case it's always "changed" -- the
+    first feed always happens)."""
+    if previous is None:
+        return True
+    if set(previous) != set(current):
+        return True
+    return any(abs(previous[k] - current[k]) > _STATES_UNCHANGED_EPSILON for k in current)
+
 
 def _level_weights(level: float) -> dict[str, float]:
     return {
@@ -249,6 +266,10 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
         self._explainability = explainability_store or ExplainabilityStore(
             session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
+        # In-memory only (see assess()'s regime-feed dedup) -- resets on
+        # process restart, which is fine: a fresh process re-feeding once
+        # after restart is correct, not a leak to guard against.
+        self._last_fed_states: dict[tuple[str, str, str], dict[str, float]] = {}
 
     async def assess(self, symbol: str | None = None) -> IntelligenceResult:
         symbol = symbol or self._settings.feature_benchmark_symbol
@@ -306,15 +327,37 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
         # callers; this is the natural place for that as well, since every
         # component's full IntelligenceResult (contributions/reasoning) is
         # already in hand here.
+        #
+        # Skip the regime feed when a component's states are unchanged since
+        # the last feed for that (component, symbol) -- found live in
+        # production: this sweep runs every market_intelligence_interval
+        # (a few minutes), far more often than slower-moving dimensions'
+        # underlying data actually refreshes (trend reads "D"-timeframe
+        # price momentum, which only updates once/day; institutional_flow's
+        # FII/DII figures are effectively daily too). Feeding the identical
+        # likelihood every cycle doesn't just waste a write -- bayesian_update
+        # increments observation_count on every call regardless of whether
+        # the evidence is new, so BayesianRegimeDetector's maturity/confidence
+        # was inflating from repetition, not from genuinely new observations
+        # (confirmed: trend/NIFTY reached observation_count=117 in one
+        # session, 117 consecutive byte-identical states dicts). Explainability
+        # recording is left un-deduped -- it's an audit log of every computed
+        # score, not a belief-accumulation mechanism, so a redundant record
+        # there is harmless.
         for name, component_result in component_results.items():
             if component_result is None:
                 continue
-            try:
-                await self._regime_detector.update_from_result(
-                    name, symbol, "D", component_result
-                )
-            except Exception:
-                logger.debug("regime belief update failed", extra={"component": name})
+            key = (name, symbol, "D")
+            if _states_changed(self._last_fed_states.get(key), component_result.states):
+                try:
+                    await self._regime_detector.update_from_result(
+                        name, symbol, "D", component_result
+                    )
+                    self._last_fed_states[key] = dict(component_result.states)
+                except Exception:
+                    logger.debug("regime belief update failed", extra={"component": name})
+            # Not gated by the dedup check above -- always runs, even when
+            # the regime feed was skipped as unchanged.
             try:
                 await self._explainability.record(name, symbol, "D", component_result)
             except Exception:

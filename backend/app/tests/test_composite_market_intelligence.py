@@ -64,6 +64,74 @@ async def test_assess_feeds_regime_detector_for_every_present_component() -> Non
     assert all(symbol == "NIFTY" and timeframe == "D" for _, symbol, timeframe in regime_detector.fed)
 
 
+class MutableStubSubEngine:
+    """Like StubSubEngine, but its result can be swapped between assess()
+    calls -- needed to test the dedup logic, which compares consecutive
+    reads rather than a single fixed one."""
+
+    def __init__(self, result: IntelligenceResult) -> None:
+        self.result = result
+
+    async def assess(self, *args, **kwargs) -> IntelligenceResult:
+        return self.result
+
+
+def make_engine_with_distinct_stubs(regime_detector, explainability):
+    """One independent stub per component (unlike make_engine's shared
+    single stub) so changing one component's result doesn't affect the
+    others -- needed to prove dedup is per-component, not global."""
+    stubs = {name: MutableStubSubEngine(fake(65.0)) for name in ALL_COMPONENTS}
+    engine = CompositeMarketIntelligenceEngine(
+        trend_engine=stubs["trend"], volatility_engine=stubs["volatility"],
+        breadth_engine=stubs["breadth"], liquidity_engine=stubs["liquidity"],
+        macro_engine=stubs["macro"], sector_engine=stubs["sector"],
+        institutional_flow_engine=stubs["institutional_flow"],
+        correlation_engine=stubs["correlation"],
+        market_structure_engine=stubs["market_structure"],
+        event_engine=stubs["event_risk"], options_engine=stubs["options"],
+        momentum_engine=stubs["momentum"],
+        regime_detector=regime_detector, explainability_store=explainability,
+    )
+    return engine, stubs
+
+
+async def test_assess_does_not_refeed_unchanged_states_on_second_call() -> None:
+    """The actual bug found live in production: composite_intelligence_sweep
+    runs far more often than slower dimensions' underlying data changes,
+    so feeding the identical states every cycle inflated
+    BayesianRegimeDetector's observation_count/maturity from repetition,
+    not genuinely new evidence (confirmed: trend/NIFTY reached
+    observation_count=117 from 117 byte-identical states dicts)."""
+    regime_detector = StubRegimeDetector()
+    engine, _ = make_engine_with_distinct_stubs(regime_detector, StubExplainabilityStore())
+    await engine.assess(symbol="NIFTY")
+    await engine.assess(symbol="NIFTY")  # identical stub results both times
+    assert len(regime_detector.fed) == len(ALL_COMPONENTS)  # not 2x
+
+
+async def test_assess_refeeds_only_the_component_whose_states_actually_changed() -> None:
+    regime_detector = StubRegimeDetector()
+    engine, stubs = make_engine_with_distinct_stubs(regime_detector, StubExplainabilityStore())
+    await engine.assess(symbol="NIFTY")
+    stubs["trend"].result = IntelligenceResult(
+        component="fake", score=30.0, confidence=0.7, states={"bullish": 0.1, "bearish": 0.9},
+    )
+    await engine.assess(symbol="NIFTY")
+    fed_second_round = [c for c, _, _ in regime_detector.fed[len(ALL_COMPONENTS):]]
+    assert fed_second_round == ["trend"]
+
+
+async def test_assess_still_records_explainability_even_when_states_unchanged() -> None:
+    """Explainability is an audit log of every computed score, not a
+    belief-accumulation mechanism -- unlike the regime feed, it must NOT
+    be deduped."""
+    explainability = StubExplainabilityStore()
+    engine, _ = make_engine_with_distinct_stubs(StubRegimeDetector(), explainability)
+    await engine.assess(symbol="NIFTY")
+    await engine.assess(symbol="NIFTY")
+    assert len(explainability.recorded) == 2 * (len(ALL_COMPONENTS) + 1)  # +1 for composite's own record
+
+
 async def test_assess_records_explainability_for_every_component_plus_itself() -> None:
     explainability = StubExplainabilityStore()
     engine = make_engine(StubRegimeDetector(), explainability)
