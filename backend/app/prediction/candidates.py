@@ -261,13 +261,25 @@ class CandidateGenerationEngine:
         opportunities = await self._detector.scan()  # already sorted by priority_score desc
         top = opportunities[:MAX_CANDIDATES]
 
+        # breadth/macro/sector/correlation are market-wide (no symbol
+        # argument) -- fetched once here rather than once per candidate
+        # inside each capture()'s report generation.
+        market_wide = await self._snapshots.market_wide_context()
+
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_SNAPSHOT_CAPTURES)
 
-        async def bounded_capture(symbol: str):
+        async def bounded_capture(opportunity: OpportunityCandidate):
             async with semaphore:
-                return await self._snapshots.capture(symbol)
+                # opportunity.component_results (trend/market_structure/
+                # institutional_flow/volatility/events/trend_transition)
+                # already carries this exact symbol's live results forward
+                # from detect() -- merged with the market-wide fetch above,
+                # capture()'s report generation reuses everything instead
+                # of recomputing it (perf-audit-2026-07-14).
+                precomputed = {**market_wide, **opportunity.component_results}
+                return await self._snapshots.capture(opportunity.symbol, precomputed=precomputed)
 
-        snapshots = await asyncio.gather(*(bounded_capture(o.symbol) for o in top))
+        snapshots = await asyncio.gather(*(bounded_capture(o) for o in top))
         candidates = [
             generate_candidate(opportunity, rank, snapshot.snapshot_id)
             for rank, (opportunity, snapshot) in enumerate(zip(top, snapshots, strict=True), start=1)

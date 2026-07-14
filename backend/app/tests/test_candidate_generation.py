@@ -210,7 +210,10 @@ class _ConcurrencyTrackingSnapshotEngine:
         self.in_flight = 0
         self.max_observed = 0
 
-    async def capture(self, symbol: str):
+    async def market_wide_context(self):
+        return {}
+
+    async def capture(self, symbol: str, precomputed=None):
         self.in_flight += 1
         self.max_observed = max(self.max_observed, self.in_flight)
         try:

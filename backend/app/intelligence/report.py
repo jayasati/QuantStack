@@ -11,14 +11,22 @@ strings — persisted with a timestamp for historical replay.
 Reuses assess_composite() (the pure function from Prompt 4.14) directly on
 the same fetched component results, rather than calling
 CompositeMarketIntelligenceEngine and re-fetching all ten components a
-second time. Market Confidence and Historical Analogs are fetched
-alongside as two more concurrent calls — Market Confidence's own internal
-orchestration (Regime Transition, Breadth, Institutional Flow, Correlation)
-means some of those four get computed twice per report. That's an
-accepted v1 redundancy: every component here is a cheap Feature Store
-read, and this runs on a periodic evaluation cycle, not a hot path —
-threading pre-computed results through would be premature optimization for
-a report that just needs to be *right*, not fast.
+second time.
+
+`generate()` accepts an optional `precomputed` mapping so a caller that
+already ran some of these components this request (OpportunityDetectionEngine
+.detect(), or this engine's own `market_wide_context()`) can pass them
+straight through instead of this engine re-running them. That used to be
+an "accepted v1 redundancy" on the theory that this only ran on a periodic
+evaluation cycle, not a hot path — which stopped being true the day
+`FeatureSnapshotEngine.capture()` put `generate()` directly in the
+`/prediction/candidates` request path (perf-audit-2026-07-14): breadth,
+macro, sector, institutional_flow, events and correlation take no symbol
+argument, so their answer is identical across every symbol in a request,
+and Market Confidence's own internal orchestration (Regime Transition,
+Breadth, Institutional Flow, Correlation) was recomputing four of them a
+second time on top of that. Market Confidence's `assess()` now takes those
+same results as keyword arguments instead.
 
 Contribution-level explainability (features, weights, per-score reasoning
 chains) is deliberately NOT embedded here — that's Prompt 4.16's job. This
@@ -209,8 +217,14 @@ class MarketStateReportEngine(IntelligenceComponent):
             session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
 
-    async def generate(self, symbol: str | None = None) -> MarketStateReport:
+    async def generate(
+        self,
+        symbol: str | None = None,
+        *,
+        precomputed: Mapping[str, IntelligenceResult | None] | None = None,
+    ) -> MarketStateReport:
         symbol = symbol or self._settings.feature_benchmark_symbol
+        precomputed = precomputed or {}
 
         async def safe(coro):
             try:
@@ -218,23 +232,42 @@ class MarketStateReportEngine(IntelligenceComponent):
             except Exception:
                 return None
 
+        async def reuse_or_fetch(key, factory):
+            if key in precomputed:
+                return precomputed[key]
+            return await safe(factory())
+
+        # analogs doesn't depend on anything fetched below, so it runs
+        # concurrently rather than joining the sequential confidence step.
+        analogs_task = asyncio.ensure_future(safe(self._analogs.assess(symbol=symbol)))
+
         (
             trend, volatility, breadth, liquidity, macro, sector, flow,
-            correlation, structure, events, confidence, analogs,
+            correlation, structure, events,
         ) = await asyncio.gather(
-            safe(self._trend.assess(symbol=symbol)),
-            safe(self._volatility.assess(symbol=symbol)),
-            safe(self._breadth.assess()),
+            reuse_or_fetch("trend", lambda: self._trend.assess(symbol=symbol)),
+            reuse_or_fetch("volatility", lambda: self._volatility.assess(symbol=symbol)),
+            reuse_or_fetch("breadth", lambda: self._breadth.assess()),
             safe(self._liquidity.assess(symbol=symbol)),
-            safe(self._macro.assess()),
-            safe(self._sector.assess()),
-            safe(self._institutional_flow.assess()),
-            safe(self._correlation.assess()),
-            safe(self._market_structure.assess(symbol=symbol)),
-            safe(self._events.assess()),
-            safe(self._confidence.assess(symbol=symbol)),
-            safe(self._analogs.assess(symbol=symbol)),
+            reuse_or_fetch("macro", lambda: self._macro.assess()),
+            reuse_or_fetch("sector", lambda: self._sector.assess()),
+            reuse_or_fetch("institutional_flow", lambda: self._institutional_flow.assess()),
+            reuse_or_fetch("correlation", lambda: self._correlation.assess()),
+            reuse_or_fetch("market_structure", lambda: self._market_structure.assess(symbol=symbol)),
+            reuse_or_fetch("events", lambda: self._events.assess()),
         )
+
+        # Feed the results just fetched/reused straight into Market
+        # Confidence instead of letting it re-run breadth/flow/correlation/
+        # regime-transition itself -- see this module's docstring.
+        confidence = await safe(self._confidence.assess(
+            symbol=symbol,
+            regime_transition=precomputed.get("trend_transition"),
+            breadth=breadth,
+            institutional_flow=flow,
+            correlation=correlation,
+        ))
+        analogs = await analogs_task
 
         component_results: dict[str, IntelligenceResult | None] = {
             "trend": trend,
@@ -263,6 +296,27 @@ class MarketStateReportEngine(IntelligenceComponent):
             },
         )
         return report
+
+    async def market_wide_context(self) -> dict[str, IntelligenceResult | None]:
+        """Breadth/macro/sector/correlation take no symbol argument, so
+        their answer is identical for every symbol in a request. A caller
+        generating reports for several symbols (CandidateGenerationEngine)
+        should call this once and pass the result into `generate()` as part
+        of `precomputed` for every symbol, instead of each `generate()` call
+        re-fetching all four itself."""
+        async def safe(coro):
+            try:
+                return await coro
+            except Exception:
+                return None
+
+        breadth, macro, sector, correlation = await asyncio.gather(
+            safe(self._breadth.assess()),
+            safe(self._macro.assess()),
+            safe(self._sector.assess()),
+            safe(self._correlation.assess()),
+        )
+        return {"breadth": breadth, "macro": macro, "sector": sector, "correlation": correlation}
 
     async def _persist(self, report: MarketStateReport) -> None:
         if self._sessions is None:

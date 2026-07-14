@@ -187,20 +187,35 @@ class MarketConfidenceEngine(IntelligenceComponent):
             session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
 
-    async def assess(self, symbol: str | None = None) -> IntelligenceResult:
+    async def assess(
+        self,
+        symbol: str | None = None,
+        *,
+        regime_transition: IntelligenceResult | None = None,
+        breadth: IntelligenceResult | None = None,
+        institutional_flow: IntelligenceResult | None = None,
+        correlation: IntelligenceResult | None = None,
+    ) -> IntelligenceResult:
+        """The four keyword-only results (regime_transition/breadth/
+        institutional_flow/correlation) let a caller that already computed
+        them this request (MarketStateReportEngine.generate(), which shares
+        one market-wide fetch across every symbol) pass them straight
+        through instead of this engine re-running all four itself -- these
+        used to be the single most duplicated engine calls in the
+        `/prediction/candidates` request path (perf-audit-2026-07-14)."""
         symbol = symbol or self._settings.feature_benchmark_symbol
 
         data_quality = await self._data_quality()
         feature_quality = await self._feature_quality()
 
-        regime = await self._regime_transitions.assess(symbol=symbol)
+        regime = regime_transition or await self._regime_transitions.assess(symbol=symbol)
         regime_certainty = clamp(1 - regime.score / 100, 0.0, 1.0)
 
-        breadth = await self._breadth.assess()
+        breadth = breadth or await self._breadth.assess()
 
-        flow = await self._institutional_flow.assess()
+        flow = institutional_flow or await self._institutional_flow.assess()
 
-        correlation = await self._correlation.assess()
+        correlation = correlation or await self._correlation.assess()
         correlation_stability = correlation.metrics.get("correlation_stability")
 
         inputs: dict[str, float | None] = {

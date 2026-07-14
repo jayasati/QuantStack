@@ -32,6 +32,7 @@ Field sourcing (no field here is invented; each traces to a real store):
 """
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -40,6 +41,7 @@ from app.core.cache import CacheService
 from app.core.config import Settings, get_settings
 from app.events.bus import Event, EventBus
 from app.features.store import FeatureStore
+from app.intelligence.base import IntelligenceResult
 from app.intelligence.report import MarketStateReportEngine
 
 EVENT_TYPE = "feature_snapshot.captured"
@@ -93,9 +95,20 @@ class FeatureSnapshotEngine:
             session_factory=session_factory, settings=self._settings, bus=bus,
         )
 
-    async def capture(self, symbol: str, timeframe: str = "D") -> FeatureSnapshot:
+    async def capture(
+        self,
+        symbol: str,
+        timeframe: str = "D",
+        *,
+        precomputed: Mapping[str, IntelligenceResult | None] | None = None,
+    ) -> FeatureSnapshot:
         """Freeze every feature value/version, the market report, current
-        regime, and collector versions for `symbol` right now."""
+        regime, and collector versions for `symbol` right now.
+
+        `precomputed` (e.g. an OpportunityCandidate.component_results, merged
+        with this engine's own `market_wide_context()`) is forwarded to
+        MarketStateReportEngine.generate() so it doesn't recompute
+        components the caller already has -- see report.py's docstring."""
         latest = await self.store.latest(symbol, timeframe)
         feature_values: dict[str, float] = {}
         feature_versions: dict[str, str] = {}
@@ -105,7 +118,7 @@ class FeatureSnapshotEngine:
             feature_values[name] = entry["value"]
             feature_versions[name] = entry.get("version") or "v1"
 
-        report = await self._report_engine.generate(symbol)
+        report = await self._report_engine.generate(symbol, precomputed=precomputed)
         collector_versions = await self._collector_versions()
 
         snapshot = FeatureSnapshot(
@@ -121,6 +134,14 @@ class FeatureSnapshotEngine:
         )
         await self._persist(snapshot)
         return snapshot
+
+    async def market_wide_context(self) -> dict[str, IntelligenceResult | None]:
+        """Passthrough to the internal report engine's one-time market-wide
+        fetch (breadth/macro/sector/correlation) -- a caller capturing
+        snapshots for several symbols in one request should call this once
+        and pass the result into every `capture(..., precomputed=...)` call
+        rather than letting each one re-fetch these independently."""
+        return await self._report_engine.market_wide_context()
 
     async def _collector_versions(self) -> dict[str, str]:
         if self._sessions is None:

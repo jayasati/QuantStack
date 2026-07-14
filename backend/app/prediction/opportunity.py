@@ -272,7 +272,17 @@ class OpportunityDetectionEngine:
             session_factory=session_factory, settings=self._settings, bus=bus,
         )
 
-    async def detect(self, symbol: str) -> OpportunityCandidate | None:
+    async def detect(
+        self,
+        symbol: str,
+        *,
+        institutional_flow: IntelligenceResult | None = None,
+        events: IntelligenceResult | None = None,
+    ) -> OpportunityCandidate | None:
+        """`institutional_flow`/`events` are market-wide (no symbol
+        argument), so their answer is identical for every symbol in a scan.
+        `scan()` computes them once and passes them in here; a standalone
+        caller that omits them gets the old per-call behavior."""
         async def safe(coro: Any) -> IntelligenceResult | None:
             try:
                 return await coro
@@ -283,6 +293,11 @@ class OpportunityDetectionEngine:
                 )
                 return None
 
+        async def reuse_or_fetch(value, factory):
+            if value is not None:
+                return value
+            return await safe(factory())
+
         # Separate tasks (not folded into the gather below) so their float |
         # None returns don't collapse the tuple's per-position typing to a
         # union across every element.
@@ -292,10 +307,10 @@ class OpportunityDetectionEngine:
         trend, structure, flow, relative, volatility, events = await asyncio.gather(
             safe(self._trend.assess(symbol=symbol)),
             safe(self._market_structure.assess(symbol=symbol)),
-            safe(self._institutional_flow.assess()),
+            reuse_or_fetch(institutional_flow, self._institutional_flow.assess),
             safe(self._relative_strength.assess(symbol=symbol)),
             safe(self._volatility.assess(symbol=symbol)),
-            safe(self._events.assess()),
+            reuse_or_fetch(events, self._events.assess),
         )
         confidence_report = await confidence_task
         composite_score, composite_confidence = await composite_task
@@ -364,9 +379,28 @@ class OpportunityDetectionEngine:
         return record.get("score"), record.get("confidence")
 
     async def scan(self) -> list[OpportunityCandidate]:
-        """Every watchlist symbol, concurrently, sorted by priority descending."""
+        """Every watchlist symbol, concurrently, sorted by priority
+        descending. institutional_flow/events are market-wide -- fetched
+        once here rather than once per symbol inside detect()."""
+        async def safe(coro: Any) -> IntelligenceResult | None:
+            try:
+                return await coro
+            except Exception as exc:
+                logger.warning(
+                    "opportunity scan market-wide component failed",
+                    extra={"error": str(exc)},
+                )
+                return None
+
+        institutional_flow, events = await asyncio.gather(
+            safe(self._institutional_flow.assess()),
+            safe(self._events.assess()),
+        )
         results = await asyncio.gather(
-            *(self.detect(symbol) for symbol in self._settings.watchlist)
+            *(
+                self.detect(symbol, institutional_flow=institutional_flow, events=events)
+                for symbol in self._settings.watchlist
+            )
         )
         candidates = [c for c in results if c is not None]
         candidates.sort(key=lambda c: c.priority_score, reverse=True)
