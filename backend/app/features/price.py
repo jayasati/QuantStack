@@ -21,6 +21,7 @@ from datetime import datetime
 from statistics import fmean
 
 from app.features.base import BaseFeatureEngine
+from app.features.normalize import add_normalized_series, normalized_definition
 from app.features.schema import Candle, FeatureDefinition, Series
 
 ENGINE_NAME = "price_feature_engine"
@@ -33,6 +34,7 @@ CATEGORY = "price"
 def price_feature_definitions(
     windows: Sequence[int],
     benchmark_symbol: str,
+    normalization_window: int,
     calculation_frequency: str = "on_schedule",
 ) -> list[FeatureDefinition]:
     def define(name: str, description: str, unit: str,
@@ -98,6 +100,13 @@ def price_feature_definitions(
                    f"over {w} bars.",
                    "ratio", (-1.0, 1.0), ("price_simple_return",), w),
         ])
+    # Prompt 3.13: normalize every feature — each raw feature gets a _z
+    # companion (the same contract volume.py/breadth.py/etc. already follow;
+    # this engine previously stored only raw values, feeding the ML ensemble
+    # unnormalized price_* features).
+    definitions.extend(
+        normalized_definition(d, normalization_window) for d in list(definitions)
+    )
     return definitions
 
 
@@ -107,6 +116,7 @@ def compute_price_features(
     candles: Sequence[Candle],
     benchmark: Sequence[Candle] | None = None,
     windows: Sequence[int] = (5, 10, 20, 50, 100, 200),
+    normalization_window: int = 100,
 ) -> dict[str, Series]:
     """Compute every price feature as a series aligned to `candles`.
 
@@ -217,7 +227,7 @@ def compute_price_features(
             out[f"price_alpha_{w}"] = alpha
             out[f"price_correlation_{w}"] = correlation
 
-    return out
+    return add_normalized_series(out, normalization_window)
 
 
 def _rolling_regression(
@@ -265,10 +275,13 @@ class PriceFeatureEngine(BaseFeatureEngine):
         return price_feature_definitions(
             self.windows,
             self.benchmark_symbol,
+            self._settings.feature_normalization_window,
             calculation_frequency=f"{self._settings.feature_engine_interval}s",
         )
 
     def _compute(
         self, candles: Sequence[Candle], benchmark: Sequence[Candle] | None = None
     ) -> dict[str, Series]:
-        return compute_price_features(candles, benchmark, self.windows)
+        return compute_price_features(
+            candles, benchmark, self.windows, self._settings.feature_normalization_window
+        )

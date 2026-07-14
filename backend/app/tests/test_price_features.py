@@ -131,8 +131,10 @@ def test_cold_start_produces_none_not_values() -> None:
 def test_engine_registers_every_feature_with_metadata() -> None:
     engine = make_engine(feature_windows=[5, 10])
     definitions = engine.registry.list_definitions(category="price")
-    # 6 window-independent + 11 windowed features x 2 windows.
-    assert len(definitions) == 6 + 11 * 2
+    # 6 window-independent + 11 windowed features x 2 windows, each with a
+    # normalized _z companion (Prompt 3.13 -- every raw feature gets one,
+    # matching volume.py/breadth.py/etc.).
+    assert len(definitions) == (6 + 11 * 2) * 2
     for definition in definitions:
         assert definition.version == "v1"
         assert definition.owner == "price_feature_engine"

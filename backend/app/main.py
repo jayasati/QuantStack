@@ -17,8 +17,10 @@ from app.core.logging import get_logger, setup_logging
 from app.database.session import dispose_engine
 from app.features.breadth import BreadthFeatureEngine
 from app.features.events import EventRiskEngine
+from app.features.institutional_flow import InstitutionalFlowFeatureEngine
 from app.features.intraday_risk import IntradayRiskFeatureEngine
 from app.features.liquidity import LiquidityFeatureEngine
+from app.features.macro import MacroFeatureEngine
 from app.features.news import NewsFeatureEngine
 from app.features.options import OptionsFeatureEngine
 from app.features.price import PriceFeatureEngine
@@ -77,6 +79,8 @@ async def lifespan(app: FastAPI):
         container.resolve(TimeFeatureEngine),
         container.resolve(RiskFeatureEngine),
         container.resolve(IntradayRiskFeatureEngine),
+        container.resolve(InstitutionalFlowFeatureEngine),
+        container.resolve(MacroFeatureEngine),
     ]
     for engine in feature_engines:
         try:
