@@ -1,12 +1,27 @@
 import asyncio
 
 import fakeredis.aioredis
+import pytest
 
 from app.core.cache import CacheService
 
 
 def make_cache() -> CacheService:
     return CacheService(client=fakeredis.aioredis.FakeRedis(decode_responses=True))
+
+
+class _BrokenRedisClient:
+    """Stands in for a Redis client whose connection is down -- every
+    method raises the same ConnectionError a real redis-py client would
+    raise when it can't reach the server (IRR-2026-07-11 finding #8: this
+    documented degrade path had never actually been exercised by a test
+    that simulates a real connection failure)."""
+
+    async def get(self, key: str) -> None:
+        raise ConnectionError("redis unavailable")
+
+    async def set(self, *args, **kwargs) -> None:
+        raise ConnectionError("redis unavailable")
 
 
 async def test_set_get_invalidate() -> None:
@@ -67,3 +82,27 @@ async def test_invalidate_prefix() -> None:
     deleted = await cache.invalidate_prefix("quotes:")
     assert deleted == 2
     assert await cache.get("macro:X") == 3
+
+
+# --- Redis outage degrade path (IRR-2026-07-11 finding #8) ------------------
+
+async def test_get_safe_returns_none_on_a_real_connection_failure() -> None:
+    cache = CacheService(client=_BrokenRedisClient())
+    assert await cache.get_safe("quotes:NIFTY") is None
+
+
+async def test_set_safe_returns_false_on_a_real_connection_failure() -> None:
+    cache = CacheService(client=_BrokenRedisClient())
+    assert await cache.set_safe("quotes:NIFTY", {"ltp": 25000}) is False
+
+
+async def test_raw_get_and_set_still_propagate_the_outage() -> None:
+    """The _safe variants are the documented degrade boundary -- the raw
+    get()/set() intentionally still raise, so a caller that actually needs
+    to know Redis is down (rather than silently treating a miss as a
+    cache-empty) isn't lied to."""
+    cache = CacheService(client=_BrokenRedisClient())
+    with pytest.raises(ConnectionError):
+        await cache.get("quotes:NIFTY")
+    with pytest.raises(ConnectionError):
+        await cache.set("quotes:NIFTY", {"ltp": 25000})
