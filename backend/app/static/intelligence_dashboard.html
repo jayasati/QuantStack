@@ -188,6 +188,15 @@ function seqColor(t) {
   return steps[i];
 }
 
+function divergingColor(value, scaleMax) {
+  // signed value (e.g. -20..+20 % momentum) -> blue (negative) <-> gray (0) <-> red (positive)
+  const t = Math.max(-1, Math.min(1, value / scaleMax));
+  if (Math.abs(t) < 0.05) return 'var(--diverging-mid)';
+  return t > 0
+    ? `color-mix(in srgb, var(--diverging-warm) ${Math.round(Math.abs(t) * 100)}%, var(--diverging-mid))`
+    : `color-mix(in srgb, var(--diverging-cool) ${Math.round(Math.abs(t) * 100)}%, var(--diverging-mid))`;
+}
+
 function statusBadge(score) {
   if (score >= 70) return ['good', 'bullish'];
   if (score >= 55) return ['good', 'mild bullish'];
@@ -281,8 +290,11 @@ async function renderRegime(symbol) {
       getJSON(`/intelligence/regime/trend/${symbol}/D?limit=1`),
       getJSON(`/intelligence/regime/market_structure/${symbol}/D?limit=1`),
     ]);
+    // /intelligence/regime/{component}/{symbol}/{timeframe} returns each
+    // history row AS the raw states dict itself (BayesianRegimeDetector.
+    // history() -> list[dict[str, float]]), not wrapped in a "states" key.
     const latestStates = (hist) => (hist.history && hist.history.length
-      ? hist.history[hist.history.length - 1].states : null);
+      ? hist.history[hist.history.length - 1] : null);
     const trendBar = await renderRegimeBar(el, 'trend', latestStates(trend));
     const structBar = await renderRegimeBar(el, 'market_structure', latestStates(structure));
     el.innerHTML = `
@@ -316,19 +328,25 @@ async function renderSector() {
   const el = $('card-sector');
   try {
     const r = await getJSON('/intelligence/sector');
-    const leaders = r.metrics.sector_scores || r.metrics.leaders || {};
-    const entries = Object.entries(leaders);
-    if (!entries.length) { renderEmpty(el, 'no per-sector scores in this reading'); return; }
+    // relative_momentum: {sector_name: momentum_% } -- signed, benchmark-
+    // relative, documented range +/-20% (features/sector.py's own
+    // expected_range for sector_momentum) -- a diverging quantity, not a
+    // 0-100 magnitude, so it gets the diverging blue<->red scale, not the
+    // sequential one.
+    const momentum = r.metrics.relative_momentum || {};
+    const entries = Object.entries(momentum);
+    if (!entries.length) { renderEmpty(el, 'no per-sector momentum in this reading'); return; }
     const cols = Math.min(4, entries.length);
-    const cells = entries.map(([name, score]) => {
-      const t = Math.max(0, Math.min(1, score / 100));
-      return `<div class="heat-cell" style="background:${seqColor(t)}" title="${name}: ${score.toFixed(1)}">
-        ${score.toFixed(0)}</div><div class="heat-label">${name}</div>`;
+    const cells = entries.map(([name, value]) => {
+      const bg = divergingColor(value, 20);
+      return `<div class="heat-cell" style="background:${bg}" title="${name}: ${value.toFixed(2)}%">
+        ${value >= 0 ? '+' : ''}${value.toFixed(1)}</div><div class="heat-label">${name}</div>`;
     }).join('');
     el.innerHTML = `
       <h2>Sector Leadership Heatmap</h2>
-      <div class="sub">Rotation score by sector</div>
-      <div class="heat-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>`;
+      <div class="sub">Relative momentum by sector, % vs. benchmark (blue = lagging, red = leading)</div>
+      <div class="heat-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>
+      <div class="row" style="margin-top:8px">rotation score <b>${(r.metrics.sector_rotation_score ?? 0).toFixed(1)}</b></div>`;
   } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
 }
 
@@ -371,16 +389,19 @@ async function renderFlowTimeline(symbol) {
   try {
     const r = await getJSON(`/intelligence/regime/institutional_flow/${symbol}/D?limit=20`);
     if (!r.history.length) { renderEmpty(el, 'no belief history yet -- fed by the scheduled composite sweep'); return; }
+    // Each row IS the states dict directly (see renderRegime's note) --
+    // not row.states.
     const dominant = r.history.map(row => {
-      const states = row.states || {};
-      const vals = Object.values(states);
+      const vals = Object.values(row || {});
       return vals.length ? Math.max(...vals) * 100 : 50;
     });
+    const latestRow = r.history[r.history.length - 1] || {};
+    const latestDominant = Object.entries(latestRow).sort((a, b) => b[1] - a[1])[0];
     el.innerHTML = `
       <h2>Institutional Flow Timeline</h2>
       <div class="sub">Dominant-belief confidence over ${r.history.length} observations</div>
       ${sparkline(dominant, 'var(--cat-5)')}
-      <div class="row">latest observation count <b>${r.history[r.history.length - 1].observation_count ?? '—'}</b></div>`;
+      <div class="row">current dominant state <b>${latestDominant ? latestDominant[0] : '—'}</b></div>`;
   } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
 }
 
@@ -391,9 +412,9 @@ async function renderTransitions(symbol) {
   try {
     const r = await getJSON(`/intelligence/regime/trend/${symbol}/D?limit=20`);
     if (!r.history.length) { renderEmpty(el, 'no belief history yet'); return; }
+    // Each row IS the states dict directly, same as renderRegime/renderFlowTimeline.
     const stability = r.history.map(row => {
-      const states = row.states || {};
-      const vals = Object.values(states);
+      const vals = Object.values(row || {});
       return vals.length ? Math.max(...vals) * 100 : 50;
     });
     el.innerHTML = `
