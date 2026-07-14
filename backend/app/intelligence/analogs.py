@@ -27,16 +27,27 @@ Of the prompt's four named search methods:
   Euclidean distance over pre-standardized (z-scored) features is the
   diagonal-covariance approximation of Mahalanobis distance — a documented
   simplification, not a silent omission.
-- Dynamic Time Warping compares *sequences*, not single snapshots — it
-  would need the analog unit redefined as a short window/path rather than
-  a point-in-time vector. Deferred as a real v2 upgrade, not implemented
-  here.
+- Dynamic Time Warping compares *sequences*, not single snapshots -- the v2
+  upgrade this docstring used to defer. Implemented now: the analog unit
+  gains a second, optional representation, a trailing DTW_WINDOW-bar path
+  of state vectors ending at each candidate date (not just the single
+  snapshot vector cosine/Euclidean compare), and dtw_distance() finds the
+  cheapest-cost alignment between the current path and each historical
+  path via classic O(n*m) dynamic programming. Unlike cosine/Euclidean, DTW
+  can match two paths that moved similarly but at different local speeds
+  (a slow 10-bar runup vs. a fast 6-bar runup that then paused) --
+  precisely what a point-in-time vector comparison cannot express. Kept
+  fully optional (current_window/historical_windows default to None) so
+  every existing call site/test keeps working unchanged; when omitted, DTW
+  simply doesn't run, the same graceful-degradation convention as a
+  missing feature elsewhere in this engine.
 
-Cosine and Euclidean rankings are computed independently; their top-20
-overlap becomes a genuine confidence signal (do two different distance
-metrics agree on what's similar, or does the answer depend on which one
-you ask?) rather than decorative — this is why both got implemented
-instead of just the one the prompt lists first.
+Cosine, Euclidean, and (when window data is supplied) DTW rankings are
+computed independently; their top-20 overlap becomes a genuine confidence
+signal (do multiple different distance metrics agree on what's similar, or
+does the answer depend on which one you ask?) rather than decorative --
+this is why all three got implemented instead of just the one the prompt
+lists first.
 
 - IntelligenceResult.score      -> bull/bear tilt implied by the analog
                                     set's mean subsequent return
@@ -70,6 +81,11 @@ BENCHMARK_TIMEFRAME = "D"
 TOP_K = 20
 FORWARD_HORIZON_BARS = 20
 HISTORY_LIMIT = 5000
+# Trailing bars per DTW path -- short enough to stay a "local shape" match
+# (the prompt's own framing) rather than drifting into a second, redundant
+# long-horizon trend comparison cosine/Euclidean already do at the
+# snapshot level.
+DTW_WINDOW = 10
 
 STATE_FEATURES: tuple[str, ...] = (
     "price_momentum_20_z",
@@ -100,6 +116,35 @@ def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float | None:
 
 def euclidean_distance(a: Sequence[float], b: Sequence[float]) -> float:
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b, strict=True)))
+
+
+def dtw_distance(path_a: Sequence[Sequence[float]], path_b: Sequence[Sequence[float]]) -> float:
+    """Classic Dynamic Time Warping distance between two paths of
+    same-dimension vectors -- O(n*m) dynamic programming, pure Python (no
+    numpy dependency, same convention as the rest of this codebase's
+    feature/intelligence layer). Local cost between two points on the two
+    paths is Euclidean distance; the DP finds the cheapest-cost alignment
+    that may skip/repeat points on either path to match similarly-shaped
+    but differently-paced moves.
+
+    Unlike cosine/Euclidean over a single point-in-time vector, this can
+    recognize two paths that moved the same way at different local speeds
+    -- exactly what a snapshot comparison structurally cannot express."""
+    n, m = len(path_a), len(path_b)
+    if n == 0 or m == 0:
+        return math.inf
+    # Rolling two-row DP (only the previous row is ever needed) rather than
+    # a full n x m table -- these paths are short (DTW_WINDOW bars) but this
+    # keeps memory flat regardless of window size.
+    previous = [math.inf] * (m + 1)
+    previous[0] = 0.0
+    for i in range(1, n + 1):
+        current = [math.inf] * (m + 1)
+        for j in range(1, m + 1):
+            cost = euclidean_distance(path_a[i - 1], path_b[j - 1])
+            current[j] = cost + min(previous[j], current[j - 1], previous[j - 1])
+        previous = current
+    return previous[m]
 
 
 def path_outcomes(returns: Sequence[float]) -> dict[str, float] | None:
@@ -142,15 +187,21 @@ def assess_historical_analogs(
     historical: Sequence[tuple[str, Sequence[float]]],
     outcomes: Mapping[str, Mapping[str, float]],
     top_k: int = TOP_K,
+    current_window: Sequence[Sequence[float]] | None = None,
+    historical_windows: Mapping[str, Sequence[Sequence[float]]] | None = None,
 ) -> IntelligenceResult:
     """Pure analog search from a current state vector, a pool of (date,
     vector) historical candidates, and each candidate's precomputed
-    forward-looking outcome."""
+    forward-looking outcome. current_window/historical_windows are optional
+    -- when supplied (a trailing DTW_WINDOW-bar path per date), DTW joins
+    cosine/Euclidean as a third independent ranking; when omitted, DTW is
+    skipped entirely and behavior is identical to before it existed."""
     contributions: list[Contribution] = []
     reasoning: list[str] = []
 
     cosine_ranked: list[tuple[str, float]] = []
     euclid_ranked: list[tuple[str, float]] = []
+    dtw_ranked: list[tuple[str, float]] = []
     for date, vector in historical:
         if date not in outcomes:
             continue
@@ -158,11 +209,17 @@ def assess_historical_analogs(
         if cosine is not None:
             cosine_ranked.append((date, cosine))
         euclid_ranked.append((date, euclidean_distance(current_vector, vector)))
+        if current_window is not None and historical_windows is not None:
+            window = historical_windows.get(date)
+            if window is not None:
+                dtw_ranked.append((date, dtw_distance(current_window, window)))
 
     cosine_ranked.sort(key=lambda pair: -pair[1])
     euclid_ranked.sort(key=lambda pair: pair[1])
+    dtw_ranked.sort(key=lambda pair: pair[1])
     cosine_top = cosine_ranked[:top_k]
     euclid_top_dates = {date for date, _ in euclid_ranked[:top_k]}
+    dtw_top_dates = {date for date, _ in dtw_ranked[:top_k]}
 
     analogs = [
         Analog(
@@ -207,11 +264,24 @@ def assess_historical_analogs(
     mean_max_runup = fmean(a.max_runup for a in analogs)
     mean_similarity = fmean(a.similarity for a in analogs)
 
-    method_agreement = len({a.date for a in analogs} & euclid_top_dates) / len(analogs)
+    analog_dates = {a.date for a in analogs}
+    euclidean_overlap = len(analog_dates & euclid_top_dates) / len(analogs)
     contributions.append(Contribution(
-        feature="cosine_vs_euclidean_overlap", value=method_agreement, weight=0.3,
-        effect="methods agree" if method_agreement > 0.5 else "methods diverge",
+        feature="cosine_vs_euclidean_overlap", value=euclidean_overlap, weight=0.3,
+        effect="methods agree" if euclidean_overlap > 0.5 else "methods diverge",
     ))
+    if dtw_ranked:
+        dtw_overlap = len(analog_dates & dtw_top_dates) / len(analogs)
+        contributions.append(Contribution(
+            feature="cosine_vs_dtw_overlap", value=dtw_overlap, weight=0.3,
+            effect="methods agree" if dtw_overlap > 0.5 else "methods diverge",
+        ))
+        # Three independent methods now agreeing is stronger evidence than
+        # two -- average rather than letting either single pairwise overlap
+        # dominate.
+        method_agreement = (euclidean_overlap + dtw_overlap) / 2
+    else:
+        method_agreement = euclidean_overlap
     contributions.append(Contribution(
         feature="mean_analog_similarity", value=mean_similarity, weight=0.3,
         effect="close analogs" if mean_similarity > 0.5 else "distant analogs",
@@ -237,7 +307,8 @@ def assess_historical_analogs(
     dominant = max(states, key=lambda s: states[s])
     reasoning.extend([
         f"{len(analogs)} analogs found (of {len(historical)} candidates searched); "
-        f"mean similarity {mean_similarity:.2f}, method agreement {method_agreement:.0%}.",
+        f"mean similarity {mean_similarity:.2f}, method agreement {method_agreement:.0%}"
+        + (f" (cosine/Euclidean/DTW, 3-way)." if dtw_ranked else " (cosine/Euclidean, 2-way)."),
         f"Win rate {win_rate:.0%}, mean subsequent return {mean_subsequent_return:+.2%} "
         f"over {FORWARD_HORIZON_BARS} bars.",
         f"Dominant state: {dominant}.",
@@ -257,6 +328,7 @@ def assess_historical_analogs(
             "mean_max_runup": round(mean_max_runup, 4),
             "mean_similarity": round(mean_similarity, 4),
             "method_agreement": round(method_agreement, 4),
+            "dtw_used": bool(dtw_ranked),
         },
         contributions=contributions,
         reasoning=reasoning,
@@ -292,9 +364,23 @@ class HistoricalAnalogEngine(IntelligenceComponent):
 
         current_ts = common_ts[-1]
         current_vector = [feature_series[f][current_ts] for f in STATE_FEATURES]
+        common_ts_index = {ts: i for i, ts in enumerate(common_ts)}
+
+        def trailing_window(ts: str) -> Sequence[Sequence[float]] | None:
+            """The DTW_WINDOW-bar path of state vectors ending at (and
+            including) `ts`, or None if fewer than DTW_WINDOW common bars
+            are available yet (too close to the start of history)."""
+            i = common_ts_index[ts]
+            if i + 1 < DTW_WINDOW:
+                return None
+            window_ts = common_ts[i - DTW_WINDOW + 1 : i + 1]
+            return [[feature_series[f][t] for f in STATE_FEATURES] for t in window_ts]
+
+        current_window = trailing_window(current_ts)
 
         historical: list[tuple[str, Sequence[float]]] = []
         outcomes: dict[str, dict[str, float]] = {}
+        historical_windows: dict[str, Sequence[Sequence[float]]] = {}
         for ts in common_ts[:-1]:
             if ts not in returns_by_ts:
                 continue
@@ -308,8 +394,15 @@ class HistoricalAnalogEngine(IntelligenceComponent):
                 continue
             outcomes[ts] = outcome
             historical.append((ts, [feature_series[f][ts] for f in STATE_FEATURES]))
+            window = trailing_window(ts)
+            if window is not None:
+                historical_windows[ts] = window
 
-        result = assess_historical_analogs(current_vector, historical, outcomes)
+        result = assess_historical_analogs(
+            current_vector, historical, outcomes,
+            current_window=current_window if current_window is not None else None,
+            historical_windows=historical_windows or None,
+        )
         result.metrics["symbol"] = symbol
         result.metrics["as_of"] = current_ts
         await self._publish_assessment(symbol, result)
