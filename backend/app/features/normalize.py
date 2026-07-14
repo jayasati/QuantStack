@@ -12,6 +12,7 @@ through :func:`normalize_series`.
 """
 
 import math
+from collections import deque
 from dataclasses import replace
 from statistics import fmean, median, pstdev
 
@@ -37,36 +38,98 @@ def rolling_zscore(series: Series, window: int, min_obs: int | None = None) -> S
 
     Bars with fewer than `min_obs` non-None trailing values, or zero variance,
     stay None (cold start / degenerate distribution).
+
+    O(n) via a sliding sum/sum-of-squares (add the entering bar, subtract the
+    one that just fell out of the window) rather than re-scanning and
+    re-reducing the trailing slice at every index -- the naive version this
+    replaced was O(n*window), which showed up live (2026-07-14, found via
+    py-spy on the production process) as the single largest CPU cost in a
+    "slow" request, independent of any database work. Matches the original's
+    output within ordinary floating-point tolerance -- see
+    test_normalize_rolling_equivalence.py, which compares this against a
+    preserved copy of the original O(n*window) implementation across many
+    randomized series (including None gaps, constant runs, and extreme
+    values) rather than trusting the derivation alone.
     """
     if min_obs is None:
         min_obs = _default_min_obs(window)
     n = len(series)
     out: Series = [None] * n
+    count = 0
+    total = 0.0
+    total_sq = 0.0
     for i in range(n):
+        entering = series[i]
+        if entering is not None:
+            count += 1
+            total += entering
+            total_sq += entering * entering
+        left = i - window
+        if left >= 0:
+            leaving = series[left]
+            if leaving is not None:
+                count -= 1
+                total -= leaving
+                total_sq -= leaving * leaving
+
         value = series[i]
-        if value is None:
+        if value is None or count < min_obs:
             continue
-        trailing = _trailing(series, i, window)
-        if len(trailing) < min_obs:
-            continue
-        std = pstdev(trailing)
-        if std > 0:
-            out[i] = (value - fmean(trailing)) / std
+        mean = total / count
+        variance = total_sq / count - mean * mean
+        if variance <= 0:
+            continue  # degenerate (zero, or a hair negative from float error)
+        std = math.sqrt(variance)
+        out[i] = (value - mean) / std
     return out
 
 
 def rolling_minmax(series: Series, window: int, min_obs: int | None = None) -> Series:
-    """Position of each value between the trailing window's min and max, 0..1."""
+    """Position of each value between the trailing window's min and max, 0..1.
+
+    O(n) amortized via two monotonic deques (classic sliding-window min/max)
+    instead of calling min()/max() over the trailing slice at every index
+    (O(n*window)) -- see rolling_zscore's docstring for why this class of
+    fix matters. Each deque holds (index, value) pairs in an order that
+    keeps the current window's min (resp. max) at the front; a value being
+    pushed pops any deque tail that could never win against it, and a
+    front is dropped once its index falls outside the window. Every index
+    is pushed once and popped at most once, so total work is O(n) despite
+    the window potentially containing many entries.
+    """
     if min_obs is None:
         min_obs = _default_min_obs(window)
-    out: Series = [None] * len(series)
-    for i, value in enumerate(series):
-        if value is None:
+    n = len(series)
+    out: Series = [None] * n
+    count = 0
+    min_deque: deque[tuple[int, float]] = deque()
+    max_deque: deque[tuple[int, float]] = deque()
+
+    for i in range(n):
+        entering = series[i]
+        if entering is not None:
+            count += 1
+            while min_deque and min_deque[-1][1] >= entering:
+                min_deque.pop()
+            min_deque.append((i, entering))
+            while max_deque and max_deque[-1][1] <= entering:
+                max_deque.pop()
+            max_deque.append((i, entering))
+
+        left = i - window
+        if left >= 0:
+            leaving = series[left]
+            if leaving is not None:
+                count -= 1
+            if min_deque and min_deque[0][0] == left:
+                min_deque.popleft()
+            if max_deque and max_deque[0][0] == left:
+                max_deque.popleft()
+
+        value = series[i]
+        if value is None or count < min_obs:
             continue
-        trailing = _trailing(series, i, window)
-        if len(trailing) < min_obs:
-            continue
-        low, high = min(trailing), max(trailing)
+        low, high = min_deque[0][1], max_deque[0][1]
         if high > low:
             out[i] = (value - low) / (high - low)
     return out
@@ -212,25 +275,60 @@ def rolling_correlation(a: Series, b: Series, window: int) -> Series:
 
     None until the window is fully populated in both series, or when either
     side has zero variance.
+
+    O(n) via sliding sums (Sx, Sy, Sxx, Syy, Sxy) over the current window's
+    paired-non-None entries, plus a running count of "gap" positions (where
+    either side is None) -- the original's `len(pairs) < window` check
+    requires a COMPLETELY clean window (unlike rolling_zscore's min_obs,
+    which tolerates partial gaps), so a window is usable exactly when the
+    gap count is 0. See rolling_zscore's docstring for why this class of
+    fix matters, and test_normalize_rolling_equivalence.py for the
+    randomized-input equivalence check against the original O(n*window)
+    implementation this replaced.
     """
     n = min(len(a), len(b))
     out: Series = [None] * n
-    for i in range(window - 1, n):
-        pairs = [
-            (x, y)
-            for x, y in zip(a[i - window + 1 : i + 1], b[i - window + 1 : i + 1], strict=True)
-            if x is not None and y is not None
-        ]
-        if len(pairs) < window:
+    gaps = 0
+    sx = sy = sxx = syy = sxy = 0.0
+
+    def _add(idx: int) -> None:
+        nonlocal gaps, sx, sy, sxx, syy, sxy
+        x, y = a[idx], b[idx]
+        if x is None or y is None:
+            gaps += 1
+        else:
+            sx += x
+            sy += y
+            sxx += x * x
+            syy += y * y
+            sxy += x * y
+
+    def _remove(idx: int) -> None:
+        nonlocal gaps, sx, sy, sxx, syy, sxy
+        x, y = a[idx], b[idx]
+        if x is None or y is None:
+            gaps -= 1
+        else:
+            sx -= x
+            sy -= y
+            sxx -= x * x
+            syy -= y * y
+            sxy -= x * y
+
+    for i in range(n):
+        _add(i)
+        left = i - window
+        if left >= 0:
+            _remove(left)
+
+        if i < window - 1 or gaps > 0:
             continue
-        xs = [p[0] for p in pairs]
-        ys = [p[1] for p in pairs]
-        mean_x, mean_y = fmean(xs), fmean(ys)
-        var_x = fmean([(x - mean_x) ** 2 for x in xs])
-        var_y = fmean([(y - mean_y) ** 2 for y in ys])
+        mean_x, mean_y = sx / window, sy / window
+        var_x = sxx / window - mean_x * mean_x
+        var_y = syy / window - mean_y * mean_y
         if var_x <= 0 or var_y <= 0:
             continue
-        cov = fmean([(x - mean_x) * (y - mean_y) for x, y in pairs])
+        cov = sxy / window - mean_x * mean_y
         # Pearson is mathematically bounded; clamp float overshoot at +/-1.
         out[i] = max(-1.0, min(1.0, cov / (var_x * var_y) ** 0.5))
     return out
