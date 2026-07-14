@@ -1,6 +1,8 @@
 """Tests for the Candidate Generation Engine (Volume 5, Prompt 5.2)."""
 
+import asyncio
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from app.intelligence.base import IntelligenceResult
 from app.prediction.candidates import (
@@ -181,6 +183,67 @@ async def test_generate_caps_at_top_20_and_runs_cleanly_without_a_db() -> None:
     candidates = await engine.generate()
     assert isinstance(candidates, list)
     assert len(candidates) <= 20
+
+
+class _StubDetector:
+    """Returns a fixed batch of opportunities without touching a DB."""
+
+    def __init__(self, n: int) -> None:
+        self._opportunities = [
+            make_opportunity([
+                TriggerReason("trend_shift", "trend.states.transition", 0.5, 0.6),
+            ])
+            for _ in range(n)
+        ]
+
+    async def scan(self):
+        return self._opportunities
+
+
+class _ConcurrencyTrackingSnapshotEngine:
+    """Records how many capture() calls were ever in flight at once --
+    the actual claim under test (MAX_CONCURRENT_SNAPSHOT_CAPTURES), not
+    just wall-clock time, which is too scale-dependent to assert
+    precisely (see test_load_and_performance.py's own notes on this)."""
+
+    def __init__(self) -> None:
+        self.in_flight = 0
+        self.max_observed = 0
+
+    async def capture(self, symbol: str):
+        self.in_flight += 1
+        self.max_observed = max(self.max_observed, self.in_flight)
+        try:
+            await asyncio.sleep(0.01)  # force real overlap between concurrent calls
+            return SimpleNamespace(snapshot_id=f"snap-{symbol}-{self.in_flight}")
+        finally:
+            self.in_flight -= 1
+
+
+async def test_generate_bounds_concurrent_snapshot_captures() -> None:
+    """The actual bug found live (2026-07-14): CandidateGenerationEngine.generate()
+    used to fan out ALL candidates' snapshot captures at once via a bare
+    asyncio.gather. Each capture() internally runs a 12-way intelligence
+    fan-out of its own, so with MAX_CANDIDATES=20 that's up to 240
+    simultaneous DB-touching calls regardless of connection pool size --
+    live-measured to keep /prediction/candidates at ~13-14s even after
+    fixing the sequential-loop bug and adding missing indexes. Fixed with
+    a semaphore capping concurrent captures at
+    MAX_CONCURRENT_SNAPSHOT_CAPTURES; this proves the cap actually holds
+    under real overlapping load, not just that the code compiles."""
+    from app.prediction.candidates import MAX_CONCURRENT_SNAPSHOT_CAPTURES
+
+    detector = _StubDetector(n=10)  # more than MAX_CONCURRENT_SNAPSHOT_CAPTURES
+    snapshots = _ConcurrencyTrackingSnapshotEngine()
+    engine = CandidateGenerationEngine(
+        session_factory=None, detector=detector, snapshot_engine=snapshots,
+    )
+
+    candidates = await engine.generate()
+
+    assert len(candidates) == 10
+    assert snapshots.max_observed <= MAX_CONCURRENT_SNAPSHOT_CAPTURES
+    assert snapshots.max_observed > 1  # still genuinely concurrent, not accidentally serial
 
 
 async def test_recent_returns_empty_list_without_a_session_factory() -> None:

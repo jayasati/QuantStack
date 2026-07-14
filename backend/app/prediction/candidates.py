@@ -38,6 +38,20 @@ logger = get_logger(__name__)
 EVENT_TYPE = "trade_candidate.generated"
 MAX_CANDIDATES = 20
 
+# Bounds how many candidates' FeatureSnapshotEngine.capture() calls run
+# concurrently. Each capture() internally runs MarketStateReportEngine.
+# generate(), itself a 12-way concurrent fan-out across intelligence
+# sub-engines (each doing its own DB reads/writes) -- so unbounded
+# concurrency here scales as MAX_CANDIDATES x 12 (up to 240 simultaneous
+# DB-touching calls), regardless of database_pool_size. Found live
+# (2026-07-14): even after fixing the sequential capture loop (which was
+# a real bug, see generate()'s own note) and adding missing indexes, this
+# unbounded fan-out alone kept /prediction/candidates at ~13-14s against
+# the real production watchlist. A semaphore caps peak concurrent DB
+# pressure independent of how many candidates or how wide the intelligence
+# fan-out grows, which raising the pool size alone can't do.
+MAX_CONCURRENT_SNAPSHOT_CAPTURES = 3
+
 DIRECTION_EPSILON = 0.05  # |signal| below this reads as neutral, matching macro.py's convention
 
 # Directional evidence pulled from the exact fields already verified in
@@ -237,10 +251,23 @@ class CandidateGenerationEngine:
         for just 6 candidates from a 3-symbol watchlist, sequential; see
         test_load_and_performance.py). Ordering is preserved -- gather()
         returns results in the same order as the input coroutines.
+
+        Snapshot captures are bounded by MAX_CONCURRENT_SNAPSHOT_CAPTURES
+        (see its own docstring) -- fully unbounded concurrency here just
+        traded one bottleneck (sequential awaits) for another (each
+        capture's own 12-way intelligence fan-out overwhelming the DB
+        connection pool when all candidates' fan-outs run at once).
         """
         opportunities = await self._detector.scan()  # already sorted by priority_score desc
         top = opportunities[:MAX_CANDIDATES]
-        snapshots = await asyncio.gather(*(self._snapshots.capture(o.symbol) for o in top))
+
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_SNAPSHOT_CAPTURES)
+
+        async def bounded_capture(symbol: str):
+            async with semaphore:
+                return await self._snapshots.capture(symbol)
+
+        snapshots = await asyncio.gather(*(bounded_capture(o.symbol) for o in top))
         candidates = [
             generate_candidate(opportunity, rank, snapshot.snapshot_id)
             for rank, (opportunity, snapshot) in enumerate(zip(top, snapshots, strict=True), start=1)

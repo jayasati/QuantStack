@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     app_name: str = "QuantStack"
     environment: str = "development"
     database_url: str = "postgresql+asyncpg://quantstack:quantstack@localhost:5432/quantstack"
+    # SQLAlchemy's own defaults (pool_size=5, max_overflow=10 -> 15 total)
+    # turned out too small once any single caller fans out widely: e.g.
+    # MarketStateReportEngine.generate() alone concurrently touches 12
+    # intelligence sub-engines, each doing its own reads/writes, so even
+    # ONE such call can briefly want more than 15 connections. Found live
+    # (2026-07-14): CandidateGenerationEngine.generate() running that
+    # report-generation fan-out concurrently for every candidate compounded
+    # this into real connection-pool queuing. Raised as a config knob
+    # (not hardcoded) so it can be tuned without a code change as usage grows.
+    database_pool_size: int = 20
+    database_max_overflow: int = 20
     redis_url: str = "redis://localhost:6379/0"
     log_level: str = "INFO"
     max_retry: int = 3
