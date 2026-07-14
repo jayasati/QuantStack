@@ -4,10 +4,11 @@
 Triple Barrier labels (Prompt 5.5, labeling.py) using a point-in-time join
 against the same raw feature_store names Volume 4's intelligence engines
 already treat as meaningful signal -- trend.py/structure.py/volatility.py/
-relative.py/liquidity.py/breadth.py/institutional_flow.py/events.py -- not
-an arbitrarily invented feature list. The as-of lookup (last observation at
-or before each label's entry_ts) avoids lookahead bias: training never sees
-a feature value from after the trade it's trying to predict.
+relative.py/liquidity.py/breadth.py/institutional_flow.py/events.py/
+options.py -- not an arbitrarily invented feature list. The as-of lookup
+(last observation at or before each label's entry_ts) avoids lookahead
+bias: training never sees a feature value from after the trade it's trying
+to predict.
 
 LightGBM/CatBoost/XGBoost are optional soft dependencies (module-level
 try/except import). If a library isn't installed, that model is simply
@@ -130,6 +131,13 @@ ENSEMBLE_FEATURE_SPECS: tuple[tuple[str, str, str], ...] = (
     ("flow_participation_index", MARKET, "flow"),
     ("event_trading_freeze", MARKET, "events"),
     ("event_expected_volatility", MARKET, "events"),
+    # app/intelligence/options.py (added once OptionsIntelligenceEngine
+    # closed the gap between these columns and this consumer).
+    ("options_pcr", INSTRUMENT, "chain"),
+    ("options_max_pain_distance_pct", INSTRUMENT, "chain"),
+    ("options_iv_rank", INSTRUMENT, "chain"),
+    ("options_gamma_exposure", INSTRUMENT, "chain"),
+    ("options_dealer_positioning", INSTRUMENT, "chain"),
 )
 FEATURE_NAMES: tuple[str, ...] = tuple(spec[0] for spec in ENSEMBLE_FEATURE_SPECS)
 

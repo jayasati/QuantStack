@@ -12,6 +12,7 @@ def bullish_calm_universe(**overrides) -> dict[str, IntelligenceResult]:
     results = {
         "trend": fake(80.0), "breadth": fake(80.0), "macro": fake(80.0),
         "sector": fake(80.0), "institutional_flow": fake(80.0), "market_structure": fake(80.0),
+        "options": fake(80.0),
         "volatility": fake(20.0), "liquidity": fake(80.0),
         "correlation": fake(20.0), "event_risk": fake(10.0),
     }
@@ -23,6 +24,7 @@ def bearish_stressed_universe(**overrides) -> dict[str, IntelligenceResult]:
     results = {
         "trend": fake(20.0), "breadth": fake(20.0), "macro": fake(20.0),
         "sector": fake(20.0), "institutional_flow": fake(20.0), "market_structure": fake(20.0),
+        "options": fake(20.0),
         "volatility": fake(80.0), "liquidity": fake(20.0),
         "correlation": fake(80.0), "event_risk": fake(80.0),
     }
@@ -82,7 +84,7 @@ def test_missing_components_reduce_data_completeness_and_confidence() -> None:
     del partial["correlation"]
     full = assess_composite(bullish_calm_universe())
     result = assess_composite(partial)
-    assert result.metrics["components_present"] == 8
+    assert result.metrics["components_present"] == 9
     assert result.confidence < full.confidence
 
 

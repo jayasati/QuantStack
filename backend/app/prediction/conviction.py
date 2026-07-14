@@ -1,7 +1,9 @@
 """Conviction Engine (Volume 5, Prompt 5.11).
 
 "Instead of a simple Rule 40% / ML 60% split, conviction blends eight
-weighted evidence sources." Every source here is an already-computed,
+weighted evidence sources" -- now nine: Options Positioning was added once
+OptionsIntelligenceEngine closed the gap between the options_* feature
+columns and this consumer. Every source here is an already-computed,
 already-real value from an engine built earlier this volume or in Volume
 4 -- nothing is re-derived a second way:
 
@@ -12,9 +14,15 @@ already-real value from an engine built earlier this volume or in Volume
 | Historical Analog          | 10%   | HistoricalSimilarityEngine (5.9)                 |
 | Institutional Flow         | 10%   | InstitutionalFlowIntelligenceEngine (Vol 4)      |
 | Market Structure           | 10%   | MarketStructureIntelligenceEngine (Vol 4)        |
+| Options Positioning        | 10%   | OptionsIntelligenceEngine (Vol 4)                 |
 | Liquidity                  | 5%    | LiquidityIntelligenceEngine (Vol 4)               |
 | Sector Strength            | 5%    | RelativeStrengthIntelligenceEngine (Vol 4)        |
 | Model Agreement            | 5%    | ModelAgreementEngine (5.8)                        |
+
+(Percentages above are the pre-renormalization weights in EVIDENCE_WEIGHTS,
+same as before -- with nine sources instead of eight they now sum to 110%
+before renormalization; compute_conviction() divides by whatever the actual
+present-sources total is, so this is not a bug.)
 
 "Sector Strength": Volume 4 never built a per-instrument, sector-only
 strength engine -- SectorIntelligenceEngine (sector.py) is a market-wide
@@ -77,6 +85,7 @@ from app.events.bus import Event, EventBus
 from app.intelligence.base import IntelligenceResult, clamp, slope
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
 from app.intelligence.liquidity import LiquidityIntelligenceEngine
+from app.intelligence.options import OptionsIntelligenceEngine
 from app.intelligence.relative import RelativeStrengthIntelligenceEngine
 from app.intelligence.structure import MarketStructureIntelligenceEngine
 from app.prediction.agreement import AgreementResult, ModelAgreementEngine
@@ -99,6 +108,15 @@ EVIDENCE_WEIGHTS: dict[str, float] = {
     "liquidity": 0.05,
     "sector_strength": 0.05,
     "model_agreement": 0.05,
+    # Added once OptionsIntelligenceEngine closed the gap between the
+    # options_* feature columns and this consumer. compute_conviction()
+    # renormalizes over whichever sources are actually present (same
+    # mechanism already used when Historical Analog is dropped for a
+    # candidate with zero analogs), so this doesn't require manually
+    # shrinking another source's documented percentage -- it proportionally
+    # reduces everyone's effective weight, same as any other addition here
+    # would.
+    "options_positioning": 0.10,
 }
 
 SCORE_HISTORY_LIMIT = 20
@@ -155,13 +173,14 @@ def build_evidence(
     liquidity_result: IntelligenceResult,
     relative_result: IntelligenceResult,
     agreement: AgreementResult,
+    options_result: IntelligenceResult,
     direction: str,
 ) -> list[EvidenceContribution]:
-    """Pure assembly of the 8 evidence sources from already-computed
+    """Pure assembly of the 9 evidence sources from already-computed
     upstream results -- no DB access. Historical Analog is OMITTED (not
     included at a fabricated neutral score) when the candidate has zero
     historical analogs, so `compute_conviction` renormalizes over the
-    remaining 7 rather than diluting the score with an invented reading."""
+    remaining 8 rather than diluting the score with an invented reading."""
     evidence = [
         EvidenceContribution(
             name="calibrated_probability",
@@ -195,6 +214,11 @@ def build_evidence(
             name="model_agreement",
             score=agreement.agreement_pct * 100,
             confidence=agreement.model_reliability,
+        ),
+        EvidenceContribution(
+            name="options_positioning",
+            score=directional_score(options_result.score, direction),
+            confidence=options_result.confidence,
         ),
     ]
     if similarity.historical_win_rate is not None:
@@ -316,6 +340,7 @@ class ConvictionEngine:
         relative_strength_engine: RelativeStrengthIntelligenceEngine | None = None,
         agreement_engine: ModelAgreementEngine | None = None,
         candidate_engine: CandidateGenerationEngine | None = None,
+        options_engine: OptionsIntelligenceEngine | None = None,
     ) -> None:
         self._sessions = session_factory
         self._settings = settings or get_settings()
@@ -347,11 +372,14 @@ class ConvictionEngine:
         self._candidates = candidate_engine or CandidateGenerationEngine(
             session_factory=session_factory, settings=self._settings,
         )
+        self._options = options_engine or OptionsIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings,
+        )
 
     async def evaluate(
         self, symbol: str, timeframe: str = "D", direction: str = "long"
     ) -> ConvictionResult:
-        """Fresh reads of all 8 evidence sources, then the conviction
+        """Fresh reads of all 9 evidence sources, then the conviction
         synthesis over them plus this (symbol, direction)'s persisted
         score history."""
         calibrated = await self._calibration.predict(
@@ -366,12 +394,13 @@ class ConvictionEngine:
         liquidity_result = await self._liquidity.assess(symbol)
         relative_result = await self._relative_strength.assess(symbol, timeframe=timeframe)
         agreement = await self._agreement.evaluate(symbol, timeframe=timeframe, direction=direction)
+        options_result = await self._options.assess(symbol)
 
         evidence = build_evidence(
             calibrated=calibrated, context=context, similarity=similarity,
             flow_result=flow_result, structure_result=structure_result,
             liquidity_result=liquidity_result, relative_result=relative_result,
-            agreement=agreement, direction=direction,
+            agreement=agreement, options_result=options_result, direction=direction,
         )
         history = await self._load_score_history(symbol, direction)
         result = assess_conviction(

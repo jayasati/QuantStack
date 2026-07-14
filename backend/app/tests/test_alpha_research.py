@@ -165,8 +165,8 @@ async def test_compare_against_production_without_a_db_is_insufficient_data() ->
     assert result.winner == "insufficient_data"
     assert result.champion_holdout_accuracy is None
     assert result.challenger_holdout_accuracy is None
-    assert result.champion_feature_count == 25
-    assert result.challenger_feature_count == 35
+    assert result.champion_feature_count == 30  # len(ENSEMBLE_FEATURE_SPECS), incl. 5 options_* features
+    assert result.challenger_feature_count == 40  # champion + len(CANDIDATE_FEATURE_SPECS)
 
 
 async def test_feature_leaderboard_without_a_db_is_empty() -> None:

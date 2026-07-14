@@ -73,7 +73,8 @@ def full_evidence(direction: str = "long") -> list[EvidenceContribution]:
         calibrated=make_calibrated(), context=make_context(),
         similarity=make_similarity(), flow_result=make_intel(70.0),
         structure_result=make_intel(65.0), liquidity_result=make_intel(80.0),
-        relative_result=make_intel(60.0), agreement=make_agreement(), direction=direction,
+        relative_result=make_intel(60.0), agreement=make_agreement(),
+        options_result=make_intel(55.0), direction=direction,
     )
 
 
@@ -95,7 +96,7 @@ def test_directional_score_treats_neutral_like_long() -> None:
 # --- build_evidence -----------------------------------------------------
 
 
-def test_build_evidence_includes_all_eight_sources_when_analogs_exist() -> None:
+def test_build_evidence_includes_all_nine_sources_when_analogs_exist() -> None:
     evidence = full_evidence()
     assert {e.name for e in evidence} == set(EVIDENCE_WEIGHTS)
 
@@ -106,16 +107,16 @@ def test_build_evidence_omits_historical_analog_with_zero_analogs() -> None:
         similarity=make_similarity(win_rate=None, mean_similarity=None),
         flow_result=make_intel(70.0), structure_result=make_intel(65.0),
         liquidity_result=make_intel(80.0), relative_result=make_intel(60.0),
-        agreement=make_agreement(), direction="long",
+        agreement=make_agreement(), options_result=make_intel(55.0), direction="long",
     )
     assert "historical_analog" not in {e.name for e in evidence}
-    assert len(evidence) == 7
+    assert len(evidence) == 8
 
 
 def test_build_evidence_mirrors_directional_sources_for_short() -> None:
     long_evidence = {e.name: e.score for e in full_evidence("long")}
     short_evidence = {e.name: e.score for e in full_evidence("short")}
-    for name in ("institutional_flow", "market_structure", "sector_strength"):
+    for name in ("institutional_flow", "market_structure", "sector_strength", "options_positioning"):
         assert short_evidence[name] == pytest.approx(100 - long_evidence[name])
     # Already direction-aware at the source -- untouched by mirroring.
     assert short_evidence["calibrated_probability"] == long_evidence["calibrated_probability"]
@@ -132,7 +133,7 @@ def test_compute_conviction_matches_the_docs_fixed_weights() -> None:
         EVIDENCE_WEIGHTS[e.name] for e in evidence
     )
     assert score == pytest.approx(manual)
-    assert completeness == pytest.approx(1.0)  # all 8 present
+    assert completeness == pytest.approx(1.0)  # all 9 present
 
 
 def test_compute_conviction_renormalizes_when_a_source_is_missing() -> None:
@@ -142,7 +143,7 @@ def test_compute_conviction_renormalizes_when_a_source_is_missing() -> None:
         EVIDENCE_WEIGHTS[e.name] for e in evidence
     )
     assert score == pytest.approx(manual)
-    assert completeness == pytest.approx(7 / 8)
+    assert completeness == pytest.approx(8 / 9, abs=1e-4)  # compute_conviction rounds to 4dp
 
 
 def test_compute_conviction_on_empty_evidence_is_an_honest_neutral() -> None:

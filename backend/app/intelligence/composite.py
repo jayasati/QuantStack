@@ -1,17 +1,19 @@
 """Composite Market Intelligence Engine (Volume 4, Prompt 4.14).
 
 "One of the most important outputs of the entire platform" per the docs:
-aggregates all ten other Volume 4 components into a single Market State
-read. The biggest orchestration in this layer — calls every other engine
-concurrently and degrades gracefully if any one of them fails, since a
-top-level synthesis component should never go down because one ingredient
-did.
+aggregates all eleven other components (the original ten Volume 4 components
+plus Options, added later once OptionsIntelligenceEngine closed the gap
+between the options feature columns and this synthesis layer) into a single
+Market State read. The biggest orchestration in this layer — calls every
+other engine concurrently and degrades gracefully if any one of them fails,
+since a top-level synthesis component should never go down because one
+ingredient did.
 
-Six of the ten inputs are directional (50-centered, bull/bear, same
+Seven of the eleven inputs are directional (50-centered, bull/bear, same
 convention as Trend Intelligence): Trend, Breadth, Macro, Sector,
-Institutional Flow, Market Structure. Four are magnitude-only (0-100, not
-directional): Volatility, Liquidity, Correlation, Event Risk — and among
-those, Liquidity is "higher = safer" while the other three are
+Institutional Flow, Market Structure, Options. Four are magnitude-only
+(0-100, not directional): Volatility, Liquidity, Correlation, Event Risk —
+and among those, Liquidity is "higher = safer" while the other three are
 "higher = riskier", which matters for how they fold into Stability vs. Risk.
 
 - IntelligenceResult.score      -> Overall Market Intelligence Score
@@ -57,6 +59,7 @@ from app.intelligence.events import EventIntelligenceEngine
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
 from app.intelligence.liquidity import LiquidityIntelligenceEngine
 from app.intelligence.macro import MacroIntelligenceEngine
+from app.intelligence.options import OptionsIntelligenceEngine
 from app.intelligence.sector import SectorIntelligenceEngine
 from app.intelligence.structure import MarketStructureIntelligenceEngine
 from app.intelligence.trend import TrendIntelligenceEngine
@@ -65,7 +68,7 @@ from app.intelligence.volatility import VolatilityIntelligenceEngine
 COMPONENT = "composite_market_intelligence"
 
 DIRECTIONAL_COMPONENTS: tuple[str, ...] = (
-    "trend", "breadth", "macro", "sector", "institutional_flow", "market_structure",
+    "trend", "breadth", "macro", "sector", "institutional_flow", "market_structure", "options",
 )
 MAGNITUDE_COMPONENTS: tuple[str, ...] = ("volatility", "liquidity", "correlation", "event_risk")
 ALL_COMPONENTS: tuple[str, ...] = DIRECTIONAL_COMPONENTS + MAGNITUDE_COMPONENTS
@@ -190,6 +193,7 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
         correlation_engine: CorrelationIntelligenceEngine | None = None,
         market_structure_engine: MarketStructureIntelligenceEngine | None = None,
         event_engine: EventIntelligenceEngine | None = None,
+        options_engine: OptionsIntelligenceEngine | None = None,
     ) -> None:
         super().__init__(session_factory=session_factory, cache=cache, settings=settings, bus=bus)
         self._trend = trend_engine or TrendIntelligenceEngine(
@@ -222,6 +226,9 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
         self._events = event_engine or EventIntelligenceEngine(
             session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
         )
+        self._options = options_engine or OptionsIntelligenceEngine(
+            session_factory=session_factory, cache=cache, settings=self._settings, bus=bus,
+        )
 
     async def assess(self, symbol: str | None = None) -> IntelligenceResult:
         symbol = symbol or self._settings.feature_benchmark_symbol
@@ -234,7 +241,7 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
 
         (
             trend, volatility, breadth, liquidity, macro,
-            sector, flow, correlation, structure, events,
+            sector, flow, correlation, structure, events, options,
         ) = await asyncio.gather(
             safe(self._trend.assess(symbol=symbol)),
             safe(self._volatility.assess(symbol=symbol)),
@@ -246,6 +253,7 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
             safe(self._correlation.assess()),
             safe(self._market_structure.assess(symbol=symbol)),
             safe(self._events.assess()),
+            safe(self._options.assess(symbol=symbol)),
         )
 
         component_results: dict[str, IntelligenceResult | None] = {
@@ -259,6 +267,7 @@ class CompositeMarketIntelligenceEngine(IntelligenceComponent):
             "correlation": correlation,
             "market_structure": structure,
             "event_risk": events,
+            "options": options,
         }
         result = assess_composite(component_results)
         result.metrics["symbol"] = symbol
