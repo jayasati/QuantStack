@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Market Intelligence Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --good:           #0ca30c;
+    --warning:        #fab219;
+    --serious:        #ec835a;
+    --critical:       #d03b3b;
+    --seq-100: #cde2fb; --seq-200: #9ec5f4; --seq-300: #6da7ec;
+    --seq-450: #2a78d6; --seq-550: #1c5cab; --seq-700: #0d366b;
+    --diverging-warm: #e34948; --diverging-cool: #2a78d6; --diverging-mid: #f0efec;
+    --cat-1: #2a78d6; --cat-2: #1baf7a; --cat-3: #eda100; --cat-4: #008300;
+    --cat-5: #4a3aa7; --cat-6: #e34948; --cat-7: #e87ba4; --cat-8: #eb6834;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+      --good:           #0ca30c;
+      --warning:        #fab219;
+      --serious:        #ec835a;
+      --critical:       #e66767;
+      --diverging-warm: #e66767; --diverging-cool: #3987e5; --diverging-mid: #383835;
+      --cat-1: #3987e5; --cat-2: #199e70; --cat-3: #c98500; --cat-4: #008300;
+      --cat-5: #9085e9; --cat-6: #e66767; --cat-7: #d55181; --cat-8: #d95926;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page-plane); color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 20px;
+  }
+  .topbar {
+    max-width: 1400px; margin: 0 auto 16px; display: flex; align-items: center;
+    gap: 14px; flex-wrap: wrap;
+  }
+  .topbar h1 { font-size: 19px; margin: 0; font-weight: 700; }
+  .topbar input, .topbar button {
+    font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+  }
+  .topbar button { cursor: pointer; }
+  .topbar .meta { color: var(--text-muted); font-size: 12px; margin-left: auto; }
+  .grid {
+    max-width: 1400px; margin: 0 auto; display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px;
+  }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; min-width: 0;
+  }
+  .card h2 { font-size: 13px; font-weight: 700; margin: 0 0 4px; letter-spacing: .01em; }
+  .card .sub { color: var(--text-muted); font-size: 11px; margin-bottom: 12px; }
+  .hero { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  .hero-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .badge {
+    font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .badge.good { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+  .badge.warning { background: color-mix(in srgb, var(--warning) 20%, transparent); color: #8a5c00; }
+  .badge.critical { background: color-mix(in srgb, var(--critical) 16%, transparent); color: var(--critical); }
+  @media (prefers-color-scheme: dark) { .badge.warning { color: var(--warning); } }
+  .meter-track {
+    height: 8px; border-radius: 999px; background: var(--gridline); overflow: hidden; margin: 6px 0;
+  }
+  .meter-fill { height: 100%; border-radius: 999px; background: var(--seq-450); }
+  .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin: 3px 0; }
+  .row b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--gridline); }
+  td { padding: 4px 6px; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  .stack-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; margin: 8px 0; }
+  .stack-seg { display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; min-width: 2px; }
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+  .heat-grid { display: grid; gap: 2px; font-size: 10px; }
+  .heat-cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    border-radius: 3px; color: #fff; font-variant-numeric: tabular-nums; overflow: hidden;
+  }
+  .heat-label { font-size: 9px; color: var(--text-muted); text-align: center; }
+  .empty { color: var(--text-muted); font-size: 12px; font-style: italic; padding: 8px 0; }
+  .sparkline-wrap svg { width: 100%; height: 56px; display: block; }
+  .card.span2 { grid-column: span 2; }
+  @media (max-width: 720px) { .card.span2 { grid-column: span 1; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Market Intelligence Dashboard</h1>
+  <input id="symbol" value="NIFTY" spellcheck="false" />
+  <button id="refresh">Refresh</button>
+  <span class="meta" id="lastUpdated">not loaded yet</span>
+</div>
+
+<div class="grid">
+
+  <div class="card" id="card-composite">
+    <h2>Composite Intelligence Score</h2>
+    <div class="sub">All 12 components, concurrently assessed (Ch18)</div>
+    <div class="empty">loading…</div>
+  </div>
+
+  <div class="card" id="card-confidence">
+    <h2>Market Confidence</h2>
+    <div class="sub">Data quality × regime certainty × agreement</div>
+    <div class="empty">loading…</div>
+  </div>
+
+  <div class="card" id="card-regime">
+    <h2>Current Regime Probabilities</h2>
+    <div class="sub">Bayesian belief, trend &amp; market structure</div>
+    <div class="empty">loading…</div>
+  </div>
+
+  <div class="card" id="card-breadth">
+    <h2>Breadth Dashboard</h2>
+    <div class="sub">Market-wide participation</div>
+    <div class="empty">loading…</div>
+  </div>
+
+  <div class="card" id="card-sector">
+    <h2>Sector Leadership Heatmap</h2>
+    <div class="sub">Rotation score by sector</div>
+    <div class="empty">loading…</div>
+  </div>
+
+  <div class="card" id="card-liquidity">
+    <h2>Liquidity Stress Monitor</h2>
+    <div class="sub">Execution risk for the selected symbol</div>
+    <div class="empty">loading…</div>
+  </div>
+
+  <div class="card" id="card-flow">
+    <h2>Institutional Flow Timeline</h2>
+    <div class="sub">Belief history, institutional_flow dimension</div>
+    <div class="empty">loading…</div>
+  </div>
+
+  <div class="card" id="card-transitions">
+    <h2>Regime Transition Timeline</h2>
+    <div class="sub">Dominant-state stability over recent observations</div>
+    <div class="empty">loading…</div>
+  </div>
+
+  <div class="card span2" id="card-correlation">
+    <h2>Cross-Asset Correlation Matrix</h2>
+    <div class="sub">Pairwise |correlation| across the asset universe</div>
+    <div class="empty">loading…</div>
+  </div>
+
+  <div class="card span2" id="card-analogs">
+    <h2>Historical Analog Explorer</h2>
+    <div class="sub">Cosine / Euclidean / DTW nearest neighbors</div>
+    <div class="empty">loading…</div>
+  </div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function seqColor(t) {
+  // 0..1 -> sequential blue ramp (light->dark), matches palette.md's 100-700 steps
+  const steps = ['#cde2fb', '#9ec5f4', '#6da7ec', '#2a78d6', '#1c5cab', '#0d366b'];
+  const i = Math.max(0, Math.min(steps.length - 1, Math.round(t * (steps.length - 1))));
+  return steps[i];
+}
+
+function statusBadge(score) {
+  if (score >= 70) return ['good', 'bullish'];
+  if (score >= 55) return ['good', 'mild bullish'];
+  if (score > 45) return ['warning', 'neutral'];
+  if (score > 30) return ['warning', 'mild bearish'];
+  return ['critical', 'bearish'];
+}
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+  return res.json();
+}
+
+function renderEmpty(el, msg) {
+  el.innerHTML = `<div class="empty">${msg}</div>`;
+}
+
+function meterRow(label, value, max = 100) {
+  const pct = Math.max(0, Math.min(100, (value / max) * 100));
+  return `<div class="row"><span>${label}</span><b>${value.toFixed(1)}</b></div>
+    <div class="meter-track"><div class="meter-fill" style="width:${pct}%"></div></div>`;
+}
+
+// --- Composite -------------------------------------------------------
+
+async function renderComposite(symbol) {
+  const el = $('card-composite');
+  try {
+    const r = await getJSON(`/intelligence/composite/${symbol}`);
+    const [cls, label] = statusBadge(r.score);
+    const scores = r.metrics.component_scores || {};
+    const rows = Object.entries(scores)
+      .filter(([, v]) => v !== null)
+      .map(([k, v]) => meterRow(k.replace(/_/g, ' '), v))
+      .join('');
+    el.innerHTML = `
+      <h2>Composite Intelligence Score</h2>
+      <div class="sub">All 12 components, concurrently assessed (Ch18)</div>
+      <div class="hero-row">
+        <div class="hero">${r.score.toFixed(1)}</div>
+        <span class="badge ${cls}">${label}</span>
+      </div>
+      <div class="row">bullishness <b>${(r.metrics.bullishness ?? 0).toFixed(1)}</b></div>
+      <div class="row">bearishness <b>${(r.metrics.bearishness ?? 0).toFixed(1)}</b></div>
+      <div class="row">stability <b>${(r.metrics.market_stability ?? 0).toFixed(1)}</b></div>
+      <div class="row">expected risk <b>${(r.metrics.expected_risk ?? 0).toFixed(1)}</b></div>
+      <div class="row">components present <b>${r.metrics.components_present}/12</b></div>
+      <div style="margin-top:8px">${rows}</div>`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Confidence --------------------------------------------------------
+
+async function renderConfidence(symbol) {
+  const el = $('card-confidence');
+  try {
+    const r = await getJSON(`/intelligence/confidence/${symbol}`);
+    const grade = r.metrics.confidence_grade || '?';
+    const [cls] = statusBadge(r.score);
+    el.innerHTML = `
+      <h2>Market Confidence</h2>
+      <div class="sub">Data quality × regime certainty × agreement</div>
+      <div class="hero-row"><div class="hero">${r.score.toFixed(1)}</div>
+        <span class="badge ${cls}">grade ${grade}</span></div>
+      ${meterRow('confidence', r.confidence * 100)}
+      <div class="row">trend <b>${r.metrics.confidence_trend ?? '—'}</b></div>`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Regime probabilities (stacked bars) --------------------------------
+
+async function renderRegimeBar(container, title, states) {
+  const entries = Object.entries(states || {}).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) return `<div class="row">${title}</div><div class="empty">no belief yet</div>`;
+  const palette = ['var(--cat-1)', 'var(--cat-2)', 'var(--cat-3)', 'var(--cat-4)', 'var(--cat-5)', 'var(--cat-6)'];
+  const segs = entries.map(([k, v], i) =>
+    `<div class="stack-seg" style="width:${(v * 100).toFixed(1)}%;background:${palette[i % palette.length]}"
+       title="${k}: ${(v * 100).toFixed(1)}%">${v > 0.12 ? (v * 100).toFixed(0) + '%' : ''}</div>`
+  ).join('');
+  const legend = entries.map(([k], i) =>
+    `<span><span class="dot" style="background:${palette[i % palette.length]}"></span>${k}</span>`
+  ).join('');
+  return `<div class="row">${title}</div><div class="stack-bar">${segs}</div><div class="legend">${legend}</div>`;
+}
+
+async function renderRegime(symbol) {
+  const el = $('card-regime');
+  try {
+    const [trend, structure] = await Promise.all([
+      getJSON(`/intelligence/regime/trend/${symbol}/D?limit=1`),
+      getJSON(`/intelligence/regime/market_structure/${symbol}/D?limit=1`),
+    ]);
+    const latestStates = (hist) => (hist.history && hist.history.length
+      ? hist.history[hist.history.length - 1].states : null);
+    const trendBar = await renderRegimeBar(el, 'trend', latestStates(trend));
+    const structBar = await renderRegimeBar(el, 'market_structure', latestStates(structure));
+    el.innerHTML = `
+      <h2>Current Regime Probabilities</h2>
+      <div class="sub">Bayesian belief, trend &amp; market structure</div>
+      ${trendBar}${structBar}`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Breadth -------------------------------------------------------------
+
+async function renderBreadth() {
+  const el = $('card-breadth');
+  try {
+    const r = await getJSON('/intelligence/breadth');
+    const [cls, label] = statusBadge(r.score);
+    el.innerHTML = `
+      <h2>Breadth Dashboard</h2>
+      <div class="sub">Market-wide participation</div>
+      <div class="hero-row"><div class="hero">${r.score.toFixed(1)}</div>
+        <span class="badge ${cls}">${label}</span></div>
+      ${meterRow('participation quality', (r.metrics.participation_quality ?? 0) * 100)}
+      ${meterRow('breadth health', r.metrics.breadth_health ?? 0)}
+      <div class="row">divergence <b>${r.metrics.breadth_divergence ?? '—'}</b></div>`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Sector heatmap --------------------------------------------------------
+
+async function renderSector() {
+  const el = $('card-sector');
+  try {
+    const r = await getJSON('/intelligence/sector');
+    const leaders = r.metrics.sector_scores || r.metrics.leaders || {};
+    const entries = Object.entries(leaders);
+    if (!entries.length) { renderEmpty(el, 'no per-sector scores in this reading'); return; }
+    const cols = Math.min(4, entries.length);
+    const cells = entries.map(([name, score]) => {
+      const t = Math.max(0, Math.min(1, score / 100));
+      return `<div class="heat-cell" style="background:${seqColor(t)}" title="${name}: ${score.toFixed(1)}">
+        ${score.toFixed(0)}</div><div class="heat-label">${name}</div>`;
+    }).join('');
+    el.innerHTML = `
+      <h2>Sector Leadership Heatmap</h2>
+      <div class="sub">Rotation score by sector</div>
+      <div class="heat-grid" style="grid-template-columns:repeat(${cols},1fr)">${cells}</div>`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Liquidity -------------------------------------------------------------
+
+async function renderLiquidity(symbol) {
+  const el = $('card-liquidity');
+  try {
+    const r = await getJSON(`/intelligence/liquidity/${symbol}`);
+    const stress = r.metrics.liquidity_stress ?? 0;
+    const cls = stress > 60 ? 'critical' : stress > 35 ? 'warning' : 'good';
+    el.innerHTML = `
+      <h2>Liquidity Stress Monitor</h2>
+      <div class="sub">Execution risk for ${symbol}</div>
+      <div class="hero-row"><div class="hero">${r.score.toFixed(1)}</div>
+        <span class="badge ${cls}">stress ${stress.toFixed(0)}</span></div>
+      ${meterRow('liquidity stress', stress)}
+      ${meterRow('execution risk', r.metrics.execution_risk ?? 0)}`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Institutional flow timeline (sparkline of dominant-state weight) ------
+
+function sparkline(points, color) {
+  if (points.length < 2) return '<div class="empty">not enough history yet</div>';
+  const w = 280, h = 50, pad = 4;
+  const min = Math.min(...points), max = Math.max(...points);
+  const span = max - min || 1;
+  const step = (w - pad * 2) / (points.length - 1);
+  const path = points.map((v, i) =>
+    `${(pad + i * step).toFixed(1)},${(h - pad - ((v - min) / span) * (h - pad * 2)).toFixed(1)}`
+  ).join(' ');
+  return `<div class="sparkline-wrap"><svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline points="${path}" fill="none" stroke="${color}" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round"/></svg></div>`;
+}
+
+async function renderFlowTimeline(symbol) {
+  const el = $('card-flow');
+  try {
+    const r = await getJSON(`/intelligence/regime/institutional_flow/${symbol}/D?limit=20`);
+    if (!r.history.length) { renderEmpty(el, 'no belief history yet -- fed by the scheduled composite sweep'); return; }
+    const dominant = r.history.map(row => {
+      const states = row.states || {};
+      const vals = Object.values(states);
+      return vals.length ? Math.max(...vals) * 100 : 50;
+    });
+    el.innerHTML = `
+      <h2>Institutional Flow Timeline</h2>
+      <div class="sub">Dominant-belief confidence over ${r.history.length} observations</div>
+      ${sparkline(dominant, 'var(--cat-5)')}
+      <div class="row">latest observation count <b>${r.history[r.history.length - 1].observation_count ?? '—'}</b></div>`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Regime transition timeline --------------------------------------------
+
+async function renderTransitions(symbol) {
+  const el = $('card-transitions');
+  try {
+    const r = await getJSON(`/intelligence/regime/trend/${symbol}/D?limit=20`);
+    if (!r.history.length) { renderEmpty(el, 'no belief history yet'); return; }
+    const stability = r.history.map(row => {
+      const states = row.states || {};
+      const vals = Object.values(states);
+      return vals.length ? Math.max(...vals) * 100 : 50;
+    });
+    el.innerHTML = `
+      <h2>Regime Transition Timeline</h2>
+      <div class="sub">Trend belief stability, ${r.history.length} observations (dips = transition-prone)</div>
+      ${sparkline(stability, 'var(--cat-6)')}`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Correlation matrix -----------------------------------------------------
+
+async function renderCorrelation() {
+  const el = $('card-correlation');
+  try {
+    const r = await getJSON('/intelligence/correlation');
+    const matrix = r.metrics.correlation_matrix || {};
+    const assets = Object.keys(matrix);
+    if (!assets.length) { renderEmpty(el, 'no correlation matrix in this reading'); return; }
+    let grid = `<table><tr><th></th>${assets.map(a => `<th>${a}</th>`).join('')}</tr>`;
+    for (const rowAsset of assets) {
+      grid += `<tr><th>${rowAsset}</th>`;
+      for (const colAsset of assets) {
+        const v = matrix[rowAsset]?.[colAsset];
+        const t = v === undefined || v === null ? 0 : Math.abs(v);
+        const bg = v === undefined || v === null ? 'var(--gridline)' : seqColor(t);
+        grid += `<td style="background:${bg};color:#fff;text-align:center">${v !== undefined && v !== null ? v.toFixed(2) : '—'}</td>`;
+      }
+      grid += '</tr>';
+    }
+    grid += '</table>';
+    el.innerHTML = `
+      <h2>Cross-Asset Correlation Matrix</h2>
+      <div class="sub">Pairwise |correlation| — stability ${((r.metrics.correlation_stability ?? 0) * 100).toFixed(0)}%</div>
+      ${grid}`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Historical analog explorer ----------------------------------------------
+
+async function renderAnalogs(symbol) {
+  const el = $('card-analogs');
+  try {
+    const r = await getJSON(`/intelligence/analogs/${symbol}`);
+    const analogs = (r.metrics.analogs || []).slice(0, 12);
+    if (!analogs.length) { renderEmpty(el, 'no analogs found -- insufficient state-vector history'); return; }
+    const rows = analogs.map(a => `<tr>
+      <td>${a.date}</td>
+      <td>${(a.similarity * 100).toFixed(0)}%</td>
+      <td style="color:${a.subsequent_return >= 0 ? 'var(--good)' : 'var(--critical)'}">${(a.subsequent_return * 100).toFixed(2)}%</td>
+      <td>${(a.max_drawdown * 100).toFixed(2)}%</td>
+      <td>${(a.max_runup * 100).toFixed(2)}%</td>
+    </tr>`).join('');
+    el.innerHTML = `
+      <h2>Historical Analog Explorer</h2>
+      <div class="sub">Win rate ${((r.metrics.win_rate ?? 0) * 100).toFixed(0)}% ·
+        method agreement ${((r.metrics.method_agreement ?? 0) * 100).toFixed(0)}%
+        ${r.metrics.dtw_used ? '(cosine/Euclidean/DTW, 3-way)' : '(cosine/Euclidean, 2-way)'}</div>
+      <table><tr><th>date</th><th>similarity</th><th>fwd return</th><th>max dd</th><th>max runup</th></tr>${rows}</table>`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
+// --- Orchestration -----------------------------------------------------------
+
+async function refreshAll() {
+  const symbol = ($('symbol').value || 'NIFTY').trim().toUpperCase();
+  $('lastUpdated').textContent = 'refreshing…';
+  await Promise.all([
+    renderComposite(symbol), renderConfidence(symbol), renderRegime(symbol),
+    renderBreadth(), renderSector(), renderLiquidity(symbol),
+    renderFlowTimeline(symbol), renderTransitions(symbol),
+    renderCorrelation(), renderAnalogs(symbol),
+  ]);
+  $('lastUpdated').textContent = `updated ${new Date().toLocaleTimeString()}`;
+}
+
+$('refresh').addEventListener('click', refreshAll);
+$('symbol').addEventListener('keydown', (e) => { if (e.key === 'Enter') refreshAll(); });
+refreshAll();
+setInterval(refreshAll, 30000);
+</script>
+</body>
+</html>

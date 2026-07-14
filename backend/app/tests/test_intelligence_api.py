@@ -9,7 +9,9 @@ from app.intelligence.analogs import HistoricalAnalogEngine
 from app.intelligence.breadth import BreadthIntelligenceEngine
 from app.intelligence.composite import CompositeMarketIntelligenceEngine
 from app.intelligence.confidence import MarketConfidenceEngine
+from app.intelligence.correlation import CorrelationIntelligenceEngine
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
+from app.intelligence.liquidity import LiquidityIntelligenceEngine
 from app.intelligence.regime import BayesianRegimeDetector
 from app.intelligence.report import MarketStateReportEngine
 from app.intelligence.sector import SectorIntelligenceEngine
@@ -19,6 +21,7 @@ ENGINE_TYPES = [
     TrendIntelligenceEngine, BreadthIntelligenceEngine, SectorIntelligenceEngine,
     InstitutionalFlowIntelligenceEngine, HistoricalAnalogEngine, MarketConfidenceEngine,
     MarketStateReportEngine, BayesianRegimeDetector, CompositeMarketIntelligenceEngine,
+    LiquidityIntelligenceEngine, CorrelationIntelligenceEngine,
 ]
 
 
@@ -132,6 +135,24 @@ def test_historical_analogs() -> None:
     body = response.json()
     assert body["component"] == "historical_analogs"
     assert "analogs" in body["metrics"]
+
+
+def test_liquidity_intelligence() -> None:
+    client = make_client()
+    response = client.get("/intelligence/liquidity/NIFTY")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["component"] == "liquidity"
+    assert "liquidity_stress" in body["metrics"] and "execution_risk" in body["metrics"]
+
+
+def test_correlation_intelligence() -> None:
+    client = make_client()
+    response = client.get("/intelligence/correlation")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["component"] == "correlation"
+    assert "correlation_matrix" in body["metrics"]
 
 
 def test_market_confidence() -> None:

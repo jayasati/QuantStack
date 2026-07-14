@@ -57,6 +57,16 @@ async def sensex_dashboard_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "sensex_dashboard.html")
 
 
+@router.get("/intelligence")
+async def intelligence_dashboard_page() -> FileResponse:
+    """Volume 4, Chapter 22's 10 named dashboard components, all reading
+    real /intelligence/* API data client-side -- no separate aggregator
+    endpoint needed, every panel just fetches its own already-existing
+    route (plus /intelligence/liquidity/{symbol} and /intelligence/correlation,
+    added alongside this dashboard since nothing exposed them before)."""
+    return FileResponse(STATIC_DIR / "intelligence_dashboard.html")
+
+
 @router.get("/sensex/data")
 async def sensex_dashboard_data() -> dict:
     source = _chain_source()

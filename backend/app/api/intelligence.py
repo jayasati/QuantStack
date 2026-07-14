@@ -9,7 +9,9 @@ from app.intelligence.analogs import HistoricalAnalogEngine
 from app.intelligence.breadth import BreadthIntelligenceEngine
 from app.intelligence.composite import CompositeMarketIntelligenceEngine
 from app.intelligence.confidence import MarketConfidenceEngine
+from app.intelligence.correlation import CorrelationIntelligenceEngine
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
+from app.intelligence.liquidity import LiquidityIntelligenceEngine
 from app.intelligence.regime import BayesianRegimeDetector
 from app.intelligence.report import MarketStateReportEngine
 from app.intelligence.sector import SectorIntelligenceEngine
@@ -124,6 +126,25 @@ async def sector_intelligence() -> dict:
 @router.get("/institutional-flow")
 async def institutional_intelligence() -> dict:
     engine = container.resolve(InstitutionalFlowIntelligenceEngine)
+    result = await engine.assess()
+    return result.to_dict()
+
+
+@router.get("/liquidity/{symbol}")
+async def liquidity_intelligence(symbol: str) -> dict:
+    """Liquidity Intelligence: metrics["liquidity_stress"]/["execution_risk"]
+    -- the Dashboard's Liquidity Stress Monitor (Chapter 22) reads this."""
+    engine = container.resolve(LiquidityIntelligenceEngine)
+    result = await engine.assess(symbol=symbol)
+    return result.to_dict()
+
+
+@router.get("/correlation")
+async def correlation_intelligence() -> dict:
+    """Cross-Asset Correlation: metrics["correlation_matrix"] is the full
+    asset x asset pairwise matrix -- the Dashboard's Correlation Matrix
+    (Chapter 22) reads this directly, no client-side computation needed."""
+    engine = container.resolve(CorrelationIntelligenceEngine)
     result = await engine.assess()
     return result.to_dict()
 
