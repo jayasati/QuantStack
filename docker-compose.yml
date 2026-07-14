@@ -8,6 +8,27 @@ services:
       POSTGRES_USER: quantstack
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quantstack}
       POSTGRES_DB: quantstack
+    # postgres:16-alpine's own out-of-box defaults (shared_buffers=128MB,
+    # effective_cache_size=4GB, work_mem=4MB) are sized for a tiny/default
+    # container, not this workload -- found live (2026-07-14) at
+    # feature_store's real ~561k-row scale, with app-level connection
+    # pooling already tuned (database_pool_size/max_overflow,
+    # candidates.py's MAX_CONCURRENT_SNAPSHOT_CAPTURES semaphore). These
+    # are moderate values, not maxed for the VM's full 15GB/4vCPU (this
+    # compose file is also used for local dev) -- shared_buffers ~25% and
+    # effective_cache_size ~50-60% of a conservative 2GB assumption,
+    # work_mem raised enough that ORDER BY ts DESC sorts (feature_store's
+    # own hot query) don't spill to disk under concurrent load.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=128MB
     ports:
       # Host port 5433: many machines run a native PostgreSQL on 5432.
       - "5433:5432"
