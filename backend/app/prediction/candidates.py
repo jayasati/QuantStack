@@ -21,6 +21,7 @@ event_type ("trade_candidate.generated") from both opportunity.detected
 (Prompt 5.1) and any future prediction_results row (Prompt 5.4+).
 """
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -226,14 +227,25 @@ class CandidateGenerationEngine:
         )
 
     async def generate(self) -> list[TradeCandidate]:
-        """Top MAX_CANDIDATES ranked trade candidates from a fresh scan."""
+        """Top MAX_CANDIDATES ranked trade candidates from a fresh scan.
+
+        Snapshot capture (each one a fresh MarketStateReportEngine.generate()
+        call -- not cheap) and persistence both fan out concurrently rather
+        than looping one candidate at a time: up to MAX_CANDIDATES=20
+        sequential awaits was the dominant cost in signal generation,
+        directly threatening Volume 1 Sec16's <2s target (measured ~2.6s
+        for just 6 candidates from a 3-symbol watchlist, sequential; see
+        test_load_and_performance.py). Ordering is preserved -- gather()
+        returns results in the same order as the input coroutines.
+        """
         opportunities = await self._detector.scan()  # already sorted by priority_score desc
-        candidates = []
-        for rank, opportunity in enumerate(opportunities[:MAX_CANDIDATES], start=1):
-            snapshot = await self._snapshots.capture(opportunity.symbol)
-            candidates.append(generate_candidate(opportunity, rank, snapshot.snapshot_id))
-        for candidate in candidates:
-            await self._persist(candidate)
+        top = opportunities[:MAX_CANDIDATES]
+        snapshots = await asyncio.gather(*(self._snapshots.capture(o.symbol) for o in top))
+        candidates = [
+            generate_candidate(opportunity, rank, snapshot.snapshot_id)
+            for rank, (opportunity, snapshot) in enumerate(zip(top, snapshots, strict=True), start=1)
+        ]
+        await asyncio.gather(*(self._persist(candidate) for candidate in candidates))
         return candidates
 
     async def _persist(self, candidate: TradeCandidate) -> None:
