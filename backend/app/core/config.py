@@ -87,13 +87,16 @@ class Settings(BaseSettings):
     # SECTOR_TOKENS (NBFC/Telecom aren't tracked sectors) -- relative.py
     # handles that gracefully (sector reference just stays empty), but
     # extend SECTOR_TOKENS/feature_stock_sectors together if that gap is
-    # ever worth closing.
+    # ever worth closing. TATAMOTORS no longer resolves -- confirmed via a
+    # live NSE trace (2026-07-15) that Tata Motors demerged into TMPV (Tata
+    # Motors Passenger Vehicles Ltd), which is what's listed on Angel One's
+    # scrip master now; TMPV replaces it as the 2nd Auto name.
     watchlist: list[str] = Field(
         default_factory=lambda: [
             "NIFTY", "BANKNIFTY", "SENSEX",
             "HDFCBANK", "ICICIBANK", "RELIANCE", "INFY", "TCS", "SBIN",
             "AXISBANK", "LT", "TATASTEEL", "JSWSTEEL", "SUNPHARMA",
-            "HINDUNILVR", "ITC", "MARUTI", "TATAMOTORS", "DLF", "COALINDIA",
+            "HINDUNILVR", "ITC", "MARUTI", "TMPV", "DLF", "COALINDIA",
             "ULTRACEMCO", "HCLTECH", "BAJFINANCE", "BHARTIARTL", "ADANIENT",
         ]
     )
@@ -150,7 +153,7 @@ class Settings(BaseSettings):
             "HINDUNILVR": "FMCG",
             "ITC": "FMCG",
             "MARUTI": "Auto",
-            "TATAMOTORS": "Auto",
+            "TMPV": "Auto",
             "DLF": "Realty",
             "COALINDIA": "PSU",
         }
