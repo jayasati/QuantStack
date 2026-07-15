@@ -80,6 +80,24 @@ anywhere, or when request latency is next worked (pairs naturally with
 DEBT-6 — populating Redis is the likely next win).
 **Logged:** 2026-07-15 (Volume 1 postflight).
 
+### DEBT-8 · news_intelligence / global_shock_news chronically slow, low quality
+**What:** Live `/collectors` check: `avg_latency_ms` 33,696 (news_intelligence,
+120s interval) and 36,444 (global_shock_news, 30s interval) — both take
+longer than their own scheduled interval to complete. `collector_health`
+quality scores sit at ~22-23/100 (occasional spikes to ~62), consistent since
+at least 05:30 IST — predates and is unrelated to this session's FinBERT
+cross-collector lock (checked and ruled out). Likely CPU-bound FinBERT
+inference cost on a shared 4-vCPU box; root cause not yet investigated
+further.
+**Risk while open:** A 30s-interval collector that takes 36s can never catch
+up to its own schedule — news-driven signals (including the
+`event_driven_opportunity` trigger, DEBT-4) run on data that's structurally
+always behind.
+**Expiry condition:** When Volume 2 collector work or news/event-driven
+signal quality is next worked on.
+**Logged:** 2026-07-15 (Volume 2 preflight,
+`docs/volumes/preflight-vol2-2026-07-15.md`).
+
 ---
 
 ## Resolved
