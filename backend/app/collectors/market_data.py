@@ -8,10 +8,14 @@ resuming from the last stored bar, with dedup and continuity validation.
 """
 
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from zoneinfo import ZoneInfo
+
 if TYPE_CHECKING:
+    from app.collectors.sources.bse_candles import BseCandleSource
+    from app.collectors.sources.nse_candles import NseCandleSource
     from app.collectors.sources.yahoo_history import YahooDailyHistory
     from app.market.angel_ws import AngelWebSocketFeed
 
@@ -28,6 +32,8 @@ from app.market.broker import BrokerInterface, Candle
 from app.market.instruments import InstrumentService
 
 INTERVAL_MINUTES = {"1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30, "1H": 60, "D": 1440}
+
+IST = ZoneInfo("Asia/Kolkata")
 
 
 class _BrokerBackedCollector(BaseCollector):
@@ -276,7 +282,23 @@ class LiveMarketCollector(_BrokerBackedCollector):
 
 
 class HistoricalCandleCollector(_BrokerBackedCollector):
-    """Backfill OHLCV candles for all timeframes with dedup and continuity checks."""
+    """Backfill OHLCV candles for all timeframes with dedup and continuity checks.
+
+    Multi-source fallback (2026-07-15, DEBT-2): the broker's own
+    historical-candle backend can silently lag real time for hours (found
+    live -- Angel One's candle pipeline fell ~5.5h behind while its live
+    tick feed stayed fresh; zero exceptions, zero empty-result signal until
+    logging was added). For TODAY's data specifically (the common,
+    steady-state case, and the exact scenario that broke), NSE/BSE's own
+    public quote-page tick feeds are tried FIRST -- they're a different
+    system from the broker's aggregated-candle backend, so they don't share
+    its failure mode -- falling through to the broker's own fetch, then to
+    Yahoo Finance as a last resort. Genuine multi-day backfill (e.g. after
+    real downtime) skips straight to broker-then-Yahoo: NSE/BSE's public
+    feeds only ever expose *today's* session, they cannot serve older days
+    (verified live -- NSE's old historical-range endpoints are dead, and
+    there is no equivalent BSE range endpoint either).
+    """
 
     name = "historical_candles"
     category = CollectorCategory.MARKET_DATA
@@ -296,15 +318,52 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
         "D": timedelta(days=365 * 2),
     }
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self,
+        nse_candles: "NseCandleSource | None" = None,
+        bse_candles: "BseCandleSource | None" = None,
+        yahoo: "YahooDailyHistory | None" = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self.gaps_detected = 0
+        self._nse_candles = nse_candles
+        self._bse_candles = bse_candles
+        self._yahoo = yahoo
+
+    def _get_nse_candles(self) -> "NseCandleSource":
+        if self._nse_candles is None:
+            from app.collectors.sources.nse_candles import NseCandleSource
+
+            self._nse_candles = NseCandleSource()
+        return self._nse_candles
+
+    def _get_bse_candles(self) -> "BseCandleSource":
+        if self._bse_candles is None:
+            from app.collectors.sources.bse_candles import BseCandleSource
+
+            self._bse_candles = BseCandleSource()
+        return self._bse_candles
+
+    def _get_yahoo(self) -> "YahooDailyHistory":
+        if self._yahoo is None:
+            from app.collectors.sources.yahoo_history import YahooDailyHistory
+
+            self._yahoo = YahooDailyHistory()
+        return self._yahoo
+
+    async def cleanup(self) -> None:
+        for source in (self._nse_candles, self._bse_candles, self._yahoo):
+            closer = getattr(source, "close", None)
+            if closer is not None:
+                await closer()
 
     async def collect(self) -> list[CollectorOutput]:
         if not self._tokens:
             raise CollectionError("no instruments resolved for watchlist")
         records: list[CollectorOutput] = []
         end = datetime.now(UTC)
+        today_ist = end.astimezone(IST).date()
         for symbol, (token, exchange, _) in self._tokens.items():
             for interval in self.intervals:
                 start = await self._backfill_start(symbol, interval, end)
@@ -317,34 +376,10 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
                         },
                     )
                     continue
-                try:
-                    candles = await self.broker.get_historical(
-                        token, interval, start, end, exchange=exchange
-                    )
-                except Exception as exc:
-                    self.logger.warning(
-                        "candle fetch failed",
-                        extra={"symbol": symbol, "interval": interval, "error": str(exc)},
-                    )
-                    continue
+                candles = await self._fetch_with_fallback(
+                    symbol, interval, start, end, token, exchange, today_ist
+                )
                 if not candles:
-                    # A broker call that succeeds (no exception) but returns
-                    # zero bars was previously silent here -- no log, no
-                    # metric -- which is exactly why intraday candle
-                    # collection stalling for hours (DEBT-2's root cause,
-                    # 2026-07-15) went undetected until a manual DB query
-                    # found it. Warn with the exact request window so a
-                    # repeat is visible in logs immediately, not by
-                    # archaeology.
-                    self.logger.warning(
-                        "candle fetch returned no bars",
-                        extra={
-                            "symbol": symbol,
-                            "interval": interval,
-                            "requested_from": start.isoformat(),
-                            "requested_to": end.isoformat(),
-                        },
-                    )
                     continue
                 gaps = self._validate_continuity(
                     [c.timestamp for c in candles], INTERVAL_MINUTES[interval]
@@ -374,6 +409,78 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
         if not records:
             raise CollectionError("no candles fetched for any symbol/timeframe")
         return records
+
+    async def _fetch_with_fallback(
+        self,
+        symbol: str,
+        interval: str,
+        start: datetime,
+        end: datetime,
+        token: str,
+        exchange: str,
+        today_ist: date,
+    ) -> list[Candle]:
+        """Try each source in order, using the first one that returns any
+        candles. NSE/BSE only ever apply to an intraday, today-only window
+        (they cannot serve older days -- see the class docstring); every
+        other window goes broker-then-Yahoo, matching the collector's
+        original behavior with the exception-vs-empty-result distinction
+        (findings 15/16 of perf-audit-2026-07-14, extended 2026-07-15)."""
+        is_today_only = (
+            interval != "D"
+            and start.astimezone(IST).date() == today_ist
+            and end.astimezone(IST).date() == today_ist
+        )
+
+        sources: list[tuple[str, object]] = []
+        if is_today_only:
+            from app.collectors.sources.bse_candles import BSE_INDEX_CODES
+
+            if symbol.upper() in BSE_INDEX_CODES:
+                sources.append(("bse", lambda: self._get_bse_candles().fetch_today(symbol, interval)))
+            else:
+                # Every non-BSE-listed symbol is assumed NSE-native
+                # (equities and NSE's own indices) -- fetch_today() itself
+                # returns [] harmlessly if that assumption is ever wrong
+                # for a future watchlist symbol.
+                sources.append(("nse", lambda: self._get_nse_candles().fetch_today(symbol, interval)))
+        sources.append((
+            "angel_one",
+            lambda: self.broker.get_historical(token, interval, start, end, exchange=exchange),
+        ))
+        if interval != "D":
+            sources.append((
+                "yahoo",
+                lambda: self._get_yahoo().fetch_intraday(symbol, interval),
+            ))
+
+        for source_name, fetch in sources:
+            try:
+                candles = await fetch()
+            except Exception as exc:
+                self.logger.warning(
+                    "candle fetch failed",
+                    extra={
+                        "symbol": symbol, "interval": interval,
+                        "source": source_name, "error": str(exc),
+                    },
+                )
+                continue
+            if candles:
+                return candles
+            # A source that succeeds (no exception) but returns zero bars
+            # was previously silent here -- no log, no metric -- which is
+            # exactly why intraday candle collection stalling for hours
+            # (DEBT-2's root cause, 2026-07-15) went undetected until a
+            # manual DB query found it.
+            self.logger.warning(
+                "candle fetch returned no bars",
+                extra={
+                    "symbol": symbol, "interval": interval, "source": source_name,
+                    "requested_from": start.isoformat(), "requested_to": end.isoformat(),
+                },
+            )
+        return []
 
     async def _backfill_start(self, symbol: str, interval: str, end: datetime) -> datetime:
         """Resume from the last stored bar; fall back to the default lookback."""

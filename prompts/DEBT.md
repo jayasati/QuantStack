@@ -56,11 +56,26 @@ include a staleness check (e.g., compare latest candle ts to now, downgrade
 confidence or flag the signal when the gap exceeds a threshold) rather than
 trusting whatever's in the table. The logging fix means a recurrence is now
 visible in logs the moment it happens, not discoverable only by manual query.
+
+**Partial mitigation added 2026-07-15:** `HistoricalCandleCollector` now
+tries NSE's and BSE's own public quote-page tick feeds *before* the broker,
+for today-only intraday windows (the exact window the stall hit), falling
+through to the broker then to Yahoo Finance on any exception or empty
+result — `app/collectors/sources/{nse_candles,bse_candles,candle_aggregate}.py`,
+`yahoo_history.fetch_intraday`, `HistoricalCandleCollector._fetch_with_fallback`.
+This reduces exposure to a repeat of this exact stall (an independent source
+now stands in when the broker's candle pipeline lags) but does **not**
+resolve DEBT-2 itself — the consumer-wiring gap and the staleness-check
+recommendation above are both still open. Multi-day backfill is unaffected
+(NSE/BSE only ever expose today's session, verified live 2026-07-15 — see
+those modules' docstrings for the dead-endpoint findings that motivated the
+today-only scoping).
 **Expiry condition:** Consumer-wiring half resolves with DEBT-1. The
 staleness-check recommendation above should land as part of that same fix,
 not deferred again.
 **Logged:** 2026-07-15 (root-caused same day, `79a067f` +
-`docs/volumes/preflight-vol3-2026-07-15.md`).
+`docs/volumes/preflight-vol3-2026-07-15.md`; fallback-chain mitigation added
+same day).
 
 ### DEBT-3 · No outcome evaluator / win-rate metric
 **What:** Candidates carry `valid_until` but nothing records whether price

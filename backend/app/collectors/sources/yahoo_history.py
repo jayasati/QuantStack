@@ -67,6 +67,27 @@ class YahooDailyHistory:
         response.raise_for_status()
         return self._parse(symbol, response.json())
 
+    async def fetch_intraday(
+        self, symbol: str, interval: str, range_: str = "1d"
+    ) -> list[Candle]:
+        """Deep intraday fallback for HistoricalCandleCollector (DEBT-2,
+        2026-07-15) when both the broker and the NSE/BSE exchange-native
+        sources come up empty -- Yahoo's own chart API already returns
+        proper per-bar OHLC (unlike NSE/BSE's raw tick series), so no
+        aggregation step is needed here, just a differently-shaped parse
+        from fetch_daily's (real per-bar timestamps, not floored to
+        midnight). `interval` must be a Yahoo-supported intraday interval
+        string ("1m", "5m", "15m", "30m", "60m" -- note "1H" here maps to
+        Yahoo's "60m", not passed through as-is)."""
+        yahoo_interval = "60m" if interval == "1H" else interval
+        ticker = yahoo_ticker(symbol)
+        response = await self._client.get(
+            CHART_PATH.format(ticker=ticker),
+            params={"range": range_, "interval": yahoo_interval},
+        )
+        response.raise_for_status()
+        return self._parse_intraday(symbol, interval, response.json())
+
     @staticmethod
     def _parse(symbol: str, data: dict[str, Any]) -> list[Candle]:
         result = (data.get("chart") or {}).get("result") or []
@@ -101,6 +122,47 @@ class YahooDailyHistory:
                     close=float(close),
                     volume=int(volume),
                     timestamp=bar_ts,
+                )
+            )
+        return candles
+
+    @staticmethod
+    def _parse_intraday(symbol: str, interval: str, data: dict[str, Any]) -> list[Candle]:
+        """Same chart response shape as _parse(), but keeps each bar's own
+        native epoch timestamp (Yahoo already buckets intraday bars at the
+        requested interval) instead of flooring every bar to that session's
+        midnight -- the daily convention _parse() uses only makes sense for
+        one-bar-per-day data."""
+        result = (data.get("chart") or {}).get("result") or []
+        if not result:
+            return []
+        timestamps = result[0].get("timestamp") or []
+        quotes = ((result[0].get("indicators") or {}).get("quote") or [{}])[0]
+        opens = quotes.get("open") or []
+        highs = quotes.get("high") or []
+        lows = quotes.get("low") or []
+        closes = quotes.get("close") or []
+        volumes = quotes.get("volume") or []
+
+        candles: list[Candle] = []
+        for idx, epoch in enumerate(timestamps):
+            try:
+                open_, high, low, close = opens[idx], highs[idx], lows[idx], closes[idx]
+            except IndexError:
+                break
+            if None in (open_, high, low, close):
+                continue
+            volume = volumes[idx] if idx < len(volumes) and volumes[idx] else 0
+            candles.append(
+                Candle(
+                    symbol=symbol,
+                    interval=interval,
+                    open=float(open_),
+                    high=float(high),
+                    low=float(low),
+                    close=float(close),
+                    volume=int(volume),
+                    timestamp=datetime.fromtimestamp(epoch, tz=IST),
                 )
             )
         return candles
