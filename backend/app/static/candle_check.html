@@ -230,11 +230,20 @@ async function load() {
   }
   emptyMsg.style.display = 'none';
 
+  // Lightweight Charts renders its time axis using the VIEWER's browser
+  // timezone, not the exchange's -- on a UTC-clocked machine, 09:15 IST
+  // market open (03:45 UTC) would show up on the axis as "03:45". The
+  // standard workaround: shift every timestamp by IST's fixed UTC+5:30
+  // offset before handing it to the library, so its (browser-timezone)
+  // rendering happens to land on real IST wall-clock values. Only the
+  // chart series need this -- the status line below computes IST directly
+  // via toLocaleString(timeZone: 'Asia/Kolkata') on the true epoch.
+  const IST_OFFSET_SECONDS = 19800; // UTC+5:30, no DST in India
   candleSeries.setData(data.candles.map(c => ({
-    time: c.time, open: c.open, high: c.high, low: c.low, close: c.close,
+    time: c.time + IST_OFFSET_SECONDS, open: c.open, high: c.high, low: c.low, close: c.close,
   })));
   volumeSeries.setData(data.candles.map(c => ({
-    time: c.time, value: c.volume,
+    time: c.time + IST_OFFSET_SECONDS, value: c.volume,
     color: c.close >= c.open ? 'rgba(12,163,12,0.5)' : 'rgba(227,73,73,0.5)',
   })));
   chart.timeScale().fitContent();
