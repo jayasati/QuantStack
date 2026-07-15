@@ -100,3 +100,16 @@ signal, not six.
 
 **Status: UNVERIFIED as a rule** — the events.score behavior is real and
 currently by-design; whether it should gate candidacy at all is DEBT-4.
+
+## I-11 · CI is green before it's trusted
+"CI exists" and "CI works" are different claims — never treat the presence of
+a workflow file as evidence pushes are checked. Before relying on CI for any
+decision (starting a new volume, calling a volume complete), confirm via the
+GitHub Actions API or UI that recent runs actually executed steps and
+passed — not just that the workflow file is well-formed.
+
+**Status: VIOLATED** — `.github/workflows/backend-tests.yml` exists and is
+well-formed, but 0 of the last 5 runs on `main` executed a single step
+(each completed in <1s, no runner assigned) — verified via the GitHub API,
+2026-07-15. Every commit this session shipped with zero CI signal. See
+DEBT-5, `docs/volumes/postflight-vol1-2026-07-15.md`.

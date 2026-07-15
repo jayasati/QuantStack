@@ -60,12 +60,23 @@ priority 0.00, identical supporting evidence).
 candidates' win rate is noise, or when candidate quality is next worked on.
 **Logged:** 2026-07-15.
 
-### DEBT-5 · No CI/CD
-**What:** The 1185-test suite (~5 min) runs only when someone remembers to run
-it. Nothing blocks a push that breaks it. Flagged as a top gap in the
-2026-07-11 IRR; still true.
-**Expiry condition:** Before the next volume's build phase begins.
-**Logged:** 2026-07-15 (originally 2026-07-09 audit).
+### DEBT-5 · CI exists but is completely non-functional — REVISED, now top priority
+**What:** ~~No CI/CD~~ — corrected by the 2026-07-15 Volume 1 postflight:
+`.github/workflows/backend-tests.yml` exists and is well-formed (added in
+`edcfabf`, addressing the original 2026-07-11 IRR finding), but 0 of the last
+5 runs succeeded. Each failing run's own timestamps show `created_at` ==
+`started_at`, completing within 1 second with zero steps recorded — GitHub
+never assigned a runner. Root cause is a repo/org GitHub Actions permission
+setting (not diagnosable or fixable from code) — check
+github.com/jayasati/QuantStack → Settings → Actions → General. Every commit
+pushed on 2026-07-15, including all of this session's perf fixes, shipped
+with zero CI signal.
+**Risk while open:** False sense of safety net — the team believes pushes are
+checked; none have been.
+**Expiry condition:** Before the next volume's build phase begins. This entry
+now blocks ahead of everything else in this ledger.
+**Logged:** 2026-07-15 (revised from the 2026-07-09 audit's "no CI/CD" note;
+see `docs/volumes/postflight-vol1-2026-07-15.md`).
 
 ### DEBT-6 · Redis online-store coverage is partial
 **What:** TTL refresh on unchanged runs was fixed (94d8eb5 era), but coverage
@@ -76,6 +87,16 @@ through to Postgres. Cache wiring is correct; population is the gap.
 biggest remaining lever from the 2026-07-14 perf audit, items verified but
 under-delivering for exactly this reason).
 **Logged:** 2026-07-15.
+
+### DEBT-7 · Signal generation misses Volume 1's own <2s target
+**What:** `/prediction/candidates` measured ~2.2s steady-state live
+(2026-07-15, post all perf fixes) vs. Volume 1 §16's <2s target — a ~10%
+miss. Not a defect introduced by any single volume; later volumes' scope
+grew past what Volume 1 budgeted for.
+**Expiry condition:** Before citing Volume 1's performance target as met
+anywhere, or when request latency is next worked (pairs naturally with
+DEBT-6 — populating Redis is the likely next win).
+**Logged:** 2026-07-15 (Volume 1 postflight).
 
 ---
 
