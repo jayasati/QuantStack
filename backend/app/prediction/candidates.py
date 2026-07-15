@@ -23,7 +23,7 @@ event_type ("trade_candidate.generated") from both opportunity.detected
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.config import Settings, get_settings
@@ -105,6 +105,16 @@ class TradeCandidate:
     market_confidence: float | None = None
     as_of: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    @property
+    def valid_until(self) -> datetime:
+        """as_of + estimated_lifetime_minutes -- the point past which this
+        setup is no longer expected to hold (see estimate_lifetime_minutes()
+        below). A computed property, not a stored field, so it can never
+        drift out of sync with as_of/estimated_lifetime_minutes. Lets a
+        caller directly check "did the market move as predicted before
+        this timestamp" instead of doing the arithmetic by hand."""
+        return self.as_of + timedelta(minutes=self.estimated_lifetime_minutes)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "instrument": self.instrument,
@@ -120,6 +130,7 @@ class TradeCandidate:
             "current_market_regime": self.current_market_regime,
             "market_confidence": self.market_confidence,
             "as_of": self.as_of.isoformat(),
+            "valid_until": self.valid_until.isoformat(),
         }
 
 
