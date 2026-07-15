@@ -197,17 +197,14 @@ class FeatureStore:
         if self._sessions is None:
             return {}
         async with self._sessions() as session:
-            # Selects only the 4 columns actually used below, not the full
-            # ORM entity -- found live (2026-07-14) via py-spy: materializing
-            # up to 5000 full FeatureStoreRow objects per call (identity-map
-            # registration, instrumentation, the works) for a query that
-            # only ever reads feature_name/value/feature_version/ts before
-            # discarding each row into a plain dict was itself the dominant
-            # cost of a "slow" request, independent of query execution time
-            # (confirmed via pg_stat_activity showing Postgres idle while
-            # this ran) -- SQLAlchemy ORM row hydration is not free, and this
-            # hot path (every latest_values() call, from every intelligence
-            # engine) never needed ORM identity/mutability semantics at all.
+            # DISTINCT ON (feature_name) ... ORDER BY feature_name, ts DESC
+            # asks Postgres for exactly the ~150 rows needed instead of
+            # fetching up to 5000 rows and keeping only the first hit per
+            # feature in Python (~97% waste per call, confirmed live
+            # 2026-07-14 -- this call runs ~264x per /prediction/candidates
+            # request) -- the same pattern replay.py already uses for its
+            # own point-in-time feature read. Also selects only the 4
+            # columns actually used below, not the full ORM entity.
             result = await session.execute(
                 select(
                     FeatureStoreRow.feature_name,
@@ -219,19 +216,18 @@ class FeatureStore:
                     FeatureStoreRow.symbol == symbol,
                     FeatureStoreRow.timeframe == timeframe,
                 )
-                .order_by(desc(FeatureStoreRow.ts))
-                .limit(5000)
+                .distinct(FeatureStoreRow.feature_name)
+                .order_by(FeatureStoreRow.feature_name, desc(FeatureStoreRow.ts))
             )
             rows = result.all()
-        payload: dict[str, Any] = {}
-        for row in rows:  # rows are ts-descending: first hit per feature is the latest
-            if row.feature_name not in payload:
-                payload[row.feature_name] = {
-                    "value": row.value,
-                    "version": row.feature_version,
-                    "ts": row.ts.isoformat(),
-                }
-        return payload
+        return {
+            row.feature_name: {
+                "value": row.value,
+                "version": row.feature_version,
+                "ts": row.ts.isoformat(),
+            }
+            for row in rows
+        }
 
     async def history(
         self,
@@ -241,7 +237,20 @@ class FeatureStore:
         version: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        since: datetime | None = None,
+        raw_ts: bool = False,
     ) -> list[dict[str, Any]]:
+        """`since` bounds the query in SQL (a WHERE ts >= since filter) for a
+        caller that only ever needs a recent window -- without it, `limit`
+        is the only bound, which lets a fast-cadence feature's history
+        stretch back arbitrarily far past however-many rows are needed
+        (perf-audit-2026-07-14 finding 9: correlation.py fetching up to
+        20,000 rows per series for a 60-day correlation, ~300x overfetch).
+        `raw_ts=True` returns `ts` as the native datetime instead of an
+        isoformat string, for a caller that would otherwise immediately
+        re-parse it back out (same finding: ~840k needless
+        serialize->reparse round trips per correlation run) -- default
+        stays isoformat-string since every other caller expects that."""
         if self._sessions is None:
             return []
         # Same fix as latest() above: select only the columns the dict
@@ -261,6 +270,8 @@ class FeatureStore:
             query = query.where(FeatureStoreRow.timeframe == timeframe)
         if version is not None:
             query = query.where(FeatureStoreRow.feature_version == version)
+        if since is not None:
+            query = query.where(FeatureStoreRow.ts >= since)
         query = query.order_by(desc(FeatureStoreRow.ts)).offset(offset).limit(limit)
         async with self._sessions() as session:
             rows = (await session.execute(query)).all()
@@ -270,7 +281,7 @@ class FeatureStore:
                 "version": row.feature_version,
                 "symbol": row.symbol,
                 "timeframe": row.timeframe,
-                "ts": row.ts.isoformat(),
+                "ts": row.ts if raw_ts else row.ts.isoformat(),
                 "value": row.value,
                 "window": row.window_size,
             }

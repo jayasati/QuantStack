@@ -329,13 +329,20 @@ class BaseFeatureEngine:
             return []
         lookback = self._settings.feature_candle_lookback
         async with self._sessions() as session:
+            # Column-only select, not the full ORM entity -- runs 96x500
+            # rows every 300s sweep across the 16 feature engines (same
+            # hydration-cost bug class as FeatureStore.latest(), see its own
+            # note on this; perf-audit-2026-07-14 finding 10).
             result = await session.execute(
-                select(OhlcvCandle)
+                select(
+                    OhlcvCandle.ts, OhlcvCandle.open, OhlcvCandle.high,
+                    OhlcvCandle.low, OhlcvCandle.close, OhlcvCandle.volume,
+                )
                 .where(OhlcvCandle.symbol == symbol, OhlcvCandle.timeframe == timeframe)
                 .order_by(OhlcvCandle.ts.desc())
                 .limit(lookback)
             )
-            rows = result.scalars().all()
+            rows = result.all()
         return [
             Candle(
                 ts=row.ts,

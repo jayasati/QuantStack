@@ -213,13 +213,17 @@ class FeatureDriftEngine:
         from app.database.tables import FeatureDriftRow
 
         query = (
-            select(FeatureDriftRow)
+            select(
+                FeatureDriftRow.created_at, FeatureDriftRow.metric,
+                FeatureDriftRow.value, FeatureDriftRow.threshold,
+                FeatureDriftRow.breached, FeatureDriftRow.data,
+            )
             .where(FeatureDriftRow.feature_name == feature_name)
             .order_by(FeatureDriftRow.id.desc())
             .limit(limit)
         )
         async with self._sessions() as session:
-            rows = (await session.execute(query)).scalars().all()
+            rows = (await session.execute(query)).all()
         history = []
         for row in rows:
             payload = row.data or {}

@@ -147,11 +147,11 @@ async def feature_versions(feature_name: str) -> dict:
     sessions = get_session_factory()
     async with sessions() as session:
         result = await session.execute(
-            select(FeatureVersion)
+            select(FeatureVersion.version, FeatureVersion.description, FeatureVersion.created_at)
             .where(FeatureVersion.feature_name == feature_name)
             .order_by(FeatureVersion.id)
         )
-        rows = result.scalars().all()
+        rows = result.all()
     return {
         "feature_name": feature_name,
         "versions": [
@@ -286,7 +286,11 @@ async def feature_quality_history(
     from app.database.tables import FeatureQualityRow
 
     query = (
-        select(FeatureQualityRow)
+        select(
+            FeatureQualityRow.created_at, FeatureQualityRow.symbol,
+            FeatureQualityRow.timeframe, FeatureQualityRow.quality_score,
+            FeatureQualityRow.sample_count, FeatureQualityRow.data,
+        )
         .where(FeatureQualityRow.feature_name == feature_name)
         .order_by(desc(FeatureQualityRow.id))
         .limit(limit)
@@ -295,7 +299,7 @@ async def feature_quality_history(
         query = query.where(FeatureQualityRow.symbol == symbol)
     sessions = get_session_factory()
     async with sessions() as session:
-        rows = (await session.execute(query)).scalars().all()
+        rows = (await session.execute(query)).all()
     return {
         "feature_name": feature_name,
         "history": [

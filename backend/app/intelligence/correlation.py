@@ -33,7 +33,7 @@ extra halving is needed here; the partition is symmetric by construction.
 
 import itertools
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.features.normalize import rolling_correlation
@@ -57,10 +57,19 @@ LONG_WINDOW = 60
 # breakdown — heuristic scales, same spirit as elsewhere in this layer.
 STABILITY_SATURATION = 0.5
 BREAKDOWN_THRESHOLD = 0.4
-# Raw rows fetched per constituent series before day-bucketing. Generous
-# because sector/macro sources run far more often than once a day (v1
-# pragmatic choice — a real cadence-aware fetch can replace this later).
-HISTORY_LIMIT = 20000
+# Raw rows fetched per constituent series before day-bucketing. Bounded by
+# both a row count and a date cutoff (HISTORY_LOOKBACK_DAYS below) -- the
+# date cutoff does the real limiting now; this stays as a sane upper bound
+# for a source with pathologically high intraday cadence.
+HISTORY_LIMIT = 2000
+# LONG_WINDOW calendar days of daily-bucketed history, plus a buffer for
+# weekends/holidays and the day-bucketing itself needing more than exactly
+# LONG_WINDOW raw calendar days of source data to produce LONG_WINDOW
+# trading-day buckets. Cuts the ~300x overfetch found live (2026-07-14):
+# sourcing up to 20,000 raw rows per series (SECTOR_INDICES sources run at
+# ~60s cadence) to compute a 60-day correlation when only ~90 calendar days
+# of history was ever going to matter.
+HISTORY_LOOKBACK_DAYS = LONG_WINDOW + 30
 
 # Each asset's constituent (feature_name, symbol, timeframe) triples,
 # averaged together day-by-day. US Markets/Global Indices/Sector Indices
@@ -84,11 +93,15 @@ ASSET_SOURCES: dict[str, tuple[tuple[str, str, str], ...]] = {
 ASSET_UNIVERSE: tuple[str, ...] = tuple(ASSET_SOURCES)
 
 
-def _ist_date(ts_iso: str) -> str:
-    dt = datetime.fromisoformat(ts_iso)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-    return dt.astimezone(IST).date().isoformat()
+def _ist_date(ts: datetime | str) -> str:
+    """Accepts a native datetime (the production path, via
+    store.history(raw_ts=True) -- no reparse needed) or an isoformat string
+    (test fixtures, and any other future caller of the pure daily_series())."""
+    if isinstance(ts, str):
+        ts = datetime.fromisoformat(ts)
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=ZoneInfo("UTC"))
+    return ts.astimezone(IST).date().isoformat()
 
 
 def daily_series(rows: Sequence[dict]) -> dict[str, float]:
@@ -228,12 +241,14 @@ class CorrelationIntelligenceEngine(IntelligenceComponent):
     name = "correlation_intelligence"
 
     async def assess(self) -> IntelligenceResult:
+        since = datetime.now(UTC) - timedelta(days=HISTORY_LOOKBACK_DAYS)
         asset_daily_series: dict[str, dict[str, float]] = {}
         for asset, sources in ASSET_SOURCES.items():
             constituents = []
             for feature_name, symbol, timeframe in sources:
                 rows = await self.store.history(
-                    feature_name, symbol=symbol, timeframe=timeframe, limit=HISTORY_LIMIT
+                    feature_name, symbol=symbol, timeframe=timeframe,
+                    limit=HISTORY_LIMIT, since=since, raw_ts=True,
                 )
                 constituents.append(daily_series(rows))
             asset_daily_series[asset] = average_daily_series(constituents)

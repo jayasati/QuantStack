@@ -341,14 +341,25 @@ class MarketStateReportEngine(IntelligenceComponent):
         from app.database.tables import MarketEvent
 
         async with self._sessions() as session:
+            # Filters `source` and orders by `id` (not `created_at`) so this
+            # matches ix_market_events_lookup's (event_type, source,
+            # data->>'symbol', data->>'timeframe', id) column order exactly
+            # -- perf-audit-2026-07-14 finding 11: omitting `source` and
+            # sorting by an unindexed column forced a filter+sort over every
+            # matching event_type row instead of an index-order scan. `id`
+            # is a monotonically increasing PK on an append-only table, so
+            # ordering by it descending is equivalent to `created_at`
+            # descending; `created_at <= as_of` below still enforces the
+            # actual point-in-time cutoff.
             result = await session.execute(
                 select(MarketEvent.data)
                 .where(
                     MarketEvent.event_type == REPORT_EVENT_TYPE,
+                    MarketEvent.source == self.name,
                     MarketEvent.data["symbol"].astext == symbol,
                     MarketEvent.created_at <= as_of,
                 )
-                .order_by(desc(MarketEvent.created_at))
+                .order_by(desc(MarketEvent.id))
                 .limit(1)
             )
             return result.scalar_one_or_none()
@@ -366,9 +377,10 @@ class MarketStateReportEngine(IntelligenceComponent):
                 select(MarketEvent.data)
                 .where(
                     MarketEvent.event_type == REPORT_EVENT_TYPE,
+                    MarketEvent.source == self.name,
                     MarketEvent.data["symbol"].astext == symbol,
                 )
-                .order_by(desc(MarketEvent.created_at))
+                .order_by(desc(MarketEvent.id))
                 .limit(limit)
             )
             return [row for row in result.scalars().all() if row is not None]

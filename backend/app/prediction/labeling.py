@@ -393,13 +393,19 @@ class TripleBarrierLabelingEngine:
 
         lookback = self._settings.feature_candle_lookback
         async with self._sessions() as session:
+            # Column-only select, not the full ORM entity -- same hydration-
+            # cost fix as features/base.py's identical method
+            # (perf-audit-2026-07-14 finding 10).
             result = await session.execute(
-                select(OhlcvCandle)
+                select(
+                    OhlcvCandle.ts, OhlcvCandle.open, OhlcvCandle.high,
+                    OhlcvCandle.low, OhlcvCandle.close, OhlcvCandle.volume,
+                )
                 .where(OhlcvCandle.symbol == symbol, OhlcvCandle.timeframe == timeframe)
                 .order_by(OhlcvCandle.ts.desc())
                 .limit(lookback)
             )
-            rows = result.scalars().all()
+            rows = result.all()
         return [
             Candle(
                 ts=row.ts, open=row.open, high=row.high, low=row.low,
