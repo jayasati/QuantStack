@@ -182,6 +182,12 @@
     <div class="empty">loading…</div>
   </div>
 
+  <div class="card span2" id="card-signal-history">
+    <h2>Signal History</h2>
+    <div class="sub">Direction and confidence over time for the selected symbol</div>
+    <div class="empty">loading…</div>
+  </div>
+
 </div>
 
 <script>
@@ -523,6 +529,51 @@ async function renderCandidates() {
   } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
 }
 
+// --- Signal history: direction strip + confidence sparkline over time ------
+
+function directionStrip(records) {
+  if (!records.length) return '<div class="empty">no history yet</div>';
+  const colorFor = (d) => d === 'long' ? 'var(--good)' : d === 'short' ? 'var(--critical)' : 'var(--warning)';
+  const segs = records.map(r => {
+    const label = r.as_of_ist ?? r.as_of;
+    return `<div style="flex:1;background:${colorFor(r.direction)}" title="${label}: ${r.direction}"></div>`;
+  }).join('');
+  return `<div style="display:flex;height:18px;border-radius:4px;overflow:hidden;gap:1px">${segs}</div>`;
+}
+
+async function renderSignalHistory(symbol) {
+  const el = $('card-signal-history');
+  try {
+    const records = await getJSON(`/prediction/candidates/${symbol}?limit=200`);
+    if (!records.length) { renderEmpty(el, `no persisted signal history for ${symbol} yet`); return; }
+    // API returns newest-first; the chart reads left(oldest) -> right(newest).
+    const chrono = [...records].reverse();
+    const confidences = chrono.map(r => r.market_confidence ?? 50);
+    const longCount = chrono.filter(r => r.direction === 'long').length;
+    const shortCount = chrono.filter(r => r.direction === 'short').length;
+    const neutralCount = chrono.length - longCount - shortCount;
+    const firstSeen = chrono[0].as_of_ist ?? chrono[0].as_of;
+    const lastSeen = chrono[chrono.length - 1].as_of_ist ?? chrono[chrono.length - 1].as_of;
+    const flat = longCount === chrono.length || shortCount === chrono.length;
+    el.innerHTML = `
+      <h2>Signal History — ${symbol}</h2>
+      <div class="sub">${chrono.length} persisted scans, ${firstSeen} &rarr; ${lastSeen}</div>
+      <div class="row">direction over time
+        <b>${longCount} long / ${shortCount} short / ${neutralCount} neutral</b></div>
+      ${directionStrip(chrono)}
+      <div class="legend">
+        <span><span class="dot" style="background:var(--good)"></span>long</span>
+        <span><span class="dot" style="background:var(--critical)"></span>short</span>
+        <span><span class="dot" style="background:var(--warning)"></span>neutral</span>
+      </div>
+      ${flat ? `<div class="row" style="margin-top:6px;color:var(--warning)">
+        direction hasn't changed across any of these ${chrono.length} scans</div>` : ''}
+      <div class="row" style="margin-top:14px">market confidence over time
+        <b>${confidences[confidences.length - 1].toFixed(1)}</b></div>
+      ${sparkline(confidences, 'var(--cat-1)')}`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
 // --- Orchestration -----------------------------------------------------------
 
 async function refreshAll() {
@@ -533,6 +584,7 @@ async function refreshAll() {
     renderBreadth(), renderSector(), renderLiquidity(symbol),
     renderFlowTimeline(symbol), renderTransitions(symbol),
     renderCorrelation(), renderAnalogs(symbol), renderCandidates(),
+    renderSignalHistory(symbol),
   ]);
   $('lastUpdated').textContent = `updated ${new Date().toLocaleTimeString()}`;
 }
