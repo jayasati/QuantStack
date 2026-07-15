@@ -29,20 +29,37 @@ input is new scope.
 OR when Volume 5.5+ work resumes — whichever comes first.
 **Logged:** 2026-07-15.
 
-### DEBT-2 · IntradayRiskFeatureEngine output is unconsumed — and it stalls
+### DEBT-2 · IntradayRiskFeatureEngine output is unconsumed (root cause of the stall found: external, not ours)
 **What:** Volume 3's `IntradayRiskFeatureEngine` writes real 5m-timeframe
 features (`intraday_move_from_open_pct`, `intraday_expected_move_next_30m_pct`,
-…) that no Volume 4/5 code reads (violates I-2). Separately, it was observed
-stalled live: last write 10:25 IST on 2026-07-15 (checked at Volume 2
-preflight), still stalled at last write 11:30 IST when re-checked at Volume 3
-preflight (VM time 17:09 IST — ~6h stale, spanning the rest of the trading
-session and market close). Confirmed NOT self-resolving. Root cause not yet
-investigated.
-**Expiry condition:** Same as DEBT-1 (they resolve together: the natural fix
-for DEBT-1 consumes this engine's output — which first requires it to run
-reliably). Root-cause investigation recommended before Volume 4 work resumes,
-independent of DEBT-1's wiring fix.
-**Logged:** 2026-07-15 (revised at Volume 3 preflight,
+…) that no Volume 4/5 code reads (violates I-2) — this half is still open.
+
+The separate stall (last write 10:25 IST → 11:30 IST → confirmed still
+stuck across the Volume 2 and 3 preflights) was root-caused 2026-07-15:
+**not a bug in this codebase.** `HistoricalCandleCollector.collect()`'s two
+early-continue paths had zero logging (fixed, `79a067f` — now warns with
+symbol/interval/requested range on an empty broker response). Once
+deployed, live investigation isolated the actual cause: `raw_ticks`
+(WebSocket live feed) stayed perfectly fresh (~5s old) throughout, while
+`ohlcv_candles` (REST `getCandleData`) was ~5.5h behind real time.
+Three manual `/collectors/historical_candles/run` triggers ~90s apart each
+advanced the 1m candle by exactly ~1 minute — Angel One's own candle-
+aggregation backend was actively catching up, just from a badly backlogged
+starting point, at roughly real-time pace (i.e., not stuck, but also not
+going to fully catch up same-day at that rate). Circuit breaker never
+tripped, zero exceptions anywhere in this chain — purely an upstream
+broker-side backend degradation, outside this codebase's control.
+**Risk while open:** Any future intraday-intelligence work (DEBT-1) must
+treat `ohlcv_candles` freshness as a genuine external dependency that can
+silently degrade for hours, not an assumption — the eventual fix should
+include a staleness check (e.g., compare latest candle ts to now, downgrade
+confidence or flag the signal when the gap exceeds a threshold) rather than
+trusting whatever's in the table. The logging fix means a recurrence is now
+visible in logs the moment it happens, not discoverable only by manual query.
+**Expiry condition:** Consumer-wiring half resolves with DEBT-1. The
+staleness-check recommendation above should land as part of that same fix,
+not deferred again.
+**Logged:** 2026-07-15 (root-caused same day, `79a067f` +
 `docs/volumes/preflight-vol3-2026-07-15.md`).
 
 ### DEBT-3 · No outcome evaluator / win-rate metric
