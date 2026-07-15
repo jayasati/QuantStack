@@ -457,6 +457,21 @@ def classify(article: dict[str, Any]) -> str:
 # --- collector -------------------------------------------------------------------
 
 
+# NewsIntelligenceCollector (120s) and GlobalShockCollector (30s, subclass
+# below) run on independent APScheduler schedules but both funnel through
+# FinBERT sentiment scoring in the same process/vCPUs -- without this,
+# their schedules can overlap and briefly peg multiple cores at once,
+# competing with the request-serving event loop (perf-audit-2026-07-14
+# finding 14: py-spy caught active BERT forward threads during slow
+# requests). Module-level (not per-instance) so it's shared across both
+# collector classes/instances. Only serializes the CPU-heavy scoring step
+# against itself -- each collector's own fetch/dedup/classify work, and any
+# other collector entirely, is unaffected. A full fix (a separate process
+# so this stops sharing the GIL/cores with request handling at all) is a
+# bigger architectural change than this conservative mitigation.
+_finbert_scoring_lock = asyncio.Lock()
+
+
 class NewsIntelligenceCollector(BaseCollector):
     """Aggregate, classify, score, and dedup financial news articles."""
 
@@ -489,11 +504,15 @@ class NewsIntelligenceCollector(BaseCollector):
     async def _score_all(self, texts: list[str]) -> list[float]:
         """One thread-pool hop per collect() call — never blocks the event
         loop, and uses score_batch (a single forward pass) when the provider
-        offers it, e.g. FinBertSentimentProvider."""
-        batch = getattr(self._sentiment, "score_batch", None)
-        if batch is not None:
-            return await asyncio.to_thread(batch, texts)
-        return await asyncio.to_thread(lambda: [self._sentiment.score(t) for t in texts])
+        offers it, e.g. FinBertSentimentProvider. Serialized against every
+        other FinBERT-scoring collector via _finbert_scoring_lock (see its
+        own docstring) so two independent schedules can't both peg CPU at
+        once."""
+        async with _finbert_scoring_lock:
+            batch = getattr(self._sentiment, "score_batch", None)
+            if batch is not None:
+                return await asyncio.to_thread(batch, texts)
+            return await asyncio.to_thread(lambda: [self._sentiment.score(t) for t in texts])
 
     async def collect(self) -> list[CollectorOutput]:
         articles = await self._news_source.fetch_articles()

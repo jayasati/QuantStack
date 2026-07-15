@@ -49,7 +49,17 @@ class Settings(BaseSettings):
     # report-generation fan-out concurrently for every candidate compounded
     # this into real connection-pool queuing. Raised as a config knob
     # (not hardcoded) so it can be tuned without a code change as usage grows.
-    database_pool_size: int = 20
+    #
+    # pool_size raised 20 -> 40 (perf-audit-2026-07-14 finding 18): only
+    # the pool_size-bounded connections are kept open and reused across
+    # checkouts -- anything landing in the max_overflow tier gets torn down
+    # (SCRAM-reauthenticated from scratch next time) the moment it's
+    # checked back in. Live burst concurrency measured at ~36-48
+    # simultaneous checkouts against pool_size=20, so most of every burst
+    # was hitting that non-reused overflow tier and paying a fresh
+    # SCRAM handshake per request. max_overflow left as a genuine ceiling
+    # above steady-state burst, not the primary capacity.
+    database_pool_size: int = 40
     database_max_overflow: int = 20
     redis_url: str = "redis://localhost:6379/0"
     log_level: str = "INFO"

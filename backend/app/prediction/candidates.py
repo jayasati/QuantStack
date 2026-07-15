@@ -284,24 +284,36 @@ class CandidateGenerationEngine:
             generate_candidate(opportunity, rank, snapshot.snapshot_id)
             for rank, (opportunity, snapshot) in enumerate(zip(top, snapshots, strict=True), start=1)
         ]
-        await asyncio.gather(*(self._persist(candidate) for candidate in candidates))
+        await self._persist_all(candidates)
         return candidates
 
-    async def _persist(self, candidate: TradeCandidate) -> None:
-        if self._bus is not None:
-            await self._bus.publish(
-                Event(type=EVENT_TYPE, payload=candidate.to_dict(), source=self.name)
-            )
+    async def _persist_all(self, candidates: list[TradeCandidate]) -> None:
+        """One session/commit for every candidate in this batch, not one
+        INSERT+COMMIT per candidate (perf-audit-2026-07-14 finding 15).
+        to_dict() is computed at most once per candidate and reused for
+        both the event payload and the DB row, and skipped entirely when
+        nothing is subscribed to EVENT_TYPE (findings 16/17)."""
+        if not candidates:
+            return
+        publish = self._bus is not None and self._bus.has_subscribers(EVENT_TYPE)
+        payloads = (
+            [candidate.to_dict() for candidate in candidates]
+            if publish or self._sessions is not None else []
+        )
+        if publish:
+            await asyncio.gather(*(
+                self._bus.publish(Event(type=EVENT_TYPE, payload=payload, source=self.name))
+                for payload in payloads
+            ))
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent
 
         async with self._sessions() as session:
-            session.add(MarketEvent(
-                event_type=EVENT_TYPE,
-                source=self.name,
-                data=candidate.to_dict(),
-            ))
+            session.add_all([
+                MarketEvent(event_type=EVENT_TYPE, source=self.name, data=payload)
+                for payload in payloads
+            ])
             await session.commit()
 
     async def recent(self, symbol: str | None = None, limit: int = 50) -> list[dict[str, Any]]:

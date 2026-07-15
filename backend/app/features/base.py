@@ -168,12 +168,19 @@ class BaseFeatureEngine:
         values = self.build_values_at(symbol, timeframe, timestamps, series, since=since)
         quality = self._quality_check(values)
         stored = await self.store.write(values)
+        if not values and not full:
+            # Nothing new since the watermark -- still refresh the online
+            # key's TTL so a feature that updates slower than the engine's
+            # schedule doesn't silently fall out of Redis (perf-audit-
+            # 2026-07-14 finding 8).
+            await self.store.refresh_online_ttl(symbol, timeframe)
         await self._persist_run_metadata(symbol, timeframe, values, quality)
 
-        if self._bus is not None and values:
+        event_type = f"feature.{self.category}.updated"
+        if self._bus is not None and values and self._bus.has_subscribers(event_type):
             await self._bus.publish(
                 Event(
-                    type=f"feature.{self.category}.updated",
+                    type=event_type,
                     payload={
                         "symbol": symbol,
                         "timeframe": timeframe,

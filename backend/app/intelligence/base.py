@@ -127,15 +127,23 @@ class IntelligenceComponent:
     async def _publish(self, event_type: str, payload: dict[str, Any]) -> None:
         """Emit a domain event for this assessment, if a bus was wired in
         (Volume 1 §10: inter-module communication flows through events, not
-        just direct downstream calls)."""
-        if self._bus is None:
+        just direct downstream calls) AND something is actually subscribed
+        (perf-audit-2026-07-14 finding 17). This guard alone only saves the
+        Event() allocation/publish() call, not payload construction that
+        already happened before `_publish` was called -- a caller building
+        an expensive payload should check `self._bus.has_subscribers(...)`
+        itself first, the way `_publish_assessment` below does."""
+        if self._bus is None or not self._bus.has_subscribers(event_type):
             return
         await self._bus.publish(Event(type=event_type, payload=payload, source=self.name))
 
     async def _publish_assessment(self, symbol: str | None, result: IntelligenceResult) -> None:
+        event_type = f"intelligence.{self.name}.assessed"
+        if self._bus is None or not self._bus.has_subscribers(event_type):
+            return
         dominant = max(result.states, key=lambda s: result.states[s]) if result.states else None
         await self._publish(
-            f"intelligence.{self.name}.assessed",
+            event_type,
             {
                 "symbol": symbol,
                 "score": result.score,

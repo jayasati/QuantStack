@@ -48,6 +48,7 @@ from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.events.bus import Event, EventBus
 from app.intelligence.base import IntelligenceResult
+from app.intelligence.composite import _states_changed
 from app.intelligence.events import EventIntelligenceEngine
 from app.intelligence.explain import ExplainabilityStore
 from app.intelligence.institutional_flow import InstitutionalFlowIntelligenceEngine
@@ -271,6 +272,13 @@ class OpportunityDetectionEngine:
         self._explainability = explainability_store or ExplainabilityStore(
             session_factory=session_factory, settings=self._settings, bus=bus,
         )
+        # Dedup for the regime-belief feed below -- same _states_changed
+        # fix composite.py already applies to its own identical feed
+        # (perf-audit-2026-07-14 finding 15): without it, every request
+        # re-writes a belief update even when the underlying states haven't
+        # moved since the last feed, inflating observation_count from
+        # repetition rather than genuinely new evidence.
+        self._last_fed_states: dict[tuple[str, str, str], dict[str, float]] = {}
 
     async def detect(
         self,
@@ -318,12 +326,20 @@ class OpportunityDetectionEngine:
         trend_transition = None
         structure_transition = None
         if trend is not None:
-            await self._regime_detector.update_from_result("trend", symbol, "D", trend)
+            key = ("trend", symbol, "D")
+            if _states_changed(self._last_fed_states.get(key), trend.states):
+                await self._regime_detector.update_from_result("trend", symbol, "D", trend)
+                self._last_fed_states[key] = dict(trend.states)
             trend_transition = await safe(
                 self._regime_transitions.assess(component="trend", symbol=symbol)
             )
         if structure is not None:
-            await self._regime_detector.update_from_result("market_structure", symbol, "D", structure)
+            key = ("market_structure", symbol, "D")
+            if _states_changed(self._last_fed_states.get(key), structure.states):
+                await self._regime_detector.update_from_result(
+                    "market_structure", symbol, "D", structure
+                )
+                self._last_fed_states[key] = dict(structure.states)
             structure_transition = await safe(
                 self._regime_transitions.assess(component="market_structure", symbol=symbol)
             )
@@ -352,7 +368,6 @@ class OpportunityDetectionEngine:
             composite_confidence=composite_confidence,
             component_results=component_results,
         )
-        await self._persist(candidate)
         return candidate
 
     async def _market_confidence(self, symbol: str) -> float | None:
@@ -404,23 +419,39 @@ class OpportunityDetectionEngine:
         )
         candidates = [c for c in results if c is not None]
         candidates.sort(key=lambda c: c.priority_score, reverse=True)
+        await self._persist_all(candidates)
         return candidates
 
-    async def _persist(self, candidate: OpportunityCandidate) -> None:
-        if self._bus is not None:
-            await self._bus.publish(
-                Event(type=EVENT_TYPE, payload=candidate.to_dict(), source=self.name)
-            )
+    async def _persist_all(self, candidates: list[OpportunityCandidate]) -> None:
+        """One session/commit for every triggered candidate from this scan,
+        not one INSERT+COMMIT per candidate (perf-audit-2026-07-14 finding
+        15) -- moved here from detect() itself, which is only ever called
+        from scan() (never persisted a candidate on its own before this
+        fix either, since scan() is the only caller). to_dict() is computed
+        at most once per candidate and reused for both the event payload
+        and the DB row, and skipped entirely when nothing is subscribed to
+        EVENT_TYPE (findings 16/17)."""
+        if not candidates:
+            return
+        publish = self._bus is not None and self._bus.has_subscribers(EVENT_TYPE)
+        payloads = (
+            [candidate.to_dict() for candidate in candidates]
+            if publish or self._sessions is not None else []
+        )
+        if publish:
+            await asyncio.gather(*(
+                self._bus.publish(Event(type=EVENT_TYPE, payload=payload, source=self.name))
+                for payload in payloads
+            ))
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent
 
         async with self._sessions() as session:
-            session.add(MarketEvent(
-                event_type=EVENT_TYPE,
-                source=self.name,
-                data=candidate.to_dict(),
-            ))
+            session.add_all([
+                MarketEvent(event_type=EVENT_TYPE, source=self.name, data=payload)
+                for payload in payloads
+            ])
             await session.commit()
 
     async def recent(self, symbol: str | None = None, limit: int = 50) -> list[dict[str, Any]]:

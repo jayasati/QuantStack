@@ -61,6 +61,17 @@ class EventBus:
         self.delivered_count = 0
         self.duplicate_count = 0
 
+    def has_subscribers(self, event_type: str) -> bool:
+        """Whether anything is actually subscribed to `event_type` --
+        callers building an expensive payload (a full to_dict()) should
+        check this BEFORE constructing it, not rely on publish()'s own
+        no-handlers short-circuit, which only saves the delivery step after
+        the (possibly large) payload was already built for nothing
+        (perf-audit-2026-07-14 finding 17: zero production subscribers
+        exist today, so every publish() call across the app was pure
+        waste)."""
+        return bool(self._subscribers.get(event_type))
+
     def subscribe(self, event_type: str, handler: Handler, version: int | None = None) -> None:
         """Subscribe to ``event_type``. ``version=None`` (default) receives
         every version of that event; passing a specific ``version`` routes

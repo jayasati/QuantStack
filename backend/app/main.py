@@ -1,6 +1,8 @@
 """QuantStack backend application entry point."""
 
+import asyncio
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI
 
@@ -124,17 +126,33 @@ async def lifespan(app: FastAPI):
     # deployment where nobody polls GET /intelligence/state/{symbol}.
     report_engine = container.resolve(MarketStateReportEngine)
 
+    # perf-audit-2026-07-14 finding 5: market_intelligence_sweep,
+    # composite_intelligence_sweep, and candidate_generation all fired on
+    # the same 300s tick -- APScheduler's IntervalTrigger with no
+    # next_run_time counts from job-add time, and all three jobs are added
+    # within milliseconds of each other here at startup, so every tick
+    # forever piles ~300 background engine executions onto the same event
+    # loop at once, with nothing preventing that from also colliding with a
+    # concurrent user request. APScheduler's max_instances=1 (the default)
+    # only stops a job overlapping *itself*, not job-vs-job. A lock shared
+    # by these three background sweeps (never held by the request path)
+    # serializes them against each other; each job's own next_run_time
+    # below staggers their first fire so steady-state ticks land apart
+    # instead of on top of each other.
+    background_sweep_lock = asyncio.Lock()
+
     async def market_intelligence_sweep() -> None:
         """Regenerate and persist a Market State Report for every watchlist
         symbol, keeping candidate generation's report_as_of() reads fresh."""
-        for symbol in settings.watchlist:
-            try:
-                await report_engine.generate(symbol)
-            except Exception as exc:
-                logger.error(
-                    "market intelligence sweep failed",
-                    extra={"symbol": symbol, "error": str(exc)},
-                )
+        async with background_sweep_lock:
+            for symbol in settings.watchlist:
+                try:
+                    await report_engine.generate(symbol)
+                except Exception as exc:
+                    logger.error(
+                        "market intelligence sweep failed",
+                        extra={"symbol": symbol, "error": str(exc)},
+                    )
 
     scheduler.add_job(
         market_intelligence_sweep,
@@ -142,6 +160,7 @@ async def lifespan(app: FastAPI):
         seconds=settings.market_intelligence_interval,
         id="intelligence.market_state_sweep",
         replace_existing=True,
+        next_run_time=datetime.now(UTC),
     )
 
     # CompositeMarketIntelligenceEngine had no scheduled cycle at all --
@@ -158,14 +177,15 @@ async def lifespan(app: FastAPI):
         """Regenerate the Composite Market Intelligence Score for every
         watchlist symbol, feeding regime beliefs and explainability records
         for all 11 components along the way."""
-        for symbol in settings.watchlist:
-            try:
-                await composite_engine.assess(symbol)
-            except Exception as exc:
-                logger.error(
-                    "composite intelligence sweep failed",
-                    extra={"symbol": symbol, "error": str(exc)},
-                )
+        async with background_sweep_lock:
+            for symbol in settings.watchlist:
+                try:
+                    await composite_engine.assess(symbol)
+                except Exception as exc:
+                    logger.error(
+                        "composite intelligence sweep failed",
+                        extra={"symbol": symbol, "error": str(exc)},
+                    )
 
     scheduler.add_job(
         composite_intelligence_sweep,
@@ -173,6 +193,8 @@ async def lifespan(app: FastAPI):
         seconds=settings.market_intelligence_interval,
         id="intelligence.composite_sweep",
         replace_existing=True,
+        next_run_time=datetime.now(UTC)
+        + timedelta(seconds=settings.market_intelligence_interval / 3),
     )
 
     # CandidateGenerationEngine.generate() already calls scan() as its first
@@ -180,12 +202,19 @@ async def lifespan(app: FastAPI):
     # together), so only this one job is scheduled -- a separate
     # OpportunityDetectionEngine.scan() job would duplicate the same scan.
     candidate_engine = container.resolve(CandidateGenerationEngine)
+
+    async def candidate_generation_sweep() -> None:
+        async with background_sweep_lock:
+            await candidate_engine.generate()
+
     scheduler.add_job(
-        candidate_engine.generate,
+        candidate_generation_sweep,
         trigger="interval",
         seconds=settings.feature_engine_interval,
         id="prediction.candidate_generation",
         replace_existing=True,
+        next_run_time=datetime.now(UTC)
+        + timedelta(seconds=2 * settings.feature_engine_interval / 3),
     )
 
     logger.info(

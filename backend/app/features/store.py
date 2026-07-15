@@ -188,6 +188,27 @@ class FeatureStore:
                 written += len(group)
         return written
 
+    async def refresh_online_ttl(self, symbol: str, timeframe: str) -> bool:
+        """Re-extend the online key's TTL without needing new values.
+
+        An incremental run whose underlying data hasn't advanced past the
+        watermark yet (e.g. a "D"-timeframe feature re-run on a schedule
+        that ticks far more often than once a day) calls write([]), which
+        writes nothing -- _write_online() above only refreshes the TTL as a
+        side effect of writing new values, so a feature update slower than
+        online_ttl_seconds would otherwise silently fall out of Redis and
+        never come back (perf-audit-2026-07-14 finding 8: live Redis held
+        13 keys vs ~45 expected). Callers should reach for this specifically
+        when a run found nothing new, not on every run -- write() already
+        refreshes the TTL when it has something to write."""
+        if self._cache is None:
+            return False
+        key = _online_key(symbol, timeframe)
+        payload = await self._cache.get_safe(key)
+        if not payload:
+            return False
+        return await self._cache.set_safe(key, payload, ttl_seconds=self._online_ttl)
+
     async def latest(self, symbol: str, timeframe: str) -> dict[str, Any]:
         """Latest value per feature: Redis first, offline store as fallback."""
         if self._cache is not None:

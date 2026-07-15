@@ -128,7 +128,20 @@ class FeatureSnapshotEngine:
             as_of=datetime.now(UTC),
             feature_values=feature_values,
             feature_versions=feature_versions,
-            market_report=report.to_dict(),
+            # A summary reference, not the full report -- generate() just
+            # persisted the complete report standalone (its own
+            # market_state_report.observation event), so embedding another
+            # full copy here duplicated a multi-KB JSON blob on every single
+            # snapshot row (perf-audit-2026-07-14 finding 16). The full
+            # report for this exact moment is always one
+            # report_as_of(symbol, snapshot.as_of) call away.
+            market_report={
+                "symbol": report.symbol,
+                "as_of": report.as_of.isoformat(),
+                "composite_intelligence_score": report.composite_intelligence_score,
+                "expected_opportunity": report.expected_opportunity,
+                "expected_risk": report.expected_risk,
+            },
             regime=dict(report.current_regimes),
             collector_versions=collector_versions,
         )
@@ -155,10 +168,14 @@ class FeatureSnapshotEngine:
             return {name: version for name, version in result.all() if name and version}
 
     async def _persist(self, snapshot: FeatureSnapshot) -> None:
-        if self._bus is not None:
-            await self._bus.publish(
-                Event(type=EVENT_TYPE, payload=snapshot.to_dict(), source=self.name)
-            )
+        # to_dict() computed at most once and reused for both the event
+        # payload and the DB row -- was called twice separately before;
+        # also skipped entirely when nothing is subscribed to EVENT_TYPE
+        # (perf-audit-2026-07-14 findings 16/17).
+        publish = self._bus is not None and self._bus.has_subscribers(EVENT_TYPE)
+        payload = snapshot.to_dict() if publish or self._sessions is not None else None
+        if publish:
+            await self._bus.publish(Event(type=EVENT_TYPE, payload=payload, source=self.name))
         if self._sessions is None:
             return
         from app.database.tables import MarketEvent
@@ -167,7 +184,7 @@ class FeatureSnapshotEngine:
             session.add(MarketEvent(
                 event_type=EVENT_TYPE,
                 source=self.name,
-                data=snapshot.to_dict(),
+                data=payload,
             ))
             await session.commit()
 
