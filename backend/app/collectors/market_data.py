@@ -309,6 +309,13 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
             for interval in self.intervals:
                 start = await self._backfill_start(symbol, interval, end)
                 if start >= end:
+                    self.logger.debug(
+                        "candle fetch skipped: already caught up",
+                        extra={
+                            "symbol": symbol, "interval": interval,
+                            "start": start.isoformat(), "end": end.isoformat(),
+                        },
+                    )
                     continue
                 try:
                     candles = await self.broker.get_historical(
@@ -321,6 +328,23 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
                     )
                     continue
                 if not candles:
+                    # A broker call that succeeds (no exception) but returns
+                    # zero bars was previously silent here -- no log, no
+                    # metric -- which is exactly why intraday candle
+                    # collection stalling for hours (DEBT-2's root cause,
+                    # 2026-07-15) went undetected until a manual DB query
+                    # found it. Warn with the exact request window so a
+                    # repeat is visible in logs immediately, not by
+                    # archaeology.
+                    self.logger.warning(
+                        "candle fetch returned no bars",
+                        extra={
+                            "symbol": symbol,
+                            "interval": interval,
+                            "requested_from": start.isoformat(),
+                            "requested_to": end.isoformat(),
+                        },
+                    )
                     continue
                 gaps = self._validate_continuity(
                     [c.timestamp for c in candles], INTERVAL_MINUTES[interval]
