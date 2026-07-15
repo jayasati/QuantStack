@@ -25,6 +25,7 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
@@ -37,6 +38,15 @@ logger = get_logger(__name__)
 
 EVENT_TYPE = "trade_candidate.generated"
 MAX_CANDIDATES = 20
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _ist_display(dt: datetime) -> str:
+    """Human-readable IST rendering for as_of/valid_until -- e.g.
+    "15 Jul 2026, 02:27 PM IST". The canonical as_of/valid_until fields stay
+    ISO-8601 UTC (unambiguous, and what the dashboard's own JS parses via
+    `new Date(...)`); this is a display-only addition, not a replacement."""
+    return dt.astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
 
 # Bounds how many candidates' FeatureSnapshotEngine.capture() calls run
 # concurrently. Each capture() internally runs MarketStateReportEngine.
@@ -131,6 +141,8 @@ class TradeCandidate:
             "market_confidence": self.market_confidence,
             "as_of": self.as_of.isoformat(),
             "valid_until": self.valid_until.isoformat(),
+            "as_of_ist": _ist_display(self.as_of),
+            "valid_until_ist": _ist_display(self.valid_until),
         }
 
 

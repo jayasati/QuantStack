@@ -508,7 +508,7 @@ async function renderCandidates() {
         <td>${c.priority_score.toFixed(2)}</td>
         <td>${(c.market_confidence ?? 0).toFixed(1)}</td>
         <td title="${c.reason}">${c.current_market_regime?.trend ?? '—'} / ${c.current_market_regime?.market_structure ?? '—'}</td>
-        <td>${validUntil.toLocaleString()}</td>
+        <td>${c.valid_until_ist ?? validUntil.toLocaleString()}</td>
         <td><span class="badge ${statusCls}">${statusLabel}</span></td>
       </tr>`;
     }).join('');
