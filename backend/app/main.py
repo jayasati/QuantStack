@@ -4,6 +4,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 
 from app.api.collectors import router as collectors_router
@@ -65,6 +66,12 @@ async def lifespan(app: FastAPI):
     discovered = registry.discover()
 
     scheduler = start_scheduler()
+    # Resolvable so an operator can pause/resume every background job
+    # (collectors, feature engines, sweeps) without stopping the process --
+    # see /health/scheduler/{pause,resume,status} -- useful for isolating
+    # request-path latency from background contention during an incident
+    # or a live perf comparison.
+    container.register(AsyncIOScheduler, lambda: scheduler)
     scheduled = registry.schedule_all(scheduler)
 
     feature_engines = [
