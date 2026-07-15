@@ -176,6 +176,12 @@
     <div class="empty">loading…</div>
   </div>
 
+  <div class="card span2" id="card-candidates">
+    <h2>Trade Candidates</h2>
+    <div class="sub">Ranked signals from the latest scan, with each one's valid_until window</div>
+    <div class="empty">loading…</div>
+  </div>
+
 </div>
 
 <script>
@@ -476,6 +482,46 @@ async function renderAnalogs(symbol) {
   } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
 }
 
+// --- Trade candidates --------------------------------------------------------
+
+function directionBadge(direction) {
+  if (direction === 'long') return 'good';
+  if (direction === 'short') return 'critical';
+  return 'warning';
+}
+
+async function renderCandidates() {
+  const el = $('card-candidates');
+  try {
+    const candidates = await getJSON('/prediction/candidates');
+    if (!candidates.length) { renderEmpty(el, 'no triggered candidates in the latest scan'); return; }
+    const now = new Date();
+    const rows = candidates.map(c => {
+      const validUntil = new Date(c.valid_until);
+      const active = validUntil > now;
+      const statusCls = active ? 'good' : 'critical';
+      const statusLabel = active ? 'active' : 'expired';
+      return `<tr>
+        <td>${c.priority}</td>
+        <td>${c.instrument}</td>
+        <td><span class="badge ${directionBadge(c.direction)}">${c.direction}</span></td>
+        <td>${c.priority_score.toFixed(2)}</td>
+        <td>${(c.market_confidence ?? 0).toFixed(1)}</td>
+        <td title="${c.reason}">${c.current_market_regime?.trend ?? '—'} / ${c.current_market_regime?.market_structure ?? '—'}</td>
+        <td>${validUntil.toLocaleString()}</td>
+        <td><span class="badge ${statusCls}">${statusLabel}</span></td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `
+      <h2>Trade Candidates</h2>
+      <div class="sub">Ranked signals from the latest scan, with each one's valid_until window</div>
+      <table><tr>
+        <th>#</th><th>instrument</th><th>direction</th><th>priority</th>
+        <th>confidence</th><th>regime (trend/structure)</th><th>valid until</th><th>status</th>
+      </tr>${rows}</table>`;
+  } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
+}
+
 // --- Orchestration -----------------------------------------------------------
 
 async function refreshAll() {
@@ -485,7 +531,7 @@ async function refreshAll() {
     renderComposite(symbol), renderConfidence(symbol), renderRegime(symbol),
     renderBreadth(), renderSector(), renderLiquidity(symbol),
     renderFlowTimeline(symbol), renderTransitions(symbol),
-    renderCorrelation(), renderAnalogs(symbol),
+    renderCorrelation(), renderAnalogs(symbol), renderCandidates(),
   ]);
   $('lastUpdated').textContent = `updated ${new Date().toLocaleTimeString()}`;
 }
