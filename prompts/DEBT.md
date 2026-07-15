@@ -173,6 +173,27 @@ INVARIANTS.md). Canonical example of why decisions need a durable,
 loudly-flagged record — a comment in one file wasn't enough to survive one
 audit prompt not reading it.
 
+### ~~Several NSE-session-bound collectors ran 24/7 with no market-hours gate~~ — resolved 2026-07-15
+`BaseCollector` already had a proven `market_hours_only` gate (`is_nse_market_open()`,
+short-circuits `run_once()` before any DB/network call) used correctly by
+`market_breadth`/`options_intelligence`/`sector_rotation`, but it was never
+applied consistently. Audit found: `live_market` (15s interval, quotes/LTP
+that freeze the instant the market closes — ~4,200 pointless broker
+round-trips/night), plus `historical_candles`/`vix`/`reference_indices`
+(same family just fixed the same day — less wasteful thanks to
+`_backfill_start`'s resume-tracking, but still 175 DB round-trips every 5
+min all night for zero new data). Separately, `nse_delivery` and
+`institutional_flow` poll hourly for data (bhavcopy, FII/DII reports) that
+only ever publishes end-of-day — the *opposite* problem, most wasted runs
+were the daytime ones checking for a file that provably wasn't published
+yet. Fixed: added `market_hours_only = True` to the first group, added a
+new symmetric `after_hours_only` gate (`app/collectors/base.py`) to the
+second group, and closed a related gap found along the way —
+`is_nse_market_open()` only checked weekday + time-of-day, so a weekday
+exchange holiday (e.g. 2026-03-04) still counted as "open"; it now also
+checks `feature_market_holidays`.
+**Logged:** 2026-07-15.
+
 ### ~~Watchlist expansion silently no-op'd on the VM~~ — resolved 2026-07-15
 Expanded `Settings.watchlist` from 3 indices to a 25-symbol basket in
 `app/core/config.py` (`fcd3da4`), deployed it, and confirmed live that only

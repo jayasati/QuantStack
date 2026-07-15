@@ -187,3 +187,14 @@ async def test_registry_discovers_vix_collector() -> None:
     registry.discover(["app.collectors.market_data"])
     names = {c["name"] for c in registry.list_collectors()}
     assert "vix" in names
+
+
+def test_historical_candle_family_is_market_hours_only() -> None:
+    # No new intraday bars form once the market's shut; inherited by
+    # VixCollector and ReferenceIndexCollector too (see
+    # test_collector_framework.py for the shared gate mechanics).
+    from app.collectors.market_data import HistoricalCandleCollector, ReferenceIndexCollector
+
+    assert HistoricalCandleCollector.market_hours_only is True
+    assert VixCollector.market_hours_only is True
+    assert ReferenceIndexCollector.market_hours_only is True

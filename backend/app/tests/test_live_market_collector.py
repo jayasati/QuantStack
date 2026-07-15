@@ -77,3 +77,10 @@ async def test_collect_emits_a_live_quote_for_india_vix() -> None:
     assert by_instrument["INDIAVIX"].metadata["trading_symbol"] == "India VIX"
     # Same 15s live-tick path as every tradable symbol — no special casing.
     assert "99926017" in broker.quoted_tokens
+
+
+def test_collector_is_market_hours_only() -> None:
+    # Quotes/LTP freeze the instant the market closes -- polling every 15s
+    # regardless would be pointless (see test_collector_framework.py for the
+    # shared market_hours_only gate mechanics).
+    assert LiveMarketCollector.market_hours_only is True

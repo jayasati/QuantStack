@@ -107,6 +107,7 @@ class LiveMarketCollector(_BrokerBackedCollector):
     interval_seconds = 15
     priority = 1
     requires_auth = True
+    market_hours_only = True  # quotes/LTP freeze the instant the market closes
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -306,6 +307,14 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
     interval_seconds = 300
     priority = 5
     requires_auth = True
+    # No new intraday bars form once the market's shut; `_backfill_start`'s
+    # resume-tracking already makes a caught-up run cheap (DB-only, no
+    # network call), but this still means zero pointless scheduled runs
+    # instead of many cheap ones. Inherited by VixCollector and
+    # ReferenceIndexCollector -- their Yahoo deep-backfill path (unrelated
+    # to NSE session timing) is also gated by this, which only delays a
+    # first-time deep backfill to the next market session, never blocks it.
+    market_hours_only = True
 
     intervals: tuple[str, ...] = ("1m", "3m", "5m", "15m", "30m", "1H", "D")
     default_lookback = {

@@ -108,3 +108,10 @@ def test_default_source_is_nse() -> None:
     from app.collectors.sources.nse_flows import NseFlowSource
 
     assert isinstance(InstitutionalFlowCollector()._flow_source, NseFlowSource)
+
+
+def test_collector_is_after_hours_only() -> None:
+    # FII/DII cash flows, deal/promoter/insider filings all publish
+    # end-of-day (see test_collector_framework.py for the shared
+    # after_hours_only gate mechanics).
+    assert InstitutionalFlowCollector.after_hours_only is True

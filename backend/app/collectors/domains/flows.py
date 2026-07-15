@@ -98,6 +98,10 @@ class InstitutionalFlowCollector(BaseCollector):
     source = "institutional_flows"
     interval_seconds = 3600
     priority = 20
+    # FII/DII cash flows, deal/promoter/insider filings all publish
+    # end-of-day, same reasoning as DeliveryCollector -- running while the
+    # market's open just checks for data that isn't out yet.
+    after_hours_only = True
 
     def __init__(self, flow_source: FlowSource | None = None) -> None:
         super().__init__()

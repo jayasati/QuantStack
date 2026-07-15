@@ -113,3 +113,10 @@ def test_collector_skips_index_symbols_from_watchlist() -> None:
     collector = DeliveryCollector(delivery_source=FakeBhavcopySource())
     assert "NIFTY" not in collector.symbols
     assert "BANKNIFTY" not in collector.symbols
+
+
+def test_collector_is_after_hours_only() -> None:
+    # Bhavcopy publishes end-of-day -- scheduled runs during market hours
+    # would just find nothing (see test_collector_framework.py for the
+    # shared after_hours_only gate mechanics).
+    assert DeliveryCollector.after_hours_only is True

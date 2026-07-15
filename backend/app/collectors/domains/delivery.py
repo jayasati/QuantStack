@@ -33,6 +33,9 @@ class DeliveryCollector(BaseCollector):
     interval_seconds = 3600
     priority = 7
     requires_auth = False
+    # Every run during market hours checks for a file that provably isn't
+    # published yet -- skip those, not just the ones that find nothing.
+    after_hours_only = True
 
     BACKFILL_DAYS = 30
     RECENT_SCAN_DAYS = 5

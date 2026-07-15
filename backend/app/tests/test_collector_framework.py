@@ -1,8 +1,14 @@
 """End-to-end framework tests: lifecycle, pipeline, quality gate, registry."""
 
 import asyncio
+from datetime import UTC, datetime
 
-from app.collectors.base import BaseCollector, CollectionError, CollectorPipeline
+from app.collectors.base import (
+    BaseCollector,
+    CollectionError,
+    CollectorPipeline,
+    is_nse_market_open,
+)
 from app.collectors.pipeline import DefaultCollectorPipeline
 from app.collectors.registry import CollectorRegistry
 from app.collectors.schema import CollectorCategory, CollectorOutput
@@ -341,3 +347,55 @@ async def test_interval_override_from_config(monkeypatch) -> None:
         assert listing["default_interval_seconds"] == 60
     finally:
         get_settings.cache_clear()
+
+
+class _NullPipeline(CollectorPipeline):
+    async def process(self, collector, records, latency_ms):
+        return records
+
+    async def record_failure(self, collector, error):
+        pass
+
+
+class AfterHoursGatedCollector(BaseCollector):
+    name = "after_hours_gated"
+    category = CollectorCategory.MARKET_DATA
+    source = "test"
+    after_hours_only = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.collected = 0
+
+    async def collect(self) -> list[CollectorOutput]:
+        self.collected += 1
+        return []
+
+
+async def test_scheduled_run_skips_during_market_hours_for_after_hours_only_collector(
+    monkeypatch,
+) -> None:
+    """DeliveryCollector/InstitutionalFlowCollector only have data once the
+    market closes (bhavcopy, FII/DII reports publish end-of-day) -- running
+    while it's open just checks for a file that isn't published yet."""
+    import app.collectors.base as base_module
+
+    monkeypatch.setattr(base_module, "is_nse_market_open", lambda now=None: True)
+    collector = AfterHoursGatedCollector()
+    await collector.run_once(_NullPipeline())
+    assert collector.collected == 0
+    assert collector.health.run_count == 0
+    assert collector.health.extras["skipped_market_open"] == 1
+
+    # force=True bypasses the gate (manual /run endpoint)
+    await collector.run_once(_NullPipeline(), force=True)
+    assert collector.collected == 1
+
+
+def test_market_hours_calendar_excludes_configured_holidays() -> None:
+    # 2026-03-04 is a Wednesday in feature_market_holidays -- weekday +
+    # time-of-day alone would previously call this "open".
+    # 10:30 IST == 05:00 UTC.
+    assert not is_nse_market_open(datetime(2026, 3, 4, 5, 0, tzinfo=UTC))
+    # The Monday before, same time, is a normal trading day.
+    assert is_nse_market_open(datetime(2026, 3, 2, 5, 0, tzinfo=UTC))

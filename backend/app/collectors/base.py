@@ -27,9 +27,14 @@ IST = ZoneInfo("Asia/Kolkata")
 
 
 def is_nse_market_open(now: datetime | None = None) -> bool:
-    """NSE equity/derivatives session: Mon-Fri 09:15-15:35 IST (incl. close prints)."""
+    """NSE equity/derivatives session: Mon-Fri 09:15-15:35 IST (incl. close
+    prints), excluding configured exchange holidays (feature_market_holidays)
+    -- a weekday holiday (e.g. 2026-03-04, a Wednesday) previously still
+    counted as "open" here, since only weekday + time-of-day were checked."""
     current = (now or datetime.now(UTC)).astimezone(IST)
     if current.weekday() >= 5:
+        return False
+    if current.date().isoformat() in get_settings().feature_market_holidays:
         return False
     minutes = current.hour * 60 + current.minute
     return 9 * 60 + 15 <= minutes <= 15 * 60 + 35
@@ -94,6 +99,10 @@ class BaseCollector(ABC):
     priority: int = 100  # lower runs earlier when schedules collide
     requires_auth: bool = False
     market_hours_only: bool = False  # scheduled runs skip outside NSE hours
+    after_hours_only: bool = False  # scheduled runs skip DURING NSE hours --
+    # for sources that only publish once, after close (bhavcopy, FII/DII
+    # flow reports): running while the market is open just checks for data
+    # that provably isn't published yet.
     depends_on: tuple[str, ...] = ()  # collector names this one consumes data from
 
     def __init__(self) -> None:
@@ -151,11 +160,17 @@ class BaseCollector(ABC):
         """Execute one full lifecycle pass. Never raises.
 
         Scheduled runs of market-hours-only collectors are skipped outside
-        NSE trading hours; pass ``force=True`` (manual /run) to bypass.
+        NSE trading hours; after-hours-only collectors are skipped during
+        them. Pass ``force=True`` (manual /run) to bypass either gate.
         """
         if self.market_hours_only and not force and not is_nse_market_open():
             self.health.extras["skipped_market_closed"] = (
                 self.health.extras.get("skipped_market_closed", 0) + 1
+            )
+            return []
+        if self.after_hours_only and not force and is_nse_market_open():
+            self.health.extras["skipped_market_open"] = (
+                self.health.extras.get("skipped_market_open", 0) + 1
             )
             return []
         if not self.circuit_breaker.allow_request():
