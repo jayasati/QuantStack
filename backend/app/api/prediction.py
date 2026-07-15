@@ -47,10 +47,13 @@ async def symbol_opportunity_history(
 
 @router.get("/candidates")
 async def generate_candidates() -> list[dict]:
-    """Top-20 ranked trade candidates from a fresh opportunity scan."""
+    """Top-20 ranked trade candidates from a fresh opportunity scan, each
+    enriched with signal_since (when this exact instrument/direction pair's
+    current continuous run started, vs. as_of which just says when this
+    particular scan re-confirmed it)."""
     engine = container.resolve(CandidateGenerationEngine)
     candidates = await engine.generate()
-    return [c.to_dict() for c in candidates]
+    return await engine.enrich_with_signal_since(candidates)
 
 
 @router.get("/candidates/{symbol}")

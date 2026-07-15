@@ -508,6 +508,7 @@ async function renderCandidates() {
         <td>${c.priority_score.toFixed(2)}</td>
         <td>${(c.market_confidence ?? 0).toFixed(1)}</td>
         <td title="${c.reason}">${c.current_market_regime?.trend ?? '—'} / ${c.current_market_regime?.market_structure ?? '—'}</td>
+        <td>${c.signal_since_ist ?? '—'}</td>
         <td>${c.valid_until_ist ?? validUntil.toLocaleString()}</td>
         <td><span class="badge ${statusCls}">${statusLabel}</span></td>
       </tr>`;
@@ -517,7 +518,7 @@ async function renderCandidates() {
       <div class="sub">Ranked signals from the latest scan, with each one's valid_until window</div>
       <table><tr>
         <th>#</th><th>instrument</th><th>direction</th><th>priority</th>
-        <th>confidence</th><th>regime (trend/structure)</th><th>valid until</th><th>status</th>
+        <th>confidence</th><th>regime (trend/structure)</th><th>signal since</th><th>valid until</th><th>status</th>
       </tr>${rows}</table>`;
   } catch (e) { renderEmpty(el, `unavailable: ${e.message}`); }
 }

@@ -1,14 +1,17 @@
 """Tests for the Candidate Generation Engine (Volume 5, Prompt 5.2)."""
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+
+import pytest
 
 from app.intelligence.base import IntelligenceResult
 from app.prediction.candidates import (
     DEFAULT_LIFETIME_MINUTES,
     EVENT_LIFETIME_CAP_MINUTES,
     CandidateGenerationEngine,
+    _streak_start,
     build_reason,
     build_supporting_features,
     current_market_regime,
@@ -247,6 +250,106 @@ async def test_generate_bounds_concurrent_snapshot_captures() -> None:
     assert len(candidates) == 10
     assert snapshots.max_observed <= MAX_CONCURRENT_SNAPSHOT_CAPTURES
     assert snapshots.max_observed > 1  # still genuinely concurrent, not accidentally serial
+
+
+def _record(direction: str, minutes_ago: float) -> dict:
+    return {
+        "direction": direction,
+        "as_of": (datetime(2026, 7, 15, 12, 0, tzinfo=UTC) - timedelta(minutes=minutes_ago)).isoformat(),
+    }
+
+
+def test_streak_start_walks_back_through_matching_direction() -> None:
+    """Newest-first history, all "long", no gaps -- streak runs all the way
+    back to the oldest record."""
+    history = [_record("long", m) for m in (0, 5, 10, 15)]
+    since = _streak_start(history, "long", timedelta(minutes=20))
+    assert since == datetime.fromisoformat(history[-1]["as_of"])
+
+
+def test_streak_start_stops_at_direction_change() -> None:
+    history = [_record("long", 0), _record("long", 5), _record("short", 10), _record("long", 15)]
+    since = _streak_start(history, "long", timedelta(minutes=20))
+    # Streak is only the two most recent "long" records -- the older "long"
+    # at minutes_ago=15 is a different, earlier episode separated by a
+    # "short" in between, not part of the current run.
+    assert since == datetime.fromisoformat(history[1]["as_of"])
+
+
+def test_streak_start_stops_at_a_gap_wider_than_the_threshold() -> None:
+    history = [_record("long", 0), _record("long", 5), _record("long", 200)]
+    since = _streak_start(history, "long", timedelta(minutes=20))
+    assert since == datetime.fromisoformat(history[1]["as_of"])
+
+
+def test_streak_start_none_when_newest_record_already_mismatches() -> None:
+    history = [_record("short", 0), _record("long", 5)]
+    assert _streak_start(history, "long", timedelta(minutes=20)) is None
+
+
+def test_streak_start_none_on_empty_history() -> None:
+    assert _streak_start([], "long", timedelta(minutes=20)) is None
+
+
+async def test_enrich_with_signal_since_without_a_session_factory_still_returns_dicts() -> None:
+    """No DB -> signal_since can't be computed, but the base candidate
+    dicts must still come back (graceful degradation, same convention as
+    every other engine in this codebase)."""
+    opportunity = make_opportunity([
+        TriggerReason("liquidity_sweep_detected", "sweep", 0.6, 0.6),
+    ])
+    candidate = generate_candidate(opportunity, priority=1, feature_snapshot_id="snap-1")
+    engine = CandidateGenerationEngine(session_factory=None)
+    result = await engine.enrich_with_signal_since([candidate])
+    assert len(result) == 1
+    assert result[0]["instrument"] == "NIFTY"
+    assert "signal_since" not in result[0]
+
+
+@pytest.mark.db
+async def test_enrich_with_signal_since_reads_the_real_streak_from_postgres(
+    test_session_factory,
+) -> None:
+    """DB-backed: inserts a realistic persisted history directly (current
+    "long" detection + two older "long" ones 5/10 min apart, then a "short"
+    further back), and confirms enrich_with_signal_since's actual SQL query
+    -- source filter, instrument IN (...), id-ordered -- finds the right
+    streak start against real Postgres, not just the pure _streak_start
+    unit tests above."""
+    from app.database.tables import MarketEvent
+
+    engine = CandidateGenerationEngine(session_factory=test_session_factory)
+    now = datetime(2026, 7, 15, 12, 0, tzinfo=UTC)
+
+    async with test_session_factory() as session:
+        # Inserted oldest-first, matching how production actually writes
+        # this table: MarketEvent.id is assigned in insertion order, and
+        # _persist_all() always appends the newest scan's row last as real
+        # time advances -- so id order and as_of order agree in production.
+        # enrich_with_signal_since()'s ORDER BY id DESC relies on that.
+        for minutes_ago, direction in [(30, "short"), (10, "long"), (5, "long"), (0, "long")]:
+            session.add(MarketEvent(
+                event_type="trade_candidate.generated",
+                source=engine.name,
+                data={
+                    "instrument": "NIFTY",
+                    "direction": direction,
+                    "as_of": (now - timedelta(minutes=minutes_ago)).isoformat(),
+                },
+            ))
+        await session.commit()
+
+    opportunity = make_opportunity([
+        TriggerReason("liquidity_sweep_detected", "sweep", 0.6, 0.6),
+    ])
+    candidate = generate_candidate(opportunity, priority=1, feature_snapshot_id="snap-1")
+    candidate.direction = "long"
+
+    result = await engine.enrich_with_signal_since([candidate])
+
+    assert len(result) == 1
+    assert result[0]["signal_since"] == (now - timedelta(minutes=10)).isoformat()
+    assert "IST" in result[0]["signal_since_ist"]
 
 
 async def test_recent_returns_empty_list_without_a_session_factory() -> None:

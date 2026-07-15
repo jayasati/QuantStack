@@ -41,6 +41,37 @@ MAX_CANDIDATES = 20
 IST = ZoneInfo("Asia/Kolkata")
 
 
+# enrich_with_signal_since()'s streak-detection tuning: how far back to
+# fetch persisted history per instrument, and how large a gap between
+# consecutive same-direction records before treating it as a new episode
+# rather than a continuation (generous margin over the 300s scheduled-sweep
+# cadence, to tolerate an occasional missed/slow cycle).
+SIGNAL_SINCE_HISTORY_LIMIT = 1000
+SIGNAL_STREAK_GAP_MINUTES = 20.0
+
+
+def _streak_start(
+    history: list[dict[str, Any]], direction: str, max_gap: timedelta
+) -> datetime | None:
+    """history is newest-first (MarketEvent.id DESC). Walk it while
+    direction keeps matching and consecutive records are within max_gap of
+    each other; return the as_of of the earliest record in that run."""
+    streak_start: datetime | None = None
+    previous_ts: datetime | None = None
+    for record in history:
+        if record.get("direction") != direction:
+            break
+        ts_raw = record.get("as_of")
+        if not ts_raw:
+            break
+        ts = datetime.fromisoformat(ts_raw)
+        if previous_ts is not None and (previous_ts - ts) > max_gap:
+            break
+        streak_start = ts
+        previous_ts = ts
+    return streak_start
+
+
 def _ist_display(dt: datetime) -> str:
     """Human-readable IST rendering for as_of/valid_until -- e.g.
     "15 Jul 2026, 02:27 PM IST". The canonical as_of/valid_until fields stay
@@ -353,3 +384,55 @@ class CandidateGenerationEngine:
         async with self._sessions() as session:
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    async def enrich_with_signal_since(self, candidates: list[TradeCandidate]) -> list[dict[str, Any]]:
+        """Each candidate's dict, plus signal_since/signal_since_ist: when
+        the current continuous run of this exact (instrument, direction)
+        started, not just when this scan last re-confirmed it -- "as_of"
+        updates every call (every scan re-detects the same live condition),
+        which answers "when was this last confirmed", not "when did this
+        setup first appear".
+
+        Walks each instrument's persisted trade_candidate.generated history
+        backward from now, stopping at the first direction change or at a
+        gap between consecutive records wider than SIGNAL_STREAK_GAP_MINUTES
+        (treated as the signal having genuinely lapsed, not continued).
+
+        One bounded query covering every instrument in this batch, not one
+        per candidate. Deliberately NOT called from generate() itself
+        (also used by the scheduled sweep, which has no use for this) --
+        only the on-demand API route pays this extra cost."""
+        dicts = [c.to_dict() for c in candidates]
+        if self._sessions is None or not candidates:
+            return dicts
+
+        from sqlalchemy import desc, select
+
+        from app.database.tables import MarketEvent
+
+        instruments = list({c.instrument for c in candidates})
+        query = (
+            select(MarketEvent.data)
+            .where(
+                MarketEvent.event_type == EVENT_TYPE,
+                MarketEvent.source == self.name,
+                MarketEvent.data["instrument"].astext.in_(instruments),
+            )
+            .order_by(desc(MarketEvent.id))
+            .limit(SIGNAL_SINCE_HISTORY_LIMIT)
+        )
+        async with self._sessions() as session:
+            rows = (await session.execute(query)).scalars().all()
+
+        by_instrument: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            if row and row.get("instrument"):
+                by_instrument.setdefault(row["instrument"], []).append(row)
+
+        gap = timedelta(minutes=SIGNAL_STREAK_GAP_MINUTES)
+        for candidate_dict in dicts:
+            history = by_instrument.get(candidate_dict["instrument"], [])
+            since = _streak_start(history, candidate_dict["direction"], gap)
+            candidate_dict["signal_since"] = since.isoformat() if since else None
+            candidate_dict["signal_since_ist"] = _ist_display(since) if since else None
+        return dicts
