@@ -22,7 +22,7 @@ import asyncio
 import time
 import uuid
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import desc, func, select
@@ -41,6 +41,20 @@ SessionFactory = Callable[[], AsyncSession] | async_sessionmaker[AsyncSession]
 
 _UPSERT_CHUNK = 500
 PARQUET_ROOT = REPO_ROOT / "data" / "feature_store_parquet"
+# latest()'s window bound -- found live (2026-07-15) at real production
+# volume: "D" timeframe doesn't mean one row per calendar day, it means
+# daily-resolution feature semantics refreshed on the engine's own
+# schedule (every feature_engine_interval), so a single symbol/timeframe
+# accumulates hundreds of thousands of rows over weeks of continuous
+# collection (NIFTY/D alone: 170k+ rows). DISTINCT ON (feature_name) has no
+# LIMIT to bound it, and Postgres has no index skip-scan (this stays true
+# even with a perfectly matching index) -- it always has to scan and sort
+# every row in the WHERE clause's result set before taking the first per
+# feature_name. Bounding to a recent window turned a live 374ms query into
+# an 8.8ms one at 170k-row scale, confirmed via EXPLAIN ANALYZE. Generous
+# enough to span any realistic weekend/holiday/collector-outage gap while
+# keeping the scan bounded regardless of how much history has accumulated.
+LATEST_LOOKBACK_DAYS = 14
 
 
 def _online_key(symbol: str, timeframe: str) -> str:
@@ -225,7 +239,10 @@ class FeatureStore:
             # 2026-07-14 -- this call runs ~264x per /prediction/candidates
             # request) -- the same pattern replay.py already uses for its
             # own point-in-time feature read. Also selects only the 4
-            # columns actually used below, not the full ORM entity.
+            # columns actually used below, not the full ORM entity. Bounded
+            # to LATEST_LOOKBACK_DAYS -- see its own comment for why this
+            # bound is load-bearing, not optional, at real production scale.
+            since = datetime.now(UTC) - timedelta(days=LATEST_LOOKBACK_DAYS)
             result = await session.execute(
                 select(
                     FeatureStoreRow.feature_name,
@@ -236,6 +253,7 @@ class FeatureStore:
                 .where(
                     FeatureStoreRow.symbol == symbol,
                     FeatureStoreRow.timeframe == timeframe,
+                    FeatureStoreRow.ts >= since,
                 )
                 .distinct(FeatureStoreRow.feature_name)
                 .order_by(FeatureStoreRow.feature_name, desc(FeatureStoreRow.ts))
