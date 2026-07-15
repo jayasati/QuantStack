@@ -17,9 +17,28 @@ watchlist:
   - NIFTY
   - BANKNIFTY
   - SENSEX
-  - RELIANCE
   - HDFCBANK
+  - ICICIBANK
+  - RELIANCE
   - INFY
+  - TCS
+  - SBIN
+  - AXISBANK
+  - LT
+  - TATASTEEL
+  - JSWSTEEL
+  - SUNPHARMA
+  - HINDUNILVR
+  - ITC
+  - MARUTI
+  - TATAMOTORS
+  - DLF
+  - COALINDIA
+  - ULTRACEMCO
+  - HCLTECH
+  - BAJFINANCE
+  - BHARTIARTL
+  - ADANIENT
 enable_websocket: true
 
 # Feature engineering (Volume 3)
@@ -37,8 +56,24 @@ feature_breadth_lookback: 8000
 feature_sector_lookback: 8000
 feature_stock_sectors:
   RELIANCE: Energy
-  HDFCBANK: Banking
+  HDFCBANK: Private Bank
+  ICICIBANK: Private Bank
+  AXISBANK: Private Bank
   INFY: IT
+  TCS: IT
+  HCLTECH: IT
+  SBIN: PSU Bank
+  LT: Infrastructure
+  ULTRACEMCO: Infrastructure
+  TATASTEEL: Metal
+  JSWSTEEL: Metal
+  SUNPHARMA: Pharma
+  HINDUNILVR: FMCG
+  ITC: FMCG
+  MARUTI: Auto
+  TATAMOTORS: Auto
+  DLF: Realty
+  COALINDIA: PSU
 feature_stock_industries: {}
 feature_sensex_symbol: SENSEX
 feature_structure_fractal: 2

@@ -173,6 +173,27 @@ INVARIANTS.md). Canonical example of why decisions need a durable,
 loudly-flagged record — a comment in one file wasn't enough to survive one
 audit prompt not reading it.
 
+### ~~Watchlist expansion silently no-op'd on the VM~~ — resolved 2026-07-15
+Expanded `Settings.watchlist` from 3 indices to a 25-symbol basket in
+`app/core/config.py` (`fcd3da4`), deployed it, and confirmed live that only
+6 symbols were actually being backfilled — including one (ICICIBANK) that
+sat between two symbols that WERE working, ruling out "just slow." Traced
+via a direct in-container probe (`HistoricalCandleCollector().initialize()`
+→ `len(tokens) == 6`, `"ICICIBANK" in tokens == False`) to `configs/
+default.yaml`, a git-tracked file `Settings.model_config` loads as a config
+source that still hardcoded the old 6-symbol watchlist and 3-entry
+`feature_stock_sectors` — I edited `config.py`'s Python-level defaults
+without checking whether a second, higher-priority config source existed
+and needed the same edit. Not deployment drift — the file was tracked and
+in-repo the whole time, I simply didn't look for it. Fixed by syncing
+`configs/default.yaml` to the same 25 symbols / 19 sector mappings.
+**Lesson for future config changes:** `Settings` in this codebase has THREE
+layered sources (code defaults, `configs/default.yaml`, `.env`/environment)
+per `app/core/config.py`'s docstring/comments — a change to one is invisible
+in practice unless checked against the others. Grep `configs/*.yaml` for
+the field name before trusting a `config.py` default-value edit is live.
+**Logged:** 2026-07-15.
+
 ### ~~report.py "accepted v1 redundancy"~~ — resolved 2026-07-15
 Market Confidence's internal re-runs and per-symbol market-wide recomputation,
 deferred in a docstring that went stale when snapshot capture entered the
