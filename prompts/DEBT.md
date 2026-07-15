@@ -33,12 +33,17 @@ OR when Volume 5.5+ work resumes — whichever comes first.
 **What:** Volume 3's `IntradayRiskFeatureEngine` writes real 5m-timeframe
 features (`intraday_move_from_open_pct`, `intraday_expected_move_next_30m_pct`,
 …) that no Volume 4/5 code reads (violates I-2). Separately, it was observed
-stalled live: last write 10:25 IST on 2026-07-15, >5h stale mid-session —
-root cause not yet investigated.
+stalled live: last write 10:25 IST on 2026-07-15 (checked at Volume 2
+preflight), still stalled at last write 11:30 IST when re-checked at Volume 3
+preflight (VM time 17:09 IST — ~6h stale, spanning the rest of the trading
+session and market close). Confirmed NOT self-resolving. Root cause not yet
+investigated.
 **Expiry condition:** Same as DEBT-1 (they resolve together: the natural fix
 for DEBT-1 consumes this engine's output — which first requires it to run
-reliably).
-**Logged:** 2026-07-15.
+reliably). Root-cause investigation recommended before Volume 4 work resumes,
+independent of DEBT-1's wiring fix.
+**Logged:** 2026-07-15 (revised at Volume 3 preflight,
+`docs/volumes/preflight-vol3-2026-07-15.md`).
 
 ### DEBT-3 · No outcome evaluator / win-rate metric
 **What:** Candidates carry `valid_until` but nothing records whether price
@@ -97,6 +102,24 @@ always behind.
 signal quality is next worked on.
 **Logged:** 2026-07-15 (Volume 2 preflight,
 `docs/volumes/preflight-vol2-2026-07-15.md`).
+
+### DEBT-9 · Feature Selection Engine has never run live
+**What:** `feature_usage` (Ch.8 of Volume 3: "which models/modules consume
+which features") is empty — 0 rows live, vs. every other feature-metadata
+table (registry/versions/dependencies/quality/statistics/drift) genuinely
+populated. Not a code gap: `FeatureSelectionEngine.persist()` correctly
+writes to it. It's reachable only via `POST /features/selection/run`
+(`api/features.py:200`) — never scheduled in `main.py`, so there is zero
+live evidence it has ever executed.
+**Risk while open:** Volume 3's own acceptance criterion "feature selection
+identifies the strongest predictors" can't be called operational. Low
+urgency — nothing downstream currently depends on its output.
+**Expiry condition:** When feature/model selection quality is next worked
+on. Resolve either by scheduling it periodically or by explicitly deciding
+it's on-demand-only (and updating this entry to reflect that as accepted,
+not deferred).
+**Logged:** 2026-07-15 (Volume 3 preflight,
+`docs/volumes/preflight-vol3-2026-07-15.md`).
 
 ---
 
