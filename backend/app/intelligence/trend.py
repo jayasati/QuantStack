@@ -13,6 +13,7 @@ acceleration — plus probabilistic trend-regime states from Chapter 4's
 taxonomy and a normalized 0-100 Trend Score (50 = no trend, >50 bullish).
 """
 
+import asyncio
 import math
 from collections.abc import Mapping, Sequence
 
@@ -214,7 +215,10 @@ class TrendIntelligenceEngine(IntelligenceComponent):
         direction_history = await self.feature_history(
             "ms_trend_direction", symbol, timeframe
         )
-        result = assess_trend(features, direction_history)
+        # Offloaded to a worker thread: pure CPU work, same convention as
+        # BaseFeatureEngine.run() (perf-audit-2026-07-14 finding 13 -- py-spy
+        # caught this running synchronously on the event loop mid-request).
+        result = await asyncio.to_thread(assess_trend, features, direction_history)
         result.metrics["symbol"] = symbol
         await self._publish_assessment(symbol, result)
         return result

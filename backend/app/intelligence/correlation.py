@@ -31,6 +31,7 @@ Breadth/Institutional Flow/Liquidity's compression-style overlays — no
 extra halving is needed here; the partition is symmetric by construction.
 """
 
+import asyncio
 import itertools
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -252,6 +253,10 @@ class CorrelationIntelligenceEngine(IntelligenceComponent):
                 )
                 constituents.append(daily_series(rows))
             asset_daily_series[asset] = average_daily_series(constituents)
-        result = assess_correlations(asset_daily_series)
+        # Offloaded to a worker thread: rolling_correlation() over every
+        # asset pair is the heaviest pure-Python compute in this layer
+        # (perf-audit-2026-07-14 finding 13), same convention as
+        # BaseFeatureEngine.run().
+        result = await asyncio.to_thread(assess_correlations, asset_daily_series)
         await self._publish_assessment(None, result)
         return result

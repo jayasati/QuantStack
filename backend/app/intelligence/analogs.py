@@ -62,6 +62,7 @@ lists first.
                                     or lost)
 """
 
+import asyncio
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -86,6 +87,12 @@ HISTORY_LIMIT = 5000
 # long-horizon trend comparison cosine/Euclidean already do at the
 # snapshot level.
 DTW_WINDOW = 10
+# DTW is O(DTW_WINDOW^2) per candidate -- run it only over a cosine/
+# Euclidean top-N prefilter instead of every historical candidate (up to
+# ~5k). Generous margin over TOP_K=20 so a candidate DTW would have ranked
+# highly isn't dropped just because it's slightly outside the top 20 on the
+# two cheaper metrics.
+DTW_PREFILTER_SIZE = 100
 
 STATE_FEATURES: tuple[str, ...] = (
     "price_momentum_20_z",
@@ -201,7 +208,6 @@ def assess_historical_analogs(
 
     cosine_ranked: list[tuple[str, float]] = []
     euclid_ranked: list[tuple[str, float]] = []
-    dtw_ranked: list[tuple[str, float]] = []
     for date, vector in historical:
         if date not in outcomes:
             continue
@@ -209,16 +215,25 @@ def assess_historical_analogs(
         if cosine is not None:
             cosine_ranked.append((date, cosine))
         euclid_ranked.append((date, euclidean_distance(current_vector, vector)))
-        if current_window is not None and historical_windows is not None:
-            window = historical_windows.get(date)
-            if window is not None:
-                dtw_ranked.append((date, dtw_distance(current_window, window)))
 
     cosine_ranked.sort(key=lambda pair: -pair[1])
     euclid_ranked.sort(key=lambda pair: pair[1])
-    dtw_ranked.sort(key=lambda pair: pair[1])
     cosine_top = cosine_ranked[:top_k]
     euclid_top_dates = {date for date, _ in euclid_ranked[:top_k]}
+
+    # DTW only runs over a cosine/Euclidean top-N prefilter, not every
+    # historical candidate (perf-audit-2026-07-14 finding 12: DTW over all
+    # ~5k candidates was this engine's dominant CPU cost, ~25M float
+    # ops/assess).
+    dtw_ranked: list[tuple[str, float]] = []
+    if current_window is not None and historical_windows is not None:
+        prefilter_dates = {date for date, _ in cosine_ranked[:DTW_PREFILTER_SIZE]}
+        prefilter_dates |= {date for date, _ in euclid_ranked[:DTW_PREFILTER_SIZE]}
+        for date in prefilter_dates:
+            window = historical_windows.get(date)
+            if window is not None:
+                dtw_ranked.append((date, dtw_distance(current_window, window)))
+        dtw_ranked.sort(key=lambda pair: pair[1])
     dtw_top_dates = {date for date, _ in dtw_ranked[:top_k]}
 
     analogs = [
@@ -398,8 +413,14 @@ class HistoricalAnalogEngine(IntelligenceComponent):
             if window is not None:
                 historical_windows[ts] = window
 
-        result = assess_historical_analogs(
+        # Offloaded to a worker thread: cosine/Euclidean/DTW scoring across
+        # thousands of candidates is the dominant pure-Python compute in
+        # this layer (perf-audit-2026-07-14 finding 13), same convention as
+        # BaseFeatureEngine.run().
+        result = await asyncio.to_thread(
+            assess_historical_analogs,
             current_vector, historical, outcomes,
+            top_k=TOP_K,
             current_window=current_window if current_window is not None else None,
             historical_windows=historical_windows or None,
         )

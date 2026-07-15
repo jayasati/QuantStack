@@ -9,6 +9,7 @@ volatility regimes — states are blended, never hard-switched, per Chapter
 15's philosophy.
 """
 
+import asyncio
 import math
 from collections.abc import Mapping
 from statistics import pstdev
@@ -195,7 +196,9 @@ class VolatilityIntelligenceEngine(IntelligenceComponent):
     ) -> IntelligenceResult:
         symbol = symbol or self._settings.feature_benchmark_symbol
         features = await self.latest_values(symbol, timeframe)
-        result = assess_volatility(features)
+        # Offloaded to a worker thread (perf-audit-2026-07-14 finding 13),
+        # same convention as BaseFeatureEngine.run().
+        result = await asyncio.to_thread(assess_volatility, features)
         result.metrics["symbol"] = symbol
         await self._publish_assessment(symbol, result)
         return result
