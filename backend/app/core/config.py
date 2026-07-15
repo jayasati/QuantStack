@@ -78,7 +78,25 @@ class Settings(BaseSettings):
     collector_retry_attempts: int = 1
     collector_retry_delay_seconds: float = 0.2
     rate_limits: RateLimits = Field(default_factory=RateLimits)
-    watchlist: list[str] = Field(default_factory=lambda: ["NIFTY", "BANKNIFTY", "SENSEX"])
+    # Expanded 2026-07-15 from the original 3 indices to a 25-symbol basket
+    # (indices + one-or-two most-liquid F&O names per sector tracked by
+    # SectorSource/broker_sectors.py) -- sized to the infra headroom
+    # verified live that day (Angel One's 3 req/sec rate limit, the new
+    # NSE/BSE fallback sources), not to the full ~180-stock F&O universe.
+    # BAJFINANCE, BHARTIARTL and ADANIENT have no matching sector index in
+    # SECTOR_TOKENS (NBFC/Telecom aren't tracked sectors) -- relative.py
+    # handles that gracefully (sector reference just stays empty), but
+    # extend SECTOR_TOKENS/feature_stock_sectors together if that gap is
+    # ever worth closing.
+    watchlist: list[str] = Field(
+        default_factory=lambda: [
+            "NIFTY", "BANKNIFTY", "SENSEX",
+            "HDFCBANK", "ICICIBANK", "RELIANCE", "INFY", "TCS", "SBIN",
+            "AXISBANK", "LT", "TATASTEEL", "JSWSTEEL", "SUNPHARMA",
+            "HINDUNILVR", "ITC", "MARUTI", "TATAMOTORS", "DLF", "COALINDIA",
+            "ULTRACEMCO", "HCLTECH", "BAJFINANCE", "BHARTIARTL", "ADANIENT",
+        ]
+    )
     # SmartAPI WebSocket streaming for live quotes (REST polling remains the fallback).
     enable_websocket: bool = False
     # Per-collector schedule overrides, e.g. {"news_intelligence": 300}.
@@ -110,8 +128,32 @@ class Settings(BaseSettings):
     # Macro observations loaded per macro-feature run.
     feature_macro_lookback: int = 8000
     # Relative-strength references (Prompt 3.8): stock -> sector index name.
+    # Sector names must match broker_sectors.py's SECTOR_TOKENS keys exactly.
+    # HDFCBANK was "Banking" until 2026-07-15 -- SECTOR_TOKENS tracks
+    # "Banking" and "Private Bank" as distinct indices, and HDFCBANK is a
+    # private bank, so it now maps to the more accurate one.
     feature_stock_sectors: dict[str, str] = Field(
-        default_factory=lambda: {"RELIANCE": "Energy", "HDFCBANK": "Banking", "INFY": "IT"}
+        default_factory=lambda: {
+            "RELIANCE": "Energy",
+            "HDFCBANK": "Private Bank",
+            "ICICIBANK": "Private Bank",
+            "AXISBANK": "Private Bank",
+            "INFY": "IT",
+            "TCS": "IT",
+            "HCLTECH": "IT",
+            "SBIN": "PSU Bank",
+            "LT": "Infrastructure",
+            "ULTRACEMCO": "Infrastructure",
+            "TATASTEEL": "Metal",
+            "JSWSTEEL": "Metal",
+            "SUNPHARMA": "Pharma",
+            "HINDUNILVR": "FMCG",
+            "ITC": "FMCG",
+            "MARUTI": "Auto",
+            "TATAMOTORS": "Auto",
+            "DLF": "Realty",
+            "COALINDIA": "PSU",
+        }
     )
     # Stock -> industry index; falls back to the sector when unset (no finer
     # industry index data source yet).
