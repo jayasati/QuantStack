@@ -49,6 +49,16 @@ starting point, at roughly real-time pace (i.e., not stuck, but also not
 going to fully catch up same-day at that rate). Circuit breaker never
 tripped, zero exceptions anywhere in this chain — purely an upstream
 broker-side backend degradation, outside this codebase's control.
+**Update 2026-07-16:** a real-time tick-aggregation layer now builds and
+live-updates 1m/3m/5m/15m/30m/1H candles directly from the same ticks
+`live_market` already polls every 15s, instead of waiting on this
+collector's 300s external-source sweep to notice new data exists (see the
+Resolved entry below). This doesn't resolve DEBT-2 itself (consumer-wiring
+gap, DEBT-1, is still open) but substantially reduces exposure to a repeat
+of the original stall -- intraday freshness no longer depends solely on
+this collector's own cadence, and the NSE/BSE fallback that was DEBT-2's
+original workaround is now last-resort rather than primary.
+
 **Risk while open:** Any future intraday-intelligence work (DEBT-1) must
 treat `ohlcv_candles` freshness as a genuine external dependency that can
 silently degrade for hours, not an assumption — the eventual fix should
@@ -193,6 +203,40 @@ second group, and closed a related gap found along the way —
 exchange holiday (e.g. 2026-03-04) still counted as "open"; it now also
 checks `feature_market_holidays`.
 **Logged:** 2026-07-15.
+
+### ~~Candle freshness capped at HistoricalCandleCollector's 300s sweep~~ — resolved 2026-07-16
+New capability, not a bug fix: `app/collectors/tick_aggregator.py`'s
+`TickCandleAggregator` builds and live-updates 1m candles directly from
+the ticks `live_market` already polls every 15s (or streams via
+WebSocket), instead of relying solely on `historical_candles`'s 300s
+external-source sweep to notice new data. 3m/5m/15m/30m/1H are re-derived
+by folding the stored 1m bars on every ingest cycle, not tracked as
+separate state -- always fresh, self-healing if a tick was missed. D and
+anything older than 1m's own 2-day retention still comes from
+`historical_candles` (broker/Yahoo deep backfill) -- ticks alone can't
+produce 2 years of daily history.
+
+Two layers, deliberately: this layer uses `ON CONFLICT DO UPDATE` (the
+forming candle should visibly live-update, not just appear once its
+minute closes -- 2026-07-16 decision); `historical_candles` keeps
+`DO NOTHING` so it can never clobber this layer's more current data, and
+remains the gap-filler for restarts/WebSocket drops. The NSE/BSE
+"today-only" fallback (DEBT-2's original workaround) stays wired as
+last-resort only, no longer primary for "today's" data.
+
+First version measured 111ms/symbol against a real Postgres in
+`test_load_and_performance.py` (one upsert + 5 SELECT/upsert pairs *per
+symbol* -- Volume 1 §16 targets <100ms) -- rewritten to batch across all
+symbols in a cycle into a fixed ~11 SQL statements total regardless of
+symbol count, not 11 × N.
+
+Paired with a new `CandleRetentionCollector`
+(`app/collectors/domains/retention.py`, `after_hours_only`, hourly):
+nothing had ever pruned `ohlcv_candles` before this -- it now deletes rows
+per interval older than that interval's own `HistoricalCandleCollector
+.default_lookback` window (the same table already used for fetch sizing,
+not a second copy of the same numbers).
+**Logged:** 2026-07-16.
 
 ### ~~Watchlist expansion silently no-op'd on the VM~~ — resolved 2026-07-15
 Expanded `Settings.watchlist` from 3 indices to a 25-symbol basket in

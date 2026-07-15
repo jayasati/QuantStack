@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.collectors.sources.bse_candles import BseCandleSource
     from app.collectors.sources.nse_candles import NseCandleSource
     from app.collectors.sources.yahoo_history import YahooDailyHistory
+    from app.collectors.tick_aggregator import TickCandleAggregator
     from app.market.angel_ws import AngelWebSocketFeed
 
 from sqlalchemy import func, insert, select
@@ -109,12 +110,22 @@ class LiveMarketCollector(_BrokerBackedCollector):
     requires_auth = True
     market_hours_only = True  # quotes/LTP freeze the instant the market closes
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self, tick_aggregator: "TickCandleAggregator | None" = None, **kwargs
+    ) -> None:
         super().__init__(**kwargs)
         self._feed: AngelWebSocketFeed | None = None
+        self._tick_aggregator = tick_aggregator
         vix_symbol = get_settings().feature_vix_symbol
         if vix_symbol not in self.symbols:
             self.symbols = [*self.symbols, vix_symbol]
+
+    def _get_tick_aggregator(self) -> "TickCandleAggregator":
+        if self._tick_aggregator is None:
+            from app.collectors.tick_aggregator import TickCandleAggregator
+
+            self._tick_aggregator = TickCandleAggregator(self._sessions())
+        return self._tick_aggregator
 
     async def authenticate(self) -> None:
         await super().authenticate()
@@ -265,6 +276,7 @@ class LiveMarketCollector(_BrokerBackedCollector):
             self.health.extras["ws_packets"] = self._feed.metrics.packets
             self.health.extras["ws_reconnects"] = self._feed.metrics.reconnects
         await self._persist_ticks(ticks)
+        await self._get_tick_aggregator().ingest_batch(ticks)
         if not records:
             raise CollectionError(f"all {len(self._tokens)} quote fetches failed")
         return records

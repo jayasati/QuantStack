@@ -84,3 +84,30 @@ def test_collector_is_market_hours_only() -> None:
     # regardless would be pointless (see test_collector_framework.py for the
     # shared market_hours_only gate mechanics).
     assert LiveMarketCollector.market_hours_only is True
+
+
+class FakeTickAggregator:
+    def __init__(self) -> None:
+        self.batches: list[list[dict]] = []
+
+    async def ingest_batch(self, ticks: list[dict]) -> None:
+        self.batches.append(ticks)
+
+
+async def test_collect_feeds_every_tick_to_the_live_candle_aggregator() -> None:
+    """The whole point of the 2026-07-16 real-time aggregation layer:
+    every tick this collector already gathers each 15s cycle must reach
+    the aggregator, not just get persisted to raw_ticks."""
+    broker = FakeBroker({"99926000": 24100.0, "99926009": 56700.0, "99926017": 14.68})
+    aggregator = FakeTickAggregator()
+    collector = LiveMarketCollector(broker=broker, tick_aggregator=aggregator)
+    collector.symbols = ["NIFTY", "BANKNIFTY", "INDIAVIX"]
+    collector._sessions = lambda: None  # type: ignore[method-assign]  # keep the test off the real DB
+    await collector.initialize()
+    await collector.collect()
+
+    assert len(aggregator.batches) == 1
+    fed_symbols = {tick["symbol"] for tick in aggregator.batches[0]}
+    assert fed_symbols == {"NIFTY", "BANKNIFTY", "INDIAVIX"}
+    vix_tick = next(t for t in aggregator.batches[0] if t["symbol"] == "INDIAVIX")
+    assert vix_tick["ltp"] == 14.68
