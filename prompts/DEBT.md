@@ -60,24 +60,6 @@ priority 0.00, identical supporting evidence).
 candidates' win rate is noise, or when candidate quality is next worked on.
 **Logged:** 2026-07-15.
 
-### DEBT-5 · CI exists but is completely non-functional — REVISED, now top priority
-**What:** ~~No CI/CD~~ — corrected by the 2026-07-15 Volume 1 postflight:
-`.github/workflows/backend-tests.yml` exists and is well-formed (added in
-`edcfabf`, addressing the original 2026-07-11 IRR finding), but 0 of the last
-5 runs succeeded. Each failing run's own timestamps show `created_at` ==
-`started_at`, completing within 1 second with zero steps recorded — GitHub
-never assigned a runner. Root cause is a repo/org GitHub Actions permission
-setting (not diagnosable or fixable from code) — check
-github.com/jayasati/QuantStack → Settings → Actions → General. Every commit
-pushed on 2026-07-15, including all of this session's perf fixes, shipped
-with zero CI signal.
-**Risk while open:** False sense of safety net — the team believes pushes are
-checked; none have been.
-**Expiry condition:** Before the next volume's build phase begins. This entry
-now blocks ahead of everything else in this ledger.
-**Logged:** 2026-07-15 (revised from the 2026-07-09 audit's "no CI/CD" note;
-see `docs/volumes/postflight-vol1-2026-07-15.md`).
-
 ### DEBT-6 · Redis online-store coverage is partial
 **What:** TTL refresh on unchanged runs was fixed (94d8eb5 era), but coverage
 is still thin — during the 2026-07-15 checks Redis held ~21 keys with zero
@@ -101,6 +83,22 @@ DEBT-6 — populating Redis is the likely next win).
 ---
 
 ## Resolved
+
+### ~~DEBT-5: CI is broken~~ — resolved by decision, 2026-07-15
+Not fixed — **removed on purpose, a second time.** Found non-functional
+(0/5 runs execute, no runner ever assigned) via the Volume 1 postflight;
+investigation traced it to a billing lock that had already caused CI to be
+deliberately removed once before (`fee0703`), then silently re-added four
+days earlier (`edcfabf`) to address an audit finding without checking that
+prior decision. Re-removed (`.github/workflows/backend-tests.yml` deleted)
+and made permanent, documented policy: solo contributor, no CI billing,
+full local test suite (+ ruff + mypy) before every push is the actual and
+sufficient safety net — see `docs/volumes/volume-1.md` §18 and
+`docs/backlog.md`'s Volume 1 section, which now explicitly warns against a
+third re-add without checking there first. I-11 revised to match (see
+INVARIANTS.md). Canonical example of why decisions need a durable,
+loudly-flagged record — a comment in one file wasn't enough to survive one
+audit prompt not reading it.
 
 ### ~~report.py "accepted v1 redundancy"~~ — resolved 2026-07-15
 Market Confidence's internal re-runs and per-symbol market-wide recomputation,

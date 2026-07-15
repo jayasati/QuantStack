@@ -150,3 +150,31 @@ everything built on top of it has been silently broken. Fix the GitHub
 Actions setting before starting the next volume — it's a five-minute repo
 setting, not a code change, and it's currently worth more than any single
 feature.
+
+---
+
+## Addendum (same day): resolved by decision, not by fix
+
+User confirmed the root cause: GitHub Actions billing is genuinely
+unavailable (no account billing configured) — not a settings toggle. On
+investigation this turned out to be the **second** time this exact problem
+occurred: CI was originally removed for this exact reason in `fee0703`
+("Remove GitHub Actions workflows — plain git workflow by choice",
+documented in `docs/backlog.md`), then silently re-added on 2026-07-11
+(`edcfabf`) to address an audit's "no CI/CD" finding, without anyone
+checking that prior decision first — reproducing the identical silent
+failure for 4 days.
+
+Resolution: `.github/workflows/backend-tests.yml` deleted again. Acceptance
+criterion §20 changed from "CI runs successfully" to "the full test suite
+runs successfully locally" — matching what has actually been true and
+sufficient (solo contributor, full suite + ruff + mypy before every push)
+since this session's actual working rhythm. `docs/backlog.md`'s Volume 1
+entry rewritten to warn explicitly against a third re-add without reading it
+first. `prompts/INVARIANTS.md` I-11 revised from "CI must be verified green"
+to "local suite must be green before push" — the real, permanent gate.
+`DEBT.md`'s CI entry moved to Resolved.
+
+**Revised verdict: COMPLETE.** No open debt from this postflight remains
+except DEBT-7 (signal-gen ~2.2s vs <2s target, tracked separately, not a
+Volume 1 defect).

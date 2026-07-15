@@ -315,17 +315,29 @@ Branch model:
 
 ## 18. CI/CD
 
-Each pull request should automatically:
+!!! note "Policy: manual verification, not GitHub Actions"
+    QuantStack is a solo-contributor project with no CI billing available.
+    GitHub Actions was tried twice (see `docs/backlog.md`) and both times
+    failed to acquire a runner — the second time silently, for 4 days,
+    which is worse than not having it. **This is now the deliberate,
+    permanent policy**, not an open gap: the checks below run locally and on
+    quantstack-vm instead of in a PR pipeline. See
+    `prompts/VERIFY-COOKBOOK.md` for the exact commands and
+    `prompts/2-build.md` for when they're required (every chunk, every
+    deploy).
 
-- Run linting
-- Run unit tests
-- Run integration tests
-- Check type hints
-- Validate migrations
-- Build Docker image
-- Generate coverage report
+Before every push to `main`, run locally:
 
-Deployment should occur **only after all checks pass**.
+- Full test suite (`cd backend && python -m pytest app/tests -q`)
+- Linting (`ruff check app`)
+- Type checking (`mypy app`)
+- Migrations apply cleanly (`alembic upgrade head` against a test DB —
+  exercised automatically by the test suite's DB-marked tests)
+
+Deployment (to quantstack-vm) occurs only after: the suite is green locally,
+the change is deployed, the container reports healthy, logs are clean, and
+the changed behavior is observed live with real data — see
+`prompts/INVARIANTS.md` I-9.
 
 ## 19. Initial Database Tables
 
@@ -351,7 +363,7 @@ The foundation creates **empty** tables only; business logic for these tables is
     - Alembic migrations initialize the complete base schema.
     - APScheduler starts and can execute a sample scheduled job.
     - Logging, dependency injection, and broker abstraction are in place.
-    - CI runs successfully with basic tests.
+    - The full test suite runs successfully locally (`python -m pytest app/tests -q`) — see §18 for why this replaces a CI pipeline.
     - The project structure and interfaces are stable enough that new collectors and engines can be added without restructuring the repository.
 
 ## Next Volume Preview

@@ -101,15 +101,20 @@ signal, not six.
 **Status: UNVERIFIED as a rule** — the events.score behavior is real and
 currently by-design; whether it should gate candidacy at all is DEBT-4.
 
-## I-11 · CI is green before it's trusted
-"CI exists" and "CI works" are different claims — never treat the presence of
-a workflow file as evidence pushes are checked. Before relying on CI for any
-decision (starting a new volume, calling a volume complete), confirm via the
-GitHub Actions API or UI that recent runs actually executed steps and
-passed — not just that the workflow file is well-formed.
+## I-11 · No push to main without a green local suite
+This project deliberately has no CI (solo contributor, no Actions billing —
+tried twice, see `docs/backlog.md`; do not re-add without reading that note
+first). The full local suite substitutes for it and is not optional: before
+any push to `main`, `cd backend && python -m pytest app/tests -q` must be
+green, run in the same session as the push, not assumed from a prior run.
+`ruff check app` / `mypy app` before push where the change touches typed
+code. This is the actual gate — treat it with the seriousness a red CI
+check would get, not more casually just because nothing external enforces
+it.
 
-**Status: VIOLATED** — `.github/workflows/backend-tests.yml` exists and is
-well-formed, but 0 of the last 5 runs on `main` executed a single step
-(each completed in <1s, no runner assigned) — verified via the GitHub API,
-2026-07-15. Every commit this session shipped with zero CI signal. See
-DEBT-5, `docs/volumes/postflight-vol1-2026-07-15.md`.
+**Status: HELD** — this has been the working rhythm of every deploy since
+2026-07-14 (full suite run and reported before each push, cookbook §10).
+Never again treat a workflow file's mere existence as evidence of anything —
+that specific mistake (`edcfabf` re-adding CI without checking why it was
+removed) cost 4 days of silent zero-signal pushes before the 2026-07-15
+Volume 1 postflight caught it. See DEBT.md's Resolved section.
