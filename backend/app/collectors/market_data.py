@@ -443,17 +443,36 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
     ) -> list[Candle]:
         """Try each source in order, using the first one that returns any
         candles. NSE/BSE only ever apply to an intraday, today-only window
-        (they cannot serve older days -- see the class docstring); every
-        other window goes broker-then-Yahoo, matching the collector's
-        original behavior with the exception-vs-empty-result distinction
-        (findings 15/16 of perf-audit-2026-07-14, extended 2026-07-15)."""
+        (they cannot serve older days -- see the class docstring).
+
+        Source order (2026-07-16): broker first, then Yahoo, with NSE/BSE
+        LAST-RESORT only -- demoted from first-tried after TickCandleAggregator
+        landed (app/collectors/tick_aggregator.py): live ticks now build
+        today's intraday candles directly and far faster than any 300s
+        sweep, so NSE/BSE's original role (DEBT-2's workaround for the
+        broker's own candle pipeline lagging) is now a fallback for gaps,
+        not the common path. Also: NSE's index chart endpoint
+        (getGraphChart, NIFTY/BANKNIFTY only) turned out to forward-pad its
+        response with placeholder bars for the rest of the session, not
+        just what's actually traded so far -- found live 2026-07-16 when
+        it was still the FIRST-tried source, producing bars timestamped
+        hours in the future. The _drop_future_candles filter below guards
+        against that class of bug regardless of source or ordering."""
         is_today_only = (
             interval != "D"
             and start.astimezone(IST).date() == today_ist
             and end.astimezone(IST).date() == today_ist
         )
 
-        sources: list[tuple[str, object]] = []
+        sources: list[tuple[str, object]] = [(
+            "angel_one",
+            lambda: self.broker.get_historical(token, interval, start, end, exchange=exchange),
+        )]
+        if interval != "D":
+            sources.append((
+                "yahoo",
+                lambda: self._get_yahoo().fetch_intraday(symbol, interval),
+            ))
         if is_today_only:
             from app.collectors.sources.bse_candles import BSE_INDEX_CODES
 
@@ -465,15 +484,6 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
                 # returns [] harmlessly if that assumption is ever wrong
                 # for a future watchlist symbol.
                 sources.append(("nse", lambda: self._get_nse_candles().fetch_today(symbol, interval)))
-        sources.append((
-            "angel_one",
-            lambda: self.broker.get_historical(token, interval, start, end, exchange=exchange),
-        ))
-        if interval != "D":
-            sources.append((
-                "yahoo",
-                lambda: self._get_yahoo().fetch_intraday(symbol, interval),
-            ))
 
         for source_name, fetch in sources:
             try:
@@ -487,6 +497,7 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
                     },
                 )
                 continue
+            candles = self._drop_future_candles(candles, end, symbol, interval, source_name)
             if candles:
                 return candles
             # A source that succeeds (no exception) but returns zero bars
@@ -502,6 +513,26 @@ class HistoricalCandleCollector(_BrokerBackedCollector):
                 },
             )
         return []
+
+    def _drop_future_candles(
+        self, candles: list[Candle], end: datetime, symbol: str, interval: str, source_name: str,
+    ) -> list[Candle]:
+        """Defense in depth against a source handing back bars timestamped
+        after the actual fetch time -- found live 2026-07-16: NSE's index
+        chart endpoint forward-pads the rest of the session with
+        placeholder bars rather than only what's actually traded so far.
+        No real source should ever legitimately report the future."""
+        kept = [c for c in candles if c.timestamp <= end]
+        dropped = len(candles) - len(kept)
+        if dropped:
+            self.logger.warning(
+                "dropped future-timestamped candles",
+                extra={
+                    "symbol": symbol, "interval": interval, "source": source_name,
+                    "dropped": dropped, "fetch_end": end.isoformat(),
+                },
+            )
+        return kept
 
     async def _backfill_start(self, symbol: str, interval: str, end: datetime) -> datetime:
         """Resume from the last stored bar; fall back to the default lookback."""

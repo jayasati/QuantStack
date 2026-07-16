@@ -75,22 +75,39 @@ def make_collector(broker=None, nse=None, bse=None, yahoo=None) -> HistoricalCan
     return collector
 
 
-async def test_today_only_intraday_tries_nse_first_for_a_non_bse_symbol() -> None:
+async def test_today_only_intraday_tries_broker_first_not_nse(monkeypatch=None) -> None:
+    """2026-07-16: NSE/BSE demoted to last-resort now that
+    TickCandleAggregator builds today's intraday candles live from ticks --
+    NSE's index endpoint also turned out to forward-pad the rest of the
+    session with placeholder bars when it was still tried first."""
     nse = FakeSource(result=[_candle("HDFCBANK", "1m", 1500.0)])
     broker = FakeBroker(result=[_candle("HDFCBANK", "1m", 1400.0)])
     collector = make_collector(broker=broker, nse=nse)
     candles = await collector._fetch_with_fallback(
         "HDFCBANK", "1m", TODAY - timedelta(minutes=5), TODAY, "tok", "NSE", TODAY.astimezone(IST).date(),
     )
+    assert candles[0].close == 1400.0
+    assert broker.calls == 1
+    assert nse.calls == []  # broker succeeded, NSE (last resort) never tried
+
+
+async def test_today_only_intraday_falls_through_to_nse_only_as_last_resort() -> None:
+    nse = FakeSource(result=[_candle("HDFCBANK", "1m", 1500.0)])
+    broker = FakeBroker(error=RuntimeError("broker down"))
+    yahoo = FakeSource(error=RuntimeError("yahoo down"))
+    collector = make_collector(broker=broker, nse=nse, yahoo=yahoo)
+    candles = await collector._fetch_with_fallback(
+        "HDFCBANK", "1m", TODAY - timedelta(minutes=5), TODAY, "tok", "NSE", TODAY.astimezone(IST).date(),
+    )
     assert candles[0].close == 1500.0
     assert nse.calls == [("HDFCBANK", "1m")]
-    assert broker.calls == 0  # NSE succeeded, nothing else was tried
 
 
-async def test_today_only_intraday_tries_bse_first_for_a_bse_listed_symbol() -> None:
+async def test_today_only_intraday_tries_bse_last_for_a_bse_listed_symbol() -> None:
     bse = FakeSource(result=[_candle("SENSEX", "1m", 77000.0)])
+    broker = FakeBroker(error=RuntimeError("broker down"))
     nse = FakeSource(result=[_candle("SENSEX", "1m", 1.0)])
-    collector = make_collector(nse=nse, bse=bse)
+    collector = make_collector(broker=broker, nse=nse, bse=bse)
     candles = await collector._fetch_with_fallback(
         "SENSEX", "1m", TODAY - timedelta(minutes=5), TODAY, "tok", "BSE", TODAY.astimezone(IST).date(),
     )
@@ -99,39 +116,37 @@ async def test_today_only_intraday_tries_bse_first_for_a_bse_listed_symbol() -> 
     assert nse.calls == []  # SENSEX is BSE-listed, NSE is never even tried
 
 
-async def test_falls_through_to_broker_when_nse_raises() -> None:
-    nse = FakeSource(error=RuntimeError("nse rejected"))
-    broker = FakeBroker(result=[_candle("HDFCBANK", "1m", 1400.0)])
-    collector = make_collector(broker=broker, nse=nse)
+async def test_falls_through_to_yahoo_when_broker_raises() -> None:
+    broker = FakeBroker(error=RuntimeError("broker down"))
+    yahoo = FakeSource(result=[_candle("HDFCBANK", "1m", 1600.0)])
+    collector = make_collector(broker=broker, yahoo=yahoo)
     candles = await collector._fetch_with_fallback(
         "HDFCBANK", "1m", TODAY - timedelta(minutes=5), TODAY, "tok", "NSE", TODAY.astimezone(IST).date(),
     )
-    assert candles[0].close == 1400.0
-    assert broker.calls == 1
+    assert candles[0].close == 1600.0
 
 
-async def test_falls_through_to_broker_when_nse_returns_empty_not_just_on_error() -> None:
+async def test_falls_through_to_yahoo_when_broker_returns_empty_not_just_on_error() -> None:
     """The exact DEBT-2 failure mode: a source that returns zero bars
     without raising must not be treated as success."""
-    nse = FakeSource(result=[])
-    broker = FakeBroker(result=[_candle("HDFCBANK", "1m", 1400.0)])
-    collector = make_collector(broker=broker, nse=nse)
+    broker = FakeBroker(result=[])
+    yahoo = FakeSource(result=[_candle("HDFCBANK", "1m", 1600.0)])
+    collector = make_collector(broker=broker, yahoo=yahoo)
     candles = await collector._fetch_with_fallback(
         "HDFCBANK", "1m", TODAY - timedelta(minutes=5), TODAY, "tok", "NSE", TODAY.astimezone(IST).date(),
     )
-    assert candles[0].close == 1400.0
-    assert broker.calls == 1
+    assert candles[0].close == 1600.0
 
 
-async def test_falls_through_to_yahoo_when_nse_and_broker_both_fail() -> None:
-    nse = FakeSource(error=RuntimeError("nse down"))
+async def test_falls_through_to_nse_when_broker_and_yahoo_both_fail() -> None:
+    nse = FakeSource(result=[_candle("HDFCBANK", "5m", 1500.0)])
     broker = FakeBroker(error=RuntimeError("broker down"))
-    yahoo = FakeSource(result=[_candle("HDFCBANK", "5m", 1600.0)])
+    yahoo = FakeSource(error=RuntimeError("yahoo down"))
     collector = make_collector(broker=broker, nse=nse, yahoo=yahoo)
     candles = await collector._fetch_with_fallback(
         "HDFCBANK", "5m", TODAY - timedelta(minutes=5), TODAY, "tok", "NSE", TODAY.astimezone(IST).date(),
     )
-    assert candles[0].close == 1600.0
+    assert candles[0].close == 1500.0
 
 
 async def test_all_sources_failing_returns_empty_list_not_an_exception() -> None:
@@ -182,3 +197,34 @@ async def test_cleanup_closes_every_constructed_source() -> None:
     collector = make_collector(nse=nse, bse=bse, yahoo=yahoo)
     await collector.cleanup()
     assert set(closed) == {"nse", "bse", "yahoo"}
+
+
+async def test_drops_candles_timestamped_after_the_fetch_end() -> None:
+    """Found live 2026-07-16: NSE's index chart endpoint (getGraphChart,
+    NIFTY/BANKNIFTY only) forward-pads its response with placeholder bars
+    for the rest of the session, not just what's actually traded so far --
+    no real source should ever legitimately report the future."""
+    future_ts = TODAY + timedelta(hours=4)
+    nse = FakeSource(result=[
+        _candle("NIFTY", "5m", 24100.0, ts=TODAY - timedelta(minutes=5)),
+        _candle("NIFTY", "5m", 24999.0, ts=future_ts),  # bogus forward-padded bar
+    ])
+    broker = FakeBroker(error=RuntimeError("broker down"))
+    yahoo = FakeSource(error=RuntimeError("yahoo down"))
+    collector = make_collector(broker=broker, nse=nse, yahoo=yahoo)
+    candles = await collector._fetch_with_fallback(
+        "NIFTY", "5m", TODAY - timedelta(minutes=5), TODAY, "tok", "NSE", TODAY.astimezone(IST).date(),
+    )
+    assert len(candles) == 1
+    assert candles[0].close == 24100.0
+
+
+async def test_all_candles_in_the_future_counts_as_no_bars_and_falls_through() -> None:
+    future_ts = TODAY + timedelta(hours=4)
+    broker = FakeBroker(result=[_candle("NIFTY", "5m", 24999.0, ts=future_ts)])
+    yahoo = FakeSource(result=[_candle("NIFTY", "5m", 24100.0)])
+    collector = make_collector(broker=broker, yahoo=yahoo)
+    candles = await collector._fetch_with_fallback(
+        "NIFTY", "5m", TODAY - timedelta(minutes=5), TODAY, "tok", "NSE", TODAY.astimezone(IST).date(),
+    )
+    assert candles[0].close == 24100.0

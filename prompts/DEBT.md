@@ -220,9 +220,25 @@ Two layers, deliberately: this layer uses `ON CONFLICT DO UPDATE` (the
 forming candle should visibly live-update, not just appear once its
 minute closes -- 2026-07-16 decision); `historical_candles` keeps
 `DO NOTHING` so it can never clobber this layer's more current data, and
-remains the gap-filler for restarts/WebSocket drops. The NSE/BSE
-"today-only" fallback (DEBT-2's original workaround) stays wired as
-last-resort only, no longer primary for "today's" data.
+remains the gap-filler for restarts/WebSocket drops.
+
+**Correction, same day:** "NSE/BSE demoted to last-resort" was the stated
+intent but the source-list reorder was never actually implemented in the
+first version -- `_fetch_with_fallback` still tried NSE/BSE FIRST for
+today-only windows, unchanged. Caught live during market hours: NIFTY and
+BANKNIFTY (the two symbols using NSE's *index* chart endpoint,
+`getGraphChart` -- not the equity endpoint) showed candles timestamped
+hours in the future (e.g. 14:45 IST bars while real time was 10:26 IST).
+Root cause: that endpoint forward-pads its response with placeholder bars
+for the rest of the session instead of only what's actually traded so
+far -- SENSEX (BSE-routed) and every equity (NSE's *different*,
+non-padding `getSymbolChartData` endpoint) were unaffected. Fixed properly
+this time: `_fetch_with_fallback`'s source order is now broker → Yahoo →
+NSE/BSE (genuinely last-resort), plus a new `_drop_future_candles` guard
+that filters any bar timestamped after the actual fetch time regardless
+of source -- defense in depth, since a source lying about "now" is a bug
+class that could recur elsewhere. 66 already-stored bad rows deleted
+(`ohlcv_candles WHERE symbol IN ('NIFTY','BANKNIFTY') AND ts > now()`).
 
 First version measured 111ms/symbol against a real Postgres in
 `test_load_and_performance.py` (one upsert + 5 SELECT/upsert pairs *per
