@@ -141,12 +141,24 @@ before truncating to 20), because `scan()` didn't have a scaling problem
 until today's watchlist change created one. Fixed the same way:
 `MAX_CONCURRENT_SYMBOL_DETECTIONS = 5` semaphore bounds `scan()`'s
 per-symbol fan-out, independent of how wide the watchlist grows next.
+**Re-measured live post-deploy, same day: improved, not resolved.**
+6.1s / 6.6s / 9.2s / 5.9s across four requests -- 2-3x faster and far more
+consistent (the 23s outlier is gone), but still 3-4.5x over the <2s
+target, not fixed. Expected: 25 symbols / `MAX_CONCURRENT_SYMBOL_DETECTIONS=5`
+= 5 sequential waves through Phase 1 -- the semaphore trades system-wide
+CPU contention for wall-clock time, it doesn't reduce the total work.
+`scan()` still runs the full 6-way intelligence assessment on *every*
+watchlist symbol just to rank them, before truncating to the top 20 --
+that cost scales directly with watchlist size regardless of concurrency
+tuning. Left **Active**, not moved to Resolved.
 **Expiry condition:** Before citing Volume 1's performance target as met
 anywhere, or when request latency is next worked (pairs naturally with
-DEBT-6 — populating Redis is the likely next win). Re-measure
-`/prediction/candidates` live post-fix before considering this closed --
-not yet done as of this logging.
-**Logged:** 2026-07-15 (Volume 1 postflight); root-caused and fixed 2026-07-16.
+DEBT-6 — populating Redis is the likely next win). Real fix likely needs a
+cheaper pre-filter ahead of the full 6-way fan-out (e.g. a lightweight
+score gate before running all 6 engines per symbol), not just tighter
+concurrency bounds.
+**Logged:** 2026-07-15 (Volume 1 postflight); root-caused and partially
+mitigated 2026-07-16 (concurrency bound live-verified insufficient alone).
 
 ### DEBT-8 · news_intelligence / global_shock_news chronically slow, low quality
 **What:** Live `/collectors` check: `avg_latency_ms` 33,696 (news_intelligence,
