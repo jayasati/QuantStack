@@ -17,46 +17,6 @@ Rules:
 
 ## Active
 
-### DEBT-1 · Directional intelligence is daily-only (4 of 5 components fixed)
-**What:** All directional intelligence (trend, market_structure, volatility,
-momentum, relative_strength) reads only `timeframe="D"` features, computed
-once at midnight. Intraday moves are invisible to every signal.
-**Why deferred:** Volume 4 was specced against daily features; wiring intraday
-input is new scope.
-**Risk while open:** The system cannot do the one thing it exists for
-(Volume 1: intraday F&O same-day trading). HDFCBANK 2026-07-15 is the proof.
-
-**Fixed 2026-07-16 for trend/market_structure/momentum/volatility** (Volume 4
-build, DEBT-1/DEBT-2 chunk): a shared intraday-overlay convention
-(`app/intelligence/base.py`: `intraday_direction_signal()`,
-`intraday_reversal_warning()`, `IntelligenceComponent.intraday_values()`)
-blends `IntradayRiskFeatureEngine`'s (Volume 3) 5m session-relative features
-into each engine's direction/level/confidence with real weight (0.3 for
-direction, dedicated confidence-conflict penalties), not a token gesture.
-Verified live on the VM against HDFCBANK's real 2026-07-16 session (-1.06%
-from open): D-based evidence was bullish (`ms_trend_direction=1.0`,
-`ms_structural_bias=0.71`), but the blended trend read dropped to
-`trend_direction=0.19`, confidence `0.49` (was structurally ~0.7+ pre-fix),
-with an explicit reasoning line ("Today's intraday move opposes the
-underlying read (conflict 48%) -- confidence docked") and dominant state
-shifted from a confident bull read to `range_bound` -- this is the actual
-HDFCBANK 2026-07-15 fix, live-verified, not just unit-tested. All 12
-composite components (including the 4 fixed here) confirmed still reporting
-successfully via `/intelligence/composite/HDFCBANK` post-deploy.
-
-**Remaining scope: relative_strength.** Not fixed in this chunk -- Relative
-Strength Intelligence is inherently a cross-symbol comparison (rs_* features
-are already relative-to-benchmark quantities), and `IntradayRiskFeatureEngine`
-has no equivalent relative/benchmark-comparison feature to overlay. Fixing
-it would need a new intraday relative-strength computation (symbol's
-intraday move vs. each reference's own intraday move), not a reuse of the
-existing overlay helpers -- explicitly deferred, not silently skipped.
-**Expiry condition:** Relative Strength intraday wiring -- before any signal
-is used for a real trading decision, OR when Volume 5.5+ work resumes,
-whichever comes first (unchanged for the remaining scope).
-**Logged:** 2026-07-15; 4/5 components fixed 2026-07-16
-(`f597610`, `docs/volumes/preflight-vol4-2026-07-16.md`).
-
 ### DEBT-2 · IntradayRiskFeatureEngine output is unconsumed (3/9 features now fixed; root cause of the stall found: external, not ours)
 **What:** Volume 3's `IntradayRiskFeatureEngine` writes real 5m-timeframe
 features (`intraday_move_from_open_pct`, `intraday_expected_move_next_30m_pct`,
@@ -82,11 +42,12 @@ broker-side backend degradation, outside this codebase's control.
 live-updates 1m/3m/5m/15m/30m/1H candles directly from the same ticks
 `live_market` already polls every 15s, instead of waiting on this
 collector's 300s external-source sweep to notice new data exists (see the
-Resolved entry below). This doesn't resolve DEBT-2 itself (consumer-wiring
-gap, DEBT-1, is still open) but substantially reduces exposure to a repeat
-of the original stall -- intraday freshness no longer depends solely on
-this collector's own cadence, and the NSE/BSE fallback that was DEBT-2's
-original workaround is now last-resort rather than primary.
+Resolved entry below). This alone didn't resolve DEBT-2's consumer-wiring
+gap (that came later, 2026-07-16, see below) but substantially reduced
+exposure to a repeat of the original stall -- intraday freshness no longer
+depends solely on this collector's own cadence, and the NSE/BSE fallback
+that was DEBT-2's original workaround is now last-resort rather than
+primary.
 
 **Risk while open:** Any future intraday-intelligence work (DEBT-1) must
 treat `ohlcv_candles` freshness as a genuine external dependency that can
@@ -121,12 +82,11 @@ market_structure, via `intraday_reversal_warning()`), and
 -- (plus all 9 base features' `_z` companions) are still write-only, an I-2
 violation. The staleness-check recommendation above (flag/downgrade
 confidence when `ohlcv_candles` is stale) also remains unimplemented.
-**Expiry condition:** Remaining consumer-wiring resolves with relative_strength's
-piece of DEBT-1, or when the still-unconsumed expected-move/VaR features are
-next relevant (a natural fit for Volume 5's conviction/qualification engines,
-which already reason about position-holding horizons). The staleness-check
-recommendation should land as part of whichever fix lands next, not deferred
-again a second time.
+**Expiry condition:** When the still-unconsumed expected-move/VaR/time-
+elapsed/max-drawdown features are next relevant (a natural fit for Volume
+5's conviction/qualification engines, which already reason about position-
+holding horizons). The staleness-check recommendation should land as part
+of whichever fix lands next, not deferred again a second time.
 **Logged:** 2026-07-15 (root-caused same day, `79a067f` +
 `docs/volumes/preflight-vol3-2026-07-15.md`; fallback-chain mitigation added
 same day; consumer-wiring partially resolved 2026-07-16, `f597610`).
@@ -378,6 +338,72 @@ or before claiming 100% quality-score coverage anywhere.
 ---
 
 ## Resolved
+
+### ~~DEBT-1: Directional intelligence is daily-only~~ — resolved 2026-07-16
+All directional intelligence (trend, market_structure, volatility, momentum,
+relative_strength) read only `timeframe="D"` features, computed once at
+midnight -- intraday moves were invisible to every signal. HDFCBANK
+2026-07-15: the system held a "long" bias through a real 1.1% intraday
+collapse.
+
+Fixed across two build chunks (Volume 4, DEBT-1/DEBT-2 work). A shared
+intraday-overlay convention (`app/intelligence/base.py`:
+`intraday_direction_signal()`, `intraday_reversal_warning()`,
+`IntelligenceComponent.intraday_values()`) blends `IntradayRiskFeatureEngine`'s
+(Volume 3) 5m session-relative features into each engine's direction/level/
+confidence with real weight, not a token gesture:
+
+- **trend/market_structure/momentum/volatility** (`f597610`): today's
+  move-from-open blended into direction/level at weight 0.3, with a
+  confidence-conflict penalty when it opposes the D-based read.
+  Volatility blends today's session-so-far realized vol (ratio vs. the
+  D-based historical-vol baseline) instead, since that's the directly
+  comparable intraday quantity for that engine.
+- **relative_strength** (`aac4956`): scoped to what's actually
+  supportable -- `IntradayRiskFeatureEngine` only covers the 25-symbol
+  watchlist (confirmed live: no sector/industry index symbols have their
+  own intraday feed), so the overlay compares the symbol's today's move
+  against Nifty's/Sensex's own today's move only; sector/industry/peers
+  intraday overlay is out of scope until those references get their own
+  intraday feed, named explicitly in the module docstring, not silently
+  dropped. `metrics["intraday_relative_references"]` names exactly which
+  references were actually used per call, so partial coverage (e.g. only
+  Nifty, if Sensex data is momentarily missing) is auditable.
+
+**Live-verified, not just unit-tested:** against HDFCBANK's real
+2026-07-16 session (-1.06% from open), D-based evidence was bullish
+(`ms_trend_direction=1.0`, `ms_structural_bias=0.71`), but the blended
+trend read dropped to `trend_direction=0.19`, confidence `0.49`, with an
+explicit reasoning line ("Today's intraday move opposes the underlying
+read (conflict 48%) -- confidence docked") and dominant state shifted to
+`range_bound` -- via the *scheduled* `market_intelligence_sweep`, not just
+a manual API call (confirmed the persisted `market_state_report.observation`
+matched exactly). `relative_strength` confirmed live separately:
+`intraday_relative_references: ['nifty', 'sensex']`, both benchmarks
+successfully folded in for HDFCBANK. All 12 composite components still
+report successfully post-deploy in both chunks.
+
+Isolated request latency after both chunks: 5.3-6.8s (was 4.57-4.93s
+before either chunk) -- a real, small addition from the extra bounded
+Redis reads each engine now does, within DEBT-7's existing 6.1-9.2s
+reference range, logged there rather than treated as a new problem. One
+intermediate reading (21-27s) was investigated and confirmed to be a
+post-restart artifact (a background job still finishing when the
+isolation pause was issued), not caused by this fix -- re-measured clean
+once CPU was confirmed genuinely idle first.
+
+**Not fully resolving I-1 as a system-wide invariant:** the underlying
+D-based sub-features (`ms_trend_direction`, `price_momentum_*`, etc.)
+still only update at midnight even in the fixed engines -- only the
+*blended* output now refreshes faster. And this was built and deployed
+after market close, so "updates in near-real-time during a live session"
+is verified against the day's final snapshot, not an actual live
+intraday session yet -- worth a genuine market-hours check when one is
+next available. I-1 stays recorded VIOLATED with this nuance noted,
+not silently upgraded to HELD.
+**Logged:** 2026-07-15; fixed 2026-07-16 (`f597610` trend/structure/
+momentum/volatility, `aac4956` relative_strength;
+`docs/volumes/preflight-vol4-2026-07-16.md`).
 
 ### ~~DEBT-9: Feature Selection Engine has never run live~~ — resolved 2026-07-16
 `feature_usage` was empty (0 rows) despite `FeatureSelectionEngine.persist()`
