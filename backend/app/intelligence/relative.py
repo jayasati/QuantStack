@@ -37,11 +37,19 @@ from app.intelligence.base import (
     clamp,
     normalize_states,
 )
+from app.intelligence.base import sign as _sign
 
 COMPONENT = "relative_strength"
 
 RS_WINDOWS = (5, 20, 50, 100)
 REFERENCES = ("nifty", "sensex", "sector", "industry", "peers")
+# Only these two references have their own tradable-index intraday data
+# (IntradayRiskFeatureEngine only covers the watchlist -- 25 symbols, no
+# sector/industry index symbols, confirmed live 2026-07-16). "sector"/
+# "industry"/"peers" intraday overlay would need each reference's own
+# intraday feed, which doesn't exist yet -- explicitly out of scope here,
+# not silently dropped (see DEBT.md).
+INTRADAY_REFERENCES = ("nifty", "sensex")
 
 # % points of cumulative relative strength that saturate the per-reference
 # signal; % per bar of relative momentum that saturates the momentum
@@ -49,6 +57,14 @@ REFERENCES = ("nifty", "sensex", "sector", "industry", "peers")
 # choice for strength and a documented v1 guess for momentum.
 STRENGTH_SATURATION = 5.0
 MOMENTUM_SATURATION = 1.0
+# Intraday overlay (DEBT-1, 2026-07-16): the symbol's own today's move-from-
+# open minus each covered reference's own today's move-from-open is a real
+# intraday relative-strength reading, not a proxy. Saturation is tighter
+# than the D-based STRENGTH_SATURATION (5.0, a cumulative multi-day number)
+# since this is a single session's relative move.
+INTRADAY_RS_SATURATION = 2.0
+INTRADAY_RS_WEIGHT = 0.25
+INTRADAY_CONFLICT_CONFIDENCE_PENALTY = 0.25
 
 
 def _mean(values: list[float]) -> float | None:
@@ -63,8 +79,37 @@ def _blend(features: Mapping[str, float], prefix: str, ref: str) -> float | None
     return _mean(values)
 
 
-def assess_relative_strength(features: Mapping[str, float]) -> IntelligenceResult:
-    """Pure relative-strength assessment from the latest feature values."""
+def _intraday_relative_move(
+    symbol_intraday: Mapping[str, float] | None,
+    benchmark_intraday: Mapping[str, float] | None,
+) -> float | None:
+    """Today's move-from-open for the symbol minus the reference's own --
+    a real intraday relative-strength reading, not a proxy. None if either
+    side's move-from-open isn't available yet (cold start, or a reference
+    outside IntradayRiskFeatureEngine's watchlist coverage)."""
+    if not symbol_intraday or not benchmark_intraday:
+        return None
+    own = symbol_intraday.get("intraday_move_from_open_pct")
+    bench = benchmark_intraday.get("intraday_move_from_open_pct")
+    if own is None or bench is None:
+        return None
+    return own - bench
+
+
+def assess_relative_strength(
+    features: Mapping[str, float],
+    intraday_features: Mapping[str, float] | None = None,
+    intraday_benchmarks: Mapping[str, Mapping[str, float]] | None = None,
+) -> IntelligenceResult:
+    """Pure relative-strength assessment from the latest feature values.
+
+    ``intraday_features`` is the symbol's own 5m session-relative output
+    (Volume 3); ``intraday_benchmarks`` maps reference name -> that
+    reference's own intraday output (only "nifty"/"sensex" are ever
+    populated -- sector/industry/peers have no intraday feed of their own).
+    Both optional and additive (DEBT-1): absent, every calculation is
+    byte-identical to before these parameters existed.
+    """
     contributions: list[Contribution] = []
     reasoning: list[str] = []
 
@@ -77,7 +122,27 @@ def assess_relative_strength(features: Mapping[str, float]) -> IntelligenceResul
                 feature=f"rs_{ref}_strength", value=mean_strength, weight=1 / len(REFERENCES),
                 effect="outperforming" if mean_strength > 0 else "underperforming",
             ))
-    level = clamp(_mean(list(strength_signals.values())) or 0.0, -1.0, 1.0)
+    d_level = clamp(_mean(list(strength_signals.values())) or 0.0, -1.0, 1.0)
+
+    intraday_relative_signals: dict[str, float] = {}
+    for ref in INTRADAY_REFERENCES:
+        rel_move = _intraday_relative_move(
+            intraday_features, (intraday_benchmarks or {}).get(ref)
+        )
+        if rel_move is not None:
+            intraday_relative_signals[ref] = math.tanh(rel_move / INTRADAY_RS_SATURATION)
+            contributions.append(Contribution(
+                feature=f"intraday_relative_move_vs_{ref}", value=rel_move,
+                weight=INTRADAY_RS_WEIGHT / len(INTRADAY_REFERENCES),
+                effect="outperforming today" if rel_move > 0 else "underperforming today",
+            ))
+    if intraday_relative_signals:
+        intraday_level = _mean(list(intraday_relative_signals.values())) or 0.0
+        level = clamp(
+            (1 - INTRADAY_RS_WEIGHT) * d_level + INTRADAY_RS_WEIGHT * intraday_level, -1.0, 1.0
+        )
+    else:
+        level = d_level
 
     momentum_signals = []
     for ref in REFERENCES:
@@ -115,11 +180,21 @@ def assess_relative_strength(features: Mapping[str, float]) -> IntelligenceResul
     consistency = agreeing / len(strength_signals) if strength_signals else 0.0
 
     data_completeness = len(strength_signals) / len(REFERENCES)
+    intraday_conflict = 0.0
+    if intraday_relative_signals:
+        intraday_level = _mean(list(intraday_relative_signals.values())) or 0.0
+        intraday_conflict = max(0.0, -intraday_level * _sign(d_level))
     confidence = clamp(
         0.2 + 0.3 * data_completeness + 0.3 * consistency
-        + 0.2 * (1.0 if outperformance_values else 0.0),
+        + 0.2 * (1.0 if outperformance_values else 0.0)
+        - INTRADAY_CONFLICT_CONFIDENCE_PENALTY * intraday_conflict,
         0.0, 1.0,
     )
+    if intraday_conflict > 0:
+        reasoning.append(
+            f"Today's relative move opposes the underlying read "
+            f"(conflict {intraday_conflict:.0%}) -- confidence docked."
+        )
 
     bull = max(level, 0.0)
     bear = max(-level, 0.0)
@@ -139,6 +214,9 @@ def assess_relative_strength(features: Mapping[str, float]) -> IntelligenceResul
            else "."),
         f"Dominant state: {dominant}.",
     ])
+    if intraday_relative_signals:
+        refs_covered = ", ".join(sorted(intraday_relative_signals))
+        reasoning.append(f"Today's relative move vs {refs_covered} folded in.")
 
     return IntelligenceResult(
         component=COMPONENT,
@@ -152,6 +230,7 @@ def assess_relative_strength(features: Mapping[str, float]) -> IntelligenceResul
                 round(leadership_ranking, 4) if leadership_ranking is not None else None
             ),
             "reference_agreement": round(consistency, 4),
+            "intraday_relative_references": sorted(intraday_relative_signals) or None,
         },
         contributions=contributions,
         reasoning=reasoning,
@@ -166,7 +245,15 @@ class RelativeStrengthIntelligenceEngine(IntelligenceComponent):
     ) -> IntelligenceResult:
         symbol = symbol or self._settings.feature_benchmark_symbol
         features = await self.latest_values(symbol, timeframe)
-        result = assess_relative_strength(features)
+        intraday_features = None
+        intraday_benchmarks = None
+        if timeframe == "D":
+            intraday_features = await self.intraday_values(symbol)
+            intraday_benchmarks = {
+                "nifty": await self.intraday_values(self._settings.feature_benchmark_symbol),
+                "sensex": await self.intraday_values(self._settings.feature_sensex_symbol),
+            }
+        result = assess_relative_strength(features, intraday_features, intraday_benchmarks)
         result.metrics["symbol"] = symbol
         await self._publish_assessment(symbol, result)
         return result
