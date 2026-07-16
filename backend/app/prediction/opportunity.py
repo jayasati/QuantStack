@@ -320,6 +320,19 @@ class OpportunityDetectionEngine:
                 return value
             return await safe(factory())
 
+        # Started early, same as before the 2026-07-16 pre-filter attempt --
+        # NOT deferred until after the trigger check. First version of this
+        # fix deferred both calls, which regressed live: 17 of 25 watchlist
+        # symbols were triggering at measurement time (68%, not the small
+        # minority assumed), so deferring lost the free parallelism these
+        # tasks got by running alongside the 6-way gather below and instead
+        # added their full cost serially on top, for most symbols. Starting
+        # them early keeps that overlap for the (usually-majority)
+        # triggering case; cancelling below still avoids the work entirely
+        # for symbols that don't trigger.
+        confidence_task = asyncio.ensure_future(self._market_confidence(symbol))
+        composite_task = asyncio.ensure_future(self._composite_context(symbol))
+
         trend, structure, flow, relative, volatility, events = await asyncio.gather(
             safe(self._trend.assess(symbol=symbol)),
             safe(self._market_structure.assess(symbol=symbol)),
@@ -362,22 +375,26 @@ class OpportunityDetectionEngine:
         }
         triggers = evaluate_triggers(component_results)
         if not triggers:
+            # DEBT-7 pre-filter (2026-07-16): market_confidence/composite_score
+            # are pure display metadata on OpportunityCandidate --
+            # evaluate_triggers() above never reads them, only
+            # component_results does. Cancel rather than await: these tasks
+            # started early (alongside the 6-way gather above) specifically
+            # so a triggering symbol pays no extra latency for them, but a
+            # non-triggering symbol (still common even at 68% trigger rates
+            # live-observed 2026-07-16) shouldn't pay for work whose result
+            # is about to be thrown away either.
+            confidence_task.cancel()
+            composite_task.cancel()
+            for task in (confidence_task, composite_task):
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
             return None
 
-        # DEBT-7 pre-filter (2026-07-16): market_confidence/composite_score
-        # are pure display metadata on OpportunityCandidate -- evaluate_triggers()
-        # above never reads them, only component_results does. Computing
-        # them for every watchlist symbol meant paying for two extra
-        # per-symbol reads on every non-triggering symbol (the large
-        # majority in practice) just to throw the result away a moment
-        # later. Deferred until here: only symbols that already triggered
-        # via the real per-symbol engines above pay this cost. Zero
-        # behavior change -- every symbol that used to get a
-        # market_confidence/composite_score still gets the identical one,
-        # just computed later.
-        confidence_report, (composite_score, composite_confidence) = await asyncio.gather(
-            self._market_confidence(symbol), self._composite_context(symbol),
-        )
+        confidence_report = await confidence_task
+        composite_score, composite_confidence = await composite_task
 
         candidate = OpportunityCandidate(
             symbol=symbol,

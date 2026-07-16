@@ -165,6 +165,25 @@ don't (the majority in practice). This is a real correctness-preserving
 cut, not the "lightweight score gate" heuristic floated below -- that
 would trade recall for speed and wasn't implemented; explicitly deferred,
 see below.
+**Correction, same day -- the first pre-filter version was a live
+regression, caught by re-measuring rather than assumed fixed:** deferring
+`market_confidence`/`composite_context` until *after* the trigger check
+(instead of starting them early like the original code) made
+`/prediction/candidates` *slower*, not faster -- 10.7s-14.4s post-deploy,
+worse than the 6.1-9.2s pre-filter-less baseline. Root cause: the two
+tasks used to start via `asyncio.ensure_future` *before* the main 6-way
+`asyncio.gather`, running concurrently with it -- most of their cost was
+already hidden behind that gather's own wall-clock time. Deferring them to
+start only after the gather completed lost that overlap. Checked live
+(`/prediction/opportunities`) rather than assumed: 17 of 25 watchlist
+symbols were triggering at the time (68%, not the small minority the fix
+assumed), so most requests paid the full serial cost on top of the main
+gather instead of getting it for free. Fixed properly: both tasks are
+started early again (restoring the original overlap for triggering
+symbols), but are now `.cancel()`'d -- not left to run to completion --
+the moment a symbol turns out not to trigger, recovering the savings for
+non-triggering symbols without re-introducing the regression for
+triggering ones.
 **Expiry condition:** Before citing Volume 1's performance target as met
 anywhere, or when request latency is next worked (pairs naturally with
 DEBT-6 — populating Redis is the likely next win). The 4 real per-symbol
@@ -176,9 +195,10 @@ size, or accepting a genuine heuristic pre-filter (with an explicit
 recall/speed trade-off the user should sign off on, not one invented
 silently) rather than assessing every symbol in full.
 **Logged:** 2026-07-15 (Volume 1 postflight); root-caused and partially
-mitigated 2026-07-16 (concurrency bound + correctness-preserving
-pre-filter, both live-verified insufficient alone -- see re-measurement
-notes above and below).
+mitigated 2026-07-16 (concurrency bound + cancel-based pre-filter, both
+live-verified insufficient alone -- see re-measurement notes above; the
+pre-filter's first version was a live regression, corrected same day
+before this ledger entry was written).
 
 ### DEBT-8 · news_intelligence / global_shock_news chronically slow, low quality
 **What:** Live `/collectors` check: `avg_latency_ms` 33,696 (news_intelligence,

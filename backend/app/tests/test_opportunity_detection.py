@@ -256,15 +256,26 @@ class _FixedAssessEngine:
         return self._result
 
 
-def _make_engine(*, market_structure: IntelligenceResult, calls: list[str]) -> OpportunityDetectionEngine:
-    async def counting_market_confidence(symbol: str):
-        calls.append("market_confidence")
-        return 55.0
+class _NeverResolvingCall:
+    """Blocks forever unless cancelled -- a trivial instant-return stub
+    can't prove cancellation actually happens (nothing to interrupt), so
+    this one only ever completes via CancelledError, letting the test
+    assert that happened rather than racing on real timing."""
 
-    async def counting_composite_context(symbol: str):
-        calls.append("composite_context")
-        return 60.0, 0.5
+    def __init__(self) -> None:
+        self.cancelled = False
 
+    async def __call__(self, symbol: str):
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+
+
+def _make_engine(
+    *, market_structure: IntelligenceResult, market_confidence, composite_context,
+) -> OpportunityDetectionEngine:
     engine = OpportunityDetectionEngine(
         session_factory=None,
         trend_engine=_FixedAssessEngine(result("trend")),
@@ -275,20 +286,27 @@ def _make_engine(*, market_structure: IntelligenceResult, calls: list[str]) -> O
         event_engine=_FixedAssessEngine(result("events", score=0.0)),
     )
     # Method-level override, independent of session_factory internals --
-    # the actual claim under test is call *timing/count*, not what these
-    # two return (already covered by their own dedicated tests above).
-    engine._market_confidence = counting_market_confidence  # type: ignore[method-assign]
-    engine._composite_context = counting_composite_context  # type: ignore[method-assign]
+    # the actual claim under test is whether these get cancelled/awaited,
+    # not what they return (already covered by their own dedicated tests
+    # above).
+    engine._market_confidence = market_confidence  # type: ignore[method-assign]
+    engine._composite_context = composite_context  # type: ignore[method-assign]
     return engine
 
 
-async def test_market_confidence_and_composite_context_skipped_for_non_triggering_symbol() -> None:
+async def test_market_confidence_and_composite_context_cancelled_for_non_triggering_symbol() -> None:
     """DEBT-7 pre-filter (2026-07-16): both are pure display metadata on
-    OpportunityCandidate, never read by evaluate_triggers() -- computing
-    them for a symbol that doesn't trigger is pure waste. Zero
-    triggers here (neutral market_structure), so neither should run."""
-    calls: list[str] = []
-    engine = _make_engine(market_structure=result("market_structure"), calls=calls)
+    OpportunityCandidate, never read by evaluate_triggers() -- both are
+    started early (so a triggering symbol keeps full parallelism, see the
+    test below) but must be cancelled, not awaited to completion, once a
+    symbol turns out not to trigger. Zero triggers here (neutral
+    market_structure)."""
+    confidence = _NeverResolvingCall()
+    composite = _NeverResolvingCall()
+    engine = _make_engine(
+        market_structure=result("market_structure"),
+        market_confidence=confidence, composite_context=composite,
+    )
 
     candidate = await engine.detect(
         "HDFCBANK",
@@ -297,18 +315,29 @@ async def test_market_confidence_and_composite_context_skipped_for_non_triggerin
     )
 
     assert candidate is None
-    assert calls == []
+    assert confidence.cancelled
+    assert composite.cancelled
 
 
 async def test_market_confidence_and_composite_context_run_for_triggering_symbol() -> None:
     """Same as above but market_structure crosses the breakout-probability
     threshold -- a real trigger fires, so both metadata reads must still
-    happen (identical final behavior to before the deferral, just later)."""
-    calls: list[str] = []
+    complete normally (identical final behavior to before this fix,
+    started at the same time as before too -- see the module-level note in
+    opportunity.py on why they're started early rather than deferred)."""
+    async def fixed_market_confidence(symbol: str) -> float:
+        return 55.0
+
+    async def fixed_composite_context(symbol: str) -> tuple[float, float]:
+        return 60.0, 0.5
+
     triggering_structure = result(
         "market_structure", metrics={"breakout_probability": BREAKOUT_PROBABILITY_THRESHOLD + 0.1}
     )
-    engine = _make_engine(market_structure=triggering_structure, calls=calls)
+    engine = _make_engine(
+        market_structure=triggering_structure,
+        market_confidence=fixed_market_confidence, composite_context=fixed_composite_context,
+    )
 
     candidate = await engine.detect(
         "HDFCBANK",
@@ -320,4 +349,3 @@ async def test_market_confidence_and_composite_context_run_for_triggering_symbol
     assert candidate.market_confidence == 55.0
     assert candidate.composite_score == 60.0
     assert candidate.composite_confidence == 0.5
-    assert sorted(calls) == ["composite_context", "market_confidence"]
