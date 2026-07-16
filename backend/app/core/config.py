@@ -184,6 +184,12 @@ class Settings(BaseSettings):
     # scheduled candidate generation reads the persisted report, not a live
     # compute -- a stale/missing report silently zeroes out market_confidence.
     market_intelligence_interval: int = 300
+    # Feature selection sweep interval, seconds (Prompt 3.16, DEBT-9).
+    # Matches feature_health_interval's cadence deliberately: selection runs
+    # against timeframe="D" bars, which only update once/day at midnight
+    # (DEBT-1) -- anything faster than a few hours re-ranks against
+    # unchanged data for pure CPU cost.
+    feature_selection_interval: int = 21600
     # Number of OS processes serving this app (e.g. `uvicorn --workers N` /
     # gunicorn worker count). MUST be kept truthful by whoever changes the
     # deploy command -- OpportunityLifecycleManager's in-process asyncio.Lock

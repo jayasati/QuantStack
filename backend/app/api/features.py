@@ -220,6 +220,53 @@ async def run_feature_selection(
     }
 
 
+@router.get("/usage/{symbol}")
+async def feature_usage(
+    symbol: str,
+    timeframe: str = "D",
+    consumer: str = "feature_selection",
+) -> dict:
+    """Currently-recommended feature set for one symbol/timeframe (Ch.8
+    feature_usage; the persisted-read counterpart of POST /selection).
+
+    This is feature_usage's only consumer today -- DEBT-9's own resolution.
+    """
+    from sqlalchemy import select
+
+    from app.database.session import get_session_factory
+    from app.database.tables import FeatureUsageRow
+
+    sessions = get_session_factory()
+    async with sessions() as session:
+        rows = (
+            await session.execute(
+                select(
+                    FeatureUsageRow.feature_name, FeatureUsageRow.data, FeatureUsageRow.created_at
+                )
+                .where(
+                    FeatureUsageRow.consumer == consumer,
+                    FeatureUsageRow.symbol == symbol,
+                    FeatureUsageRow.timeframe == timeframe,
+                )
+                .order_by(FeatureUsageRow.id)
+            )
+        ).all()
+    ranked = sorted(rows, key=lambda row: (row.data or {}).get("rank", 999))
+    return {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "consumer": consumer,
+        "recommended_feature_set": [
+            {
+                "feature_name": row.feature_name,
+                "rank": (row.data or {}).get("rank"),
+                "last_selected_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in ranked
+        ],
+    }
+
+
 @router.post("/quality/evaluate/{symbol}")
 async def evaluate_feature_quality(symbol: str, timeframe: str = "D") -> dict:
     """On-demand quality sweep for one group (Prompt 3.14)."""

@@ -126,6 +126,33 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
+    async def feature_selection_sweep() -> None:
+        """Recommended feature set per watchlist symbol (Prompt 3.16,
+        DEBT-9) -- previously reachable only via POST /features/selection,
+        never scheduled, so feature_usage had zero live rows despite the
+        engine's own code being correct."""
+        from app.database.session import get_session_factory
+        from app.features.selection import FeatureSelectionEngine
+
+        engine = FeatureSelectionEngine(get_session_factory())
+        for symbol in settings.watchlist:
+            try:
+                await engine.select(symbol)
+            except Exception as exc:
+                logger.error(
+                    "feature selection sweep failed",
+                    extra={"symbol": symbol, "error": str(exc)},
+                )
+
+    scheduler.add_job(
+        feature_selection_sweep,
+        trigger="interval",
+        seconds=settings.feature_selection_interval,
+        id="features.selection_sweep",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+    )
+
     # CandidateGenerationEngine.generate() reads each watchlist symbol's
     # Market State Report via report_as_of() -- a persisted-read, not a live
     # compute -- so without a scheduled writer that report (and therefore

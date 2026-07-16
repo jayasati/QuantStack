@@ -145,10 +145,18 @@ class FeatureDriftRow(Base):
 class FeatureUsageRow(Base):
     __tablename__ = "feature_usage"
     __table_args__ = (
-        UniqueConstraint("feature_name", "consumer", name="uq_feature_usage_edge"),
+        UniqueConstraint(
+            "feature_name", "consumer", "symbol", "timeframe", name="uq_feature_usage_edge"
+        ),
     )
     feature_name: Mapped[str] = mapped_column(String(200), index=True)
     consumer: Mapped[str] = mapped_column(String(100))
+    # Real columns, not JSONB-only -- a prior version kept symbol/timeframe
+    # only inside `data`, so the unique edge above was (feature_name,
+    # consumer) alone and two symbols recommending the same feature name
+    # silently overwrote each other's row (migration 0006).
+    symbol: Mapped[str] = mapped_column(String(50), index=True)
+    timeframe: Mapped[str] = mapped_column(String(10))
 
 
 # --- Market intelligence -----------------------------------------------------

@@ -22,6 +22,7 @@ persisted into feature_usage (consumer "feature_selection") so downstream
 modules can read which features are currently trusted.
 """
 
+import asyncio
 import math
 import random
 from collections.abc import Callable, Sequence
@@ -226,10 +227,27 @@ def select_features(
     correlated_pairs: list[dict[str, Any]] = []
     redundant: set[str] = set()
     names = sorted(standardized, key=lambda n: -mi_scores[n])
+    # `candidates` below is the first MODEL_CANDIDATES *names* entries not in
+    # `redundant`, in this same MI-descending order -- once that many
+    # survivors have been seen, nothing later in `names` can ever enter
+    # `candidates` regardless of its redundancy status, so the O(len(names)^2)
+    # pairwise-correlation scan can stop. At live scale (781 stored features
+    # for one symbol/D group) the unbounded version measured 12.5s of real
+    # CPU per symbol; this cut is exact for recommended/ranking (the only
+    # fields the ridge/permutation/RFE stage and the final output consume) --
+    # it only makes `redundant`/`correlated_pairs` a partial view (pairs
+    # among the never-reached low-MI tail go unreported), which matches
+    # their existing bounded nature (they were never a full pairwise audit).
+    survivors = 0
     for a_index in range(len(names)):
+        if survivors >= MODEL_CANDIDATES:
+            break
         first = names[a_index]
         if first in redundant:
             continue
+        survivors += 1
+        if survivors >= MODEL_CANDIDATES:
+            break
         for second in names[a_index + 1 :]:
             if second in redundant:
                 continue
@@ -290,7 +308,12 @@ class FeatureSelectionEngine:
         matrix, target, rows = await self._build_matrix(symbol, timeframe)
         if rows < MIN_ROWS:
             return SelectionReport(symbol, timeframe, rows, [], [], [], [])
-        outcome = select_features(matrix, target, max_features)
+        # CPU-bound (correlation/MI/ridge/permutation/RFE over the full
+        # stored feature set before truncating to MODEL_CANDIDATES) --
+        # measured 0.7-2.7s against real live data even after the O(n^2)
+        # early-exit fix below, so this must not run directly on the event
+        # loop (I-4), same convention as trend/volatility/correlation/analogs.
+        outcome = await asyncio.to_thread(select_features, matrix, target, max_features)
         report = SelectionReport(
             symbol=symbol,
             timeframe=timeframe,
@@ -356,11 +379,9 @@ class FeatureSelectionEngine:
             {
                 "feature_name": name,
                 "consumer": "feature_selection",
-                "data": {
-                    "symbol": report.symbol,
-                    "timeframe": report.timeframe,
-                    "rank": rank,
-                },
+                "symbol": report.symbol,
+                "timeframe": report.timeframe,
+                "data": {"rank": rank},
             }
             for rank, name in enumerate(report.recommended, start=1)
         ]
@@ -368,7 +389,7 @@ class FeatureSelectionEngine:
             statement = pg_insert(FeatureUsageRow).values(rows)
             await session.execute(
                 statement.on_conflict_do_update(
-                    index_elements=["feature_name", "consumer"],
+                    index_elements=["feature_name", "consumer", "symbol", "timeframe"],
                     set_={"data": statement.excluded.data},
                 )
             )
