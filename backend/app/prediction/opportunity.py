@@ -223,6 +223,20 @@ class OpportunityDetectionEngine:
 
     name = "opportunity_detection_engine"
 
+    # scan() fans out detect() to every watchlist symbol -- each detect()
+    # itself fans out to ~6 fresh per-symbol intelligence assessments
+    # (institutional_flow/events are computed once and reused, not
+    # per-symbol). Same class of problem CandidateGenerationEngine's
+    # MAX_CONCURRENT_SNAPSHOT_CAPTURES was fixed for on 2026-07-14: this
+    # scales with watchlist size, and the watchlist grew 3 -> 25 symbols on
+    # 2026-07-16 with nothing here adjusted for it -- /prediction/candidates
+    # measured 12-23s live afterward (DEBT-7), not the ~2.2s the old
+    # 3-symbol baseline showed. A semaphore caps peak concurrent
+    # DB/CPU pressure independent of how wide the watchlist grows next,
+    # which raising database_pool_size alone can't do (same reasoning as
+    # MAX_CONCURRENT_SNAPSHOT_CAPTURES's own docstring).
+    MAX_CONCURRENT_SYMBOL_DETECTIONS = 5
+
     def __init__(
         self,
         session_factory: Any = None,
@@ -394,9 +408,13 @@ class OpportunityDetectionEngine:
         return record.get("score"), record.get("confidence")
 
     async def scan(self) -> list[OpportunityCandidate]:
-        """Every watchlist symbol, concurrently, sorted by priority
+        """Every watchlist symbol, bounded concurrency, sorted by priority
         descending. institutional_flow/events are market-wide -- fetched
-        once here rather than once per symbol inside detect()."""
+        once here rather than once per symbol inside detect().
+
+        MAX_CONCURRENT_SYMBOL_DETECTIONS caps peak fan-out (see its own
+        docstring) -- fully unbounded concurrency here is exactly the
+        DEBT-7 regression a wider watchlist exposed."""
         async def safe(coro: Any) -> IntelligenceResult | None:
             try:
                 return await coro
@@ -411,11 +429,17 @@ class OpportunityDetectionEngine:
             safe(self._institutional_flow.assess()),
             safe(self._events.assess()),
         )
+
+        semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_SYMBOL_DETECTIONS)
+
+        async def bounded_detect(symbol: str) -> OpportunityCandidate | None:
+            async with semaphore:
+                return await self.detect(
+                    symbol, institutional_flow=institutional_flow, events=events
+                )
+
         results = await asyncio.gather(
-            *(
-                self.detect(symbol, institutional_flow=institutional_flow, events=events)
-                for symbol in self._settings.watchlist
-            )
+            *(bounded_detect(symbol) for symbol in self._settings.watchlist)
         )
         candidates = [c for c in results if c is not None]
         candidates.sort(key=lambda c: c.priority_score, reverse=True)

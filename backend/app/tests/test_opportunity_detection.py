@@ -1,5 +1,8 @@
 """Tests for the Opportunity Detection Engine (Volume 5, Prompt 5.1)."""
 
+import asyncio
+
+from app.core.config import Settings
 from app.intelligence.base import IntelligenceResult
 from app.prediction.opportunity import (
     BREAKOUT_PROBABILITY_THRESHOLD,
@@ -191,3 +194,52 @@ async def test_composite_context_is_honestly_none_without_a_persisted_record() -
     score, confidence = await engine._composite_context("NIFTY")
     assert score is None
     assert confidence is None
+
+
+class _ConcurrencyTrackingTrendEngine:
+    """Records how many assess() calls were ever in flight at once -- the
+    actual claim under test (MAX_CONCURRENT_SYMBOL_DETECTIONS), same
+    pattern as test_candidate_generation.py's
+    _ConcurrencyTrackingSnapshotEngine (fixed for the analogous
+    MAX_CONCURRENT_SNAPSHOT_CAPTURES bug on 2026-07-14)."""
+
+    def __init__(self) -> None:
+        self.in_flight = 0
+        self.max_observed = 0
+
+    async def assess(self, symbol: str) -> IntelligenceResult:
+        self.in_flight += 1
+        self.max_observed = max(self.max_observed, self.in_flight)
+        try:
+            await asyncio.sleep(0.01)  # force real overlap between concurrent calls
+            return result("trend")
+        finally:
+            self.in_flight -= 1
+
+
+async def test_scan_bounds_concurrent_symbol_detections() -> None:
+    """The actual bug found live (2026-07-16, DEBT-7): scan() used to fan
+    out detect() for every watchlist symbol via a bare asyncio.gather, with
+    no cap. Each detect() itself fans out ~6 fresh per-symbol intelligence
+    assessments, so a 25-symbol watchlist (grown from 3 the same day) meant
+    up to ~150 simultaneous DB/CPU-touching calls -- live-measured to keep
+    /prediction/candidates at 12-23s, not Volume 1's <2s target. Fixed with
+    a semaphore capping concurrent detect() calls at
+    MAX_CONCURRENT_SYMBOL_DETECTIONS; this proves the cap actually holds
+    under real overlapping load, not just that the code compiles."""
+    watchlist = [f"SYM{i}" for i in range(10)]  # more than the cap
+    trend = _ConcurrencyTrackingTrendEngine()
+    engine = OpportunityDetectionEngine(
+        # None (not a lambda): _market_confidence/_composite_context both
+        # short-circuit on "if self._sessions is None" -- avoids exercising
+        # report_engine/explainability_store, which aren't the point here.
+        session_factory=None,
+        settings=Settings(watchlist=watchlist),
+        trend_engine=trend,
+    )
+
+    candidates = await engine.scan()
+
+    assert len(candidates) == 0  # empty universe, nothing triggers -- fine, not the point
+    assert trend.max_observed <= OpportunityDetectionEngine.MAX_CONCURRENT_SYMBOL_DETECTIONS
+    assert trend.max_observed > 1  # still genuinely concurrent, not accidentally serial

@@ -122,10 +122,31 @@ under-delivering for exactly this reason).
 (2026-07-15, post all perf fixes) vs. Volume 1 §16's <2s target — a ~10%
 miss. Not a defect introduced by any single volume; later volumes' scope
 grew past what Volume 1 budgeted for.
+
+**Root-caused 2026-07-16 -- the 2.2s baseline was stale, real miss was
+6-10x, not 10%:** `OpportunityDetectionEngine.scan()` fans out `detect()`
+to every watchlist symbol via a bare `asyncio.gather`, no cap -- each
+`detect()` itself fans out ~6 fresh per-symbol intelligence assessments.
+The 2.2s figure was measured against the original 3-symbol watchlist
+(~18-24 concurrent calls); the watchlist grew to 25 symbols later the same
+day (see the Resolved "Watchlist expansion" entry) with nothing here
+adjusted for it. Live-measured afterward: 12.2s / 23.2s / 14.2s / 6.8s
+across four requests, container CPU pegged 90-95% on 4 vCPUs during a
+request (Postgres only 17-40% -- confirms CPU-bound application work, not
+DB wait). Exactly the same class of bug `MAX_CONCURRENT_SNAPSHOT_CAPTURES`
+was fixed for on 2026-07-14 (`CandidateGenerationEngine.generate()`'s
+*second* phase, snapshot capture for the top 20 ranked candidates) -- that
+fix never covered `scan()`'s *first* phase (ranking the full watchlist
+before truncating to 20), because `scan()` didn't have a scaling problem
+until today's watchlist change created one. Fixed the same way:
+`MAX_CONCURRENT_SYMBOL_DETECTIONS = 5` semaphore bounds `scan()`'s
+per-symbol fan-out, independent of how wide the watchlist grows next.
 **Expiry condition:** Before citing Volume 1's performance target as met
 anywhere, or when request latency is next worked (pairs naturally with
-DEBT-6 — populating Redis is the likely next win).
-**Logged:** 2026-07-15 (Volume 1 postflight).
+DEBT-6 — populating Redis is the likely next win). Re-measure
+`/prediction/candidates` live post-fix before considering this closed --
+not yet done as of this logging.
+**Logged:** 2026-07-15 (Volume 1 postflight); root-caused and fixed 2026-07-16.
 
 ### DEBT-8 · news_intelligence / global_shock_news chronically slow, low quality
 **What:** Live `/collectors` check: `avg_latency_ms` 33,696 (news_intelligence,
