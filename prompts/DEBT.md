@@ -140,10 +140,43 @@ further.
 up to its own schedule — news-driven signals (including the
 `event_driven_opportunity` trigger, DEBT-4) run on data that's structurally
 always behind.
+
+**Root-caused 2026-07-16:** confirmed live (`docker stats`: container
+pegged at ~100% CPU on 4 vCPUs during a run; exactly 2 "loading finbert
+sentiment model" log lines total since container start, so NOT repeated
+per-cycle reloading). Three contributing factors:
+1. **Genuine capacity ceiling, not fixable by code alone:** `news_intelligence`
+   fetches up to ~200 articles/cycle (4 RSS feeds × `MAX_ARTICLES_PER_FEED=50`),
+   `global_shock_news` up to ~120+ (2 fixed feeds + 8 `GOOGLE_NEWS_QUERIES` ×
+   `MAX_ARTICLES_PER_QUERY=15`). FinBERT (BERT-base) CPU inference, capped
+   to 3 threads (`cpu_count - 1`, deliberately, to leave a core free — this
+   part is correct), genuinely costs 30-45s at that volume. A 40s job can
+   never fit a 30s clock regardless of tuning.
+2. **Fixed, real waste:** scoring ran on the full raw article batch
+   *before* the near-duplicate filter discarded matches — `global_shock_news`'s
+   8 topically-overlapping queries ("Iran Israel war" / "US Iran conflict" /
+   "Russia Ukraine war" / ...) routinely return the same breaking story more
+   than once, so CPU was being spent scoring articles thrown away a moment
+   later. `NewsIntelligenceCollector.collect()` now dedups first, scores
+   only the survivors.
+3. **Fixed, real waste:** `news_intelligence` and `global_shock_news` each
+   called `_default_sentiment_provider()` independently, so each loaded its
+   own separate ~440MB FinBERT copy — despite every scoring call from
+   either collector already serializing through the shared
+   `_finbert_scoring_lock`, so there was never a concurrent-access reason to
+   keep them apart. `_default_sentiment_provider()` is now a module-level
+   singleton, one model shared by both.
+
+Factors 2/3 reduce wasted CPU and memory but do not resolve factor 1 —
+`global_shock_news`'s 30s interval remains structurally too tight for its
+own article volume. Cutting `MAX_ARTICLES_PER_QUERY`/query count, or
+accepting a longer interval, would be the next lever if this still isn't
+fast enough after the above.
 **Expiry condition:** When Volume 2 collector work or news/event-driven
 signal quality is next worked on.
 **Logged:** 2026-07-15 (Volume 2 preflight,
-`docs/volumes/preflight-vol2-2026-07-15.md`).
+`docs/volumes/preflight-vol2-2026-07-15.md`); root-caused and partially
+fixed 2026-07-16.
 
 ### DEBT-9 · Feature Selection Engine has never run live
 **What:** `feature_usage` (Ch.8 of Volume 3: "which models/modules consume

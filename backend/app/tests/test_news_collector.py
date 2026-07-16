@@ -113,6 +113,48 @@ async def test_cross_run_dedup_uses_bounded_seen_set() -> None:
     assert second == []  # all articles already seen in the previous run
 
 
+class RecordingSentimentProvider:
+    """Records exactly which texts it was asked to score -- lets a test
+    prove dedup ran first, not just that the final record count is right."""
+
+    def __init__(self) -> None:
+        self.scored_batches: list[list[str]] = []
+
+    def score_batch(self, texts: list[str]) -> list[float]:
+        self.scored_batches.append(list(texts))
+        return [0.0] * len(texts)
+
+
+async def test_dedup_runs_before_scoring_not_after() -> None:
+    """2026-07-16, DEBT-8: scoring used to run on every raw article before
+    dedup discarded near-duplicates, wasting FinBERT inference on results
+    nobody keeps. The second PHARMA article in _articles() is a
+    near-duplicate of the first and must never reach score_batch."""
+    provider = RecordingSentimentProvider()
+    collector = NewsIntelligenceCollector(
+        news_source=FakeNewsSource(_articles()), sentiment_provider=provider
+    )
+    records = await collector.collect()
+
+    assert len(records) == 3
+    assert len(provider.scored_batches) == 1
+    scored_texts = provider.scored_batches[0]
+    assert len(scored_texts) == 3  # not 4 -- the duplicate was filtered first
+    assert not any("probe widens further" in text for text in scored_texts)
+
+
+def test_default_sentiment_provider_is_a_shared_singleton() -> None:
+    """2026-07-16, DEBT-8: NewsIntelligenceCollector and GlobalShockCollector
+    each used to load their own separate ~440MB FinBERT model copy despite
+    every scoring call already serializing through one shared lock -- no
+    reason to keep two instances around."""
+    from app.collectors.domains.news import _default_sentiment_provider
+
+    first = _default_sentiment_provider()
+    second = _default_sentiment_provider()
+    assert first is second
+
+
 async def test_unconfigured_source_raises() -> None:
     from app.collectors.domains.news import UnconfiguredNewsSource
 

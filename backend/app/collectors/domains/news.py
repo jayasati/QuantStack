@@ -396,15 +396,31 @@ class LexiconSentimentProvider(SentimentProvider):
         return max(-1.0, min(1.0, (positive - negative) / total))
 
 
+_shared_default_provider: SentimentProvider | None = None
+
+
 def _default_sentiment_provider() -> SentimentProvider:
     """Chosen by ``Settings.news_sentiment_provider`` so environments without
     the FinBERT model cached (or without transformers/torch installed) can
-    opt back into the dependency-free lexicon scorer."""
+    opt back into the dependency-free lexicon scorer.
+
+    Memoized module-wide (2026-07-16, DEBT-8): NewsIntelligenceCollector
+    and GlobalShockCollector each called this independently with no
+    explicit sentiment_provider, so each loaded its own separate ~440MB
+    FinBERT model copy for no benefit -- every scoring call from either
+    collector already serializes through the shared _finbert_scoring_lock
+    below, so there was never any concurrent-access reason to keep them
+    apart. One instance, reused by both."""
+    global _shared_default_provider
+    if _shared_default_provider is not None:
+        return _shared_default_provider
     if get_settings().news_sentiment_provider == "finbert":
         from app.collectors.sources.finbert_sentiment import FinBertSentimentProvider
 
-        return FinBertSentimentProvider()
-    return LexiconSentimentProvider()
+        _shared_default_provider = FinBertSentimentProvider()
+    else:
+        _shared_default_provider = LexiconSentimentProvider()
+    return _shared_default_provider
 
 
 # --- classification and entity extraction ---------------------------------------
@@ -520,25 +536,33 @@ class NewsIntelligenceCollector(BaseCollector):
         texts = [
             f"{a.get('title') or ''} {a.get('body') or ''}".strip() for a in articles
         ]
-        # Scored up front for every article (dedup below doesn't affect
-        # which texts need scoring, so this is the only batching opportunity).
-        raw_sentiments = await self._score_all(texts)
-        records: list[CollectorOutput] = []
-        run_seen: list[frozenset[str]] = []
 
-        for article, text, raw_sentiment in zip(articles, texts, raw_sentiments, strict=True):
-            title = str(article.get("title") or "")
+        # Dedup runs BEFORE scoring, not after (2026-07-16, DEBT-8): FinBERT
+        # inference is the single most expensive step in this pipeline, and
+        # dedup doesn't depend on sentiment at all -- scoring every raw
+        # article first meant CPU time was routinely spent on articles that
+        # got discarded as near-duplicates a moment later, especially
+        # costly for GlobalShockCollector's several topically-overlapping
+        # queries (Iran Israel war / US Iran conflict / ... routinely
+        # surface the same breaking story more than once).
+        run_seen: list[frozenset[str]] = []
+        kept: list[tuple[dict[str, Any], str, float]] = []  # article, text, novelty
+        for article, text in zip(articles, texts, strict=True):
             tokens = _content_tokens(text)
             if not tokens:
                 continue
-
             history = [*run_seen, *self._seen_tokens]
             max_similarity = max((_jaccard(tokens, seen) for seen in history), default=0.0)
             if max_similarity > DUPLICATE_SIMILARITY:
                 continue  # semantically similar to an already-seen article
             run_seen.append(tokens)
-            novelty = round(1.0 - max_similarity, 4)
+            kept.append((article, text, round(1.0 - max_similarity, 4)))
 
+        raw_sentiments = await self._score_all([text for _, text, _ in kept])
+
+        records: list[CollectorOutput] = []
+        for (article, text, novelty), raw_sentiment in zip(kept, raw_sentiments, strict=True):
+            title = str(article.get("title") or "")
             sentiment = max(-1.0, min(1.0, raw_sentiment))
             entities = extract_entities(text)
             published = _parse_timestamp(article.get("published_at"))
