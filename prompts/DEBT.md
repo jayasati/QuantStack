@@ -183,7 +183,11 @@ started early again (restoring the original overlap for triggering
 symbols), but are now `.cancel()`'d -- not left to run to completion --
 the moment a symbol turns out not to trigger, recovering the savings for
 non-triggering symbols without re-introducing the regression for
-triggering ones.
+triggering ones. **Re-measured live post-deploy (market closed, 17:35
+IST): 6.3s / 5.7s / 6.3s / 6.1s across four requests** -- regression
+confirmed gone, back in line with the concurrency-bound-only baseline
+(6.1-9.2s), not further improved beyond it in this measurement. Still
+3-4x over the <2s target; DEBT-7 stays Active.
 **Expiry condition:** Before citing Volume 1's performance target as met
 anywhere, or when request latency is next worked (pairs naturally with
 DEBT-6 — populating Redis is the likely next win). The 4 real per-symbol
