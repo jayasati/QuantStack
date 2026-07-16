@@ -198,7 +198,14 @@ same 4-vCPU contention class from a different angle -- the new
 latency (to 36-46s) for the ~3min it runs, gated to after-hours only since
 selection has no reason to run mid-session. Confirms this box's capacity
 ceiling is a recurring constraint across unrelated schedulers, not
-specific to `scan()`.
+specific to `scan()`. **New data point, Volume 3 postflight, 20:10 IST:**
+an unrelated background-contention spike (43.4s/25.2s, `docker stats`
+confirmed 100% CPU; confirmed NOT the selection sweep, which wasn't due to
+fire again until the next day) -- worse than any previously recorded
+figure here. Isolated (scheduler paused) request-path latency measured
+clean at 4.57-4.93s immediately after, confirming the app itself hasn't
+regressed; the ceiling is entirely background-job contention, still
+unresolved.
 **Logged:** 2026-07-15 (Volume 1 postflight); root-caused and partially
 mitigated 2026-07-16 (concurrency bound + cancel-based pre-filter, both
 live-verified insufficient alone -- see re-measurement notes above; the
@@ -262,11 +269,59 @@ a large article batch) survives a real high-volume moment. Left
 **Active** deliberately — plan is to re-check live during market hours
 tomorrow (2026-07-17), when a heavier/breaking news cycle is more likely
 to actually exercise a large batch, before considering this resolved.
+
+**Re-checked live again 2026-07-16, ~20:08 IST (incidental, surfaced during
+the Volume 3 postflight, not the planned market-hours check):** regressed
+back to `news_intelligence` quality 34.14 / avg_latency_ms 13,288 and
+`global_shock_news` quality 33.73 / avg_latency_ms 5,771 — worse than the
+98.85/99.55 figures recorded a few hours earlier the same evening. Confirms
+this genuinely fluctuates with article volume/content even outside market
+hours (not just a market-hours-only problem), consistent with factor 1
+(BERT-inference cost scales with batch size) rather than a regression in
+factors 2/3's fixes. Not investigated further this pass — out of scope for
+the Volume 3 postflight that surfaced it; folded into the existing planned
+market-hours re-check rather than treated as a new finding.
 **Expiry condition:** When Volume 2 collector work or news/event-driven
 signal quality is next worked on.
 **Logged:** 2026-07-15 (Volume 2 preflight,
 `docs/volumes/preflight-vol2-2026-07-15.md`); root-caused and partially
-fixed 2026-07-16; re-check planned for market hours 2026-07-17.
+fixed 2026-07-16; re-checked evening (good) and again ~20:08 IST
+(regressed) same day; market-hours re-check still planned for 2026-07-17.
+
+### DEBT-10 · Feature Versioning has never been exercised beyond v1
+**What:** `feature_versions` and the versioning mechanism (Ch.6: "Never
+overwrite a feature -- publish successive versions, e.g. VWAP_v1 -> v2 ->
+v3") are real and correctly wired, but `SELECT count(DISTINCT version)
+FROM feature_versions` = **1** across all 1075 registered features --
+every one has only ever been `"v1"`. No feature's calculation has ever
+changed in a way that triggered a version bump, so the "models pin to a
+specific version" guarantee (Ch.6) has zero live evidence of working
+beyond the trivial single-version case.
+**Risk while open:** Low -- nothing downstream currently needs multi-
+version pinning. But it's an explicit, named spec capability with no
+proof it functions when actually exercised (same shape of gap as DEBT-9
+before this session, just lower stakes).
+**Expiry condition:** When any feature's calculation logic changes (a
+version bump becomes real), or when model/feature version pinning is
+next worked on.
+**Logged:** 2026-07-16 (Volume 3 postflight,
+`docs/volumes/postflight-vol3-2026-07-16.md`).
+
+### DEBT-11 · 85 registered features have never received a quality score
+**What:** `feature_quality` has 169,742 live rows, but only 990 of 1075
+registered features (92%) have ever appeared in it. The 85 never-scored
+features concentrate in `institutional_flow` (35), `liquidity` (28),
+`breadth` (12), `structure` (9), `events` (1).
+**Risk while open:** Ch.27's own acceptance criterion ("every feature has
+a quality score") isn't fully met. Plausibly explained by index symbols
+(NIFTY/BANKNIFTY/SENSEX) legitimately lacking the underlying volume/
+liquidity/institutional-flow data by design (documented pattern
+elsewhere in this project) -- but this was **not independently confirmed**
+this pass, so treat the explanation as a hypothesis, not a verified cause.
+**Expiry condition:** When feature quality coverage is next investigated,
+or before claiming 100% quality-score coverage anywhere.
+**Logged:** 2026-07-16 (Volume 3 postflight,
+`docs/volumes/postflight-vol3-2026-07-16.md`).
 
 ---
 
