@@ -130,10 +130,24 @@ async def lifespan(app: FastAPI):
         """Recommended feature set per watchlist symbol (Prompt 3.16,
         DEBT-9) -- previously reachable only via POST /features/selection,
         never scheduled, so feature_usage had zero live rows despite the
-        engine's own code being correct."""
+        engine's own code being correct.
+
+        Skips entirely during market hours: live-measured 2026-07-16, a
+        full 25-symbol sweep takes ~3min of real CPU (even after fixing
+        select_features()'s O(features^2) redundancy scan) and degraded
+        /prediction/candidates from its ~4.7s steady state to 36s/10.7s/
+        14.6s while running. feature_selection_interval's 21600s divides
+        24h exactly, so an unguarded interval trigger would hit the same
+        time-of-day, inside market hours, every single day -- and there's
+        no upside to running mid-session anyway: this operates on
+        timeframe="D", which only updates once/day at midnight (DEBT-1).
+        """
+        from app.collectors.base import is_nse_market_open
         from app.database.session import get_session_factory
         from app.features.selection import FeatureSelectionEngine
 
+        if is_nse_market_open():
+            return
         engine = FeatureSelectionEngine(get_session_factory())
         for symbol in settings.watchlist:
             try:
