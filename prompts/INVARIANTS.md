@@ -77,7 +77,11 @@ actually happened. A signal generator whose accuracy nobody measures will
 happily say "long" forever.
 
 **Status: VIOLATED (partially)** — `valid_until` exists (2026-07-15); the
-outcome evaluator and win-rate metric do not (DEBT-3).
+outcome evaluator and win-rate metric do not (DEBT-3). **Sharpened
+2026-07-16 (Volume 5 preflight):** the gap is more fundamental than "we
+don't measure outcomes" — DEBT-13 found the full conviction/qualification
+pipeline has never run live, so there is currently no genuine signal for
+I-5's evaluator to even measure yet, beyond raw candidate detection.
 
 ## I-6 · API compatibility is additive
 Fields in persisted payloads and API responses are added, never renamed or
@@ -94,7 +98,13 @@ report says so, with a link. (The 2026-07-11 IRR found roadmap claiming
 completeness at a measured 45/100 readiness.)
 
 **Status: VIOLATED** — roadmap.md still overstates Vol 5.5+ status per the
-IRR; not yet corrected.
+IRR; not yet corrected. **New instance, 2026-07-16 (Volume 5 preflight):**
+roadmap.md's Volume 5 row is "✅" with no linked postflight, and DEBT-13
+found 12 of its 16 modules have literally never executed live — the
+same shape of overstatement the IRR found for 5.5+, now confirmed to
+extend to Volume 5 itself. Not corrected here (roadmap only updates after
+a passing postflight, and Volume 5 hasn't had one yet) but named
+explicitly rather than left to compound further.
 
 ## I-8 · Graceful degradation everywhere
 Every engine constructed with `session_factory=None` (and/or missing cache,

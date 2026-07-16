@@ -361,6 +361,53 @@ existing `regime_history`/`feature_quality_history` endpoint pattern.
 **Logged:** 2026-07-16 (Volume 4 postflight,
 `docs/volumes/postflight-vol4-2026-07-16.md`).
 
+### DEBT-13 · Volume 5's decision pipeline beyond candidate generation has never run live
+**What:** All 16 Volume 5 modules exist in code (`app/prediction/`), but
+`main.py` schedules exactly one job (`prediction.candidate_generation`,
+covering Prompts 5.1-5.3 only). Checked every remaining module's own
+persisted-event type directly against `market_events`: **zero rows** for
+all 11 of Multi-Horizon Prediction (5.4), Ensemble Prediction (5.6),
+Probability Calibration (5.7), Model Agreement (5.8), Historical
+Similarity (5.9), Market Context Adjustment (5.10), Conviction (5.11),
+Trade Qualification (5.12), Signal Priority (5.13), Duplicate Signal
+(5.14), Opportunity Lifecycle (5.15), Explainability Report (5.16). Not a
+stale/degraded state -- these have never executed, ever, live or manually,
+outside of ad-hoc calls made during this investigation. (5.5 Triple Barrier
+Labeling is a deliberate exception -- on-demand training-data generator by
+design, not a live signal.)
+
+Confirmed genuinely "never scheduled" rather than "broken": manually
+invoked `GET /prediction/conviction/MARUTI` against a real live candidate.
+Returns HTTP 200 with a structured result -- the code runs, degrades
+gracefully (I-8 held) -- but 3 of Conviction's 9 weighted evidence sources
+(`calibrated_probability` 35% weight, `market_context` 20%,
+`model_agreement` 5% -- 60% of total weight) all read `score: 50.0,
+confidence: 0.0`, the default-degradation value, because no ensemble model
+has ever been trained (`ensemble.py` has no model persistence mechanism at
+all beyond the never-written result event) and nothing downstream of it has
+real input to compute from.
+
+**Risk while open:** Volume 5's own framing calls itself "the decision-
+making core of QuantStack -- the 'brain' of the platform." That brain has
+never actually decided anything beyond raw candidate detection. Trade
+Qualification does correctly reject the one candidate manually checked
+(missing-data defaults tend to trigger rejection, not false confidence, so
+this isn't currently shipping bad signals) -- but one of its rejection
+reasons ("Model disagreement high: agreement 0%") is worded as if models
+actively disagreed, when the real cause is that no model prediction exists
+at all. Misleading explainability, even in a fail-safe direction, is still
+a problem for Ch.16's "Reason Codes" requirement.
+**Expiry condition:** Before any Volume 5.5+ or Volume 6 work proceeds, or
+before citing Volume 5's roadmap "✅" status without a linked postflight
+that specifically re-verifies this pipeline runs live. Resolve by training
+a real ensemble model and scheduling calibration/agreement/market-context/
+conviction/qualification/priority into a live job (either folded into
+`candidate_generation_sweep` or a closely-following one), then verifying
+with live evidence that a real signal travels end-to-end with genuine
+(non-default) evidence behind every weighted input.
+**Logged:** 2026-07-16 (Volume 5 preflight,
+`docs/volumes/preflight-vol5-2026-07-16.md`).
+
 ---
 
 ## Resolved
