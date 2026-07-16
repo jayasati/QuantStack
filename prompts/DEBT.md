@@ -17,7 +17,7 @@ Rules:
 
 ## Active
 
-### DEBT-1 · Directional intelligence is daily-only
+### DEBT-1 · Directional intelligence is daily-only (4 of 5 components fixed)
 **What:** All directional intelligence (trend, market_structure, volatility,
 momentum, relative_strength) reads only `timeframe="D"` features, computed
 once at midnight. Intraday moves are invisible to every signal.
@@ -25,14 +25,43 @@ once at midnight. Intraday moves are invisible to every signal.
 input is new scope.
 **Risk while open:** The system cannot do the one thing it exists for
 (Volume 1: intraday F&O same-day trading). HDFCBANK 2026-07-15 is the proof.
-**Expiry condition:** Before any signal is used for a real trading decision,
-OR when Volume 5.5+ work resumes — whichever comes first.
-**Logged:** 2026-07-15.
 
-### DEBT-2 · IntradayRiskFeatureEngine output is unconsumed (root cause of the stall found: external, not ours)
+**Fixed 2026-07-16 for trend/market_structure/momentum/volatility** (Volume 4
+build, DEBT-1/DEBT-2 chunk): a shared intraday-overlay convention
+(`app/intelligence/base.py`: `intraday_direction_signal()`,
+`intraday_reversal_warning()`, `IntelligenceComponent.intraday_values()`)
+blends `IntradayRiskFeatureEngine`'s (Volume 3) 5m session-relative features
+into each engine's direction/level/confidence with real weight (0.3 for
+direction, dedicated confidence-conflict penalties), not a token gesture.
+Verified live on the VM against HDFCBANK's real 2026-07-16 session (-1.06%
+from open): D-based evidence was bullish (`ms_trend_direction=1.0`,
+`ms_structural_bias=0.71`), but the blended trend read dropped to
+`trend_direction=0.19`, confidence `0.49` (was structurally ~0.7+ pre-fix),
+with an explicit reasoning line ("Today's intraday move opposes the
+underlying read (conflict 48%) -- confidence docked") and dominant state
+shifted from a confident bull read to `range_bound` -- this is the actual
+HDFCBANK 2026-07-15 fix, live-verified, not just unit-tested. All 12
+composite components (including the 4 fixed here) confirmed still reporting
+successfully via `/intelligence/composite/HDFCBANK` post-deploy.
+
+**Remaining scope: relative_strength.** Not fixed in this chunk -- Relative
+Strength Intelligence is inherently a cross-symbol comparison (rs_* features
+are already relative-to-benchmark quantities), and `IntradayRiskFeatureEngine`
+has no equivalent relative/benchmark-comparison feature to overlay. Fixing
+it would need a new intraday relative-strength computation (symbol's
+intraday move vs. each reference's own intraday move), not a reuse of the
+existing overlay helpers -- explicitly deferred, not silently skipped.
+**Expiry condition:** Relative Strength intraday wiring -- before any signal
+is used for a real trading decision, OR when Volume 5.5+ work resumes,
+whichever comes first (unchanged for the remaining scope).
+**Logged:** 2026-07-15; 4/5 components fixed 2026-07-16
+(`f597610`, `docs/volumes/preflight-vol4-2026-07-16.md`).
+
+### DEBT-2 · IntradayRiskFeatureEngine output is unconsumed (3/9 features now fixed; root cause of the stall found: external, not ours)
 **What:** Volume 3's `IntradayRiskFeatureEngine` writes real 5m-timeframe
 features (`intraday_move_from_open_pct`, `intraday_expected_move_next_30m_pct`,
-…) that no Volume 4/5 code reads (violates I-2) — this half is still open.
+…) that no Volume 4/5 code reads (violates I-2) — see 2026-07-16 update below,
+6 of 9 base features (plus their `_z` companions) are still unconsumed.
 
 The separate stall (last write 10:25 IST → 11:30 IST → confirmed still
 stuck across the Volume 2 and 3 preflights) was root-caused 2026-07-15:
@@ -80,12 +109,27 @@ recommendation above are both still open. Multi-day backfill is unaffected
 (NSE/BSE only ever expose today's session, verified live 2026-07-15 — see
 those modules' docstrings for the dead-endpoint findings that motivated the
 today-only scoping).
-**Expiry condition:** Consumer-wiring half resolves with DEBT-1. The
-staleness-check recommendation above should land as part of that same fix,
-not deferred again.
+**Consumer-wiring: partially resolved 2026-07-16** (same chunk as DEBT-1).
+Of `IntradayRiskFeatureEngine`'s 9 base features, 3 now have real consumers:
+`intraday_move_from_open_pct` (trend, market_structure, momentum, all via
+`intraday_direction_signal()`), `intraday_current_drawdown_pct` (trend,
+market_structure, via `intraday_reversal_warning()`), and
+`intraday_realized_vol_pct` (volatility). The remaining 6 --
+`intraday_time_elapsed_pct`, `intraday_max_drawdown_pct`,
+`intraday_expected_move_next_30m_pct`/`intraday_var95_next_30m_pct`,
+`intraday_expected_move_rest_of_session_pct`/`intraday_var95_rest_of_session_pct`
+-- (plus all 9 base features' `_z` companions) are still write-only, an I-2
+violation. The staleness-check recommendation above (flag/downgrade
+confidence when `ohlcv_candles` is stale) also remains unimplemented.
+**Expiry condition:** Remaining consumer-wiring resolves with relative_strength's
+piece of DEBT-1, or when the still-unconsumed expected-move/VaR features are
+next relevant (a natural fit for Volume 5's conviction/qualification engines,
+which already reason about position-holding horizons). The staleness-check
+recommendation should land as part of whichever fix lands next, not deferred
+again a second time.
 **Logged:** 2026-07-15 (root-caused same day, `79a067f` +
 `docs/volumes/preflight-vol3-2026-07-15.md`; fallback-chain mitigation added
-same day).
+same day; consumer-wiring partially resolved 2026-07-16, `f597610`).
 
 ### DEBT-3 · No outcome evaluator / win-rate metric
 **What:** Candidates carry `valid_until` but nothing records whether price
@@ -205,7 +249,15 @@ fire again until the next day) -- worse than any previously recorded
 figure here. Isolated (scheduler paused) request-path latency measured
 clean at 4.57-4.93s immediately after, confirming the app itself hasn't
 regressed; the ceiling is entirely background-job contention, still
-unresolved.
+unresolved. **Volume 4 DEBT-1/DEBT-2 chunk, 2026-07-16:** isolated latency
+after wiring the intraday overlay into trend/market_structure/momentum/
+volatility measured 5.5-6.8s (was 4.57-4.93s just before) -- each of the 4
+engines now does one additional bounded `FeatureStore.latest()` read per
+symbol (Redis-first, same proven-cheap call already used elsewhere). A
+real, small addition, within this entry's existing 6.1-9.2s reference
+range, not a new regression -- not chased further here since it doesn't
+change DEBT-7's own diagnosis (per-symbol `assess()` computation, not
+cache-miss latency, is still the dominant remaining cost).
 **Logged:** 2026-07-15 (Volume 1 postflight); root-caused and partially
 mitigated 2026-07-16 (concurrency bound + cancel-based pre-filter, both
 live-verified insufficient alone -- see re-measurement notes above; the
