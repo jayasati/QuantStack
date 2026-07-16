@@ -107,16 +107,6 @@ priority 0.00, identical supporting evidence).
 candidates' win rate is noise, or when candidate quality is next worked on.
 **Logged:** 2026-07-15.
 
-### DEBT-6 · Redis online-store coverage is partial
-**What:** TTL refresh on unchanged runs was fixed (94d8eb5 era), but coverage
-is still thin — during the 2026-07-15 checks Redis held ~21 keys with zero
-`:D`-timeframe keys, so the intelligence read path effectively always falls
-through to Postgres. Cache wiring is correct; population is the gap.
-**Expiry condition:** When request latency next needs improvement (it's the
-biggest remaining lever from the 2026-07-14 perf audit, items verified but
-under-delivering for exactly this reason).
-**Logged:** 2026-07-15.
-
 ### DEBT-7 · Signal generation misses Volume 1's own <2s target
 **What:** `/prediction/candidates` measured ~2.2s steady-state live
 (2026-07-15, post all perf fixes) vs. Volume 1 §16's <2s target — a ~10%
@@ -189,15 +179,20 @@ confirmed gone, back in line with the concurrency-bound-only baseline
 (6.1-9.2s), not further improved beyond it in this measurement. Still
 3-4x over the <2s target; DEBT-7 stays Active.
 **Expiry condition:** Before citing Volume 1's performance target as met
-anywhere, or when request latency is next worked (pairs naturally with
-DEBT-6 — populating Redis is the likely next win). The 4 real per-symbol
+anywhere, or when request latency is next worked. The 4 real per-symbol
 engines (trend, market_structure, relative_strength, volatility) still run
 for every watchlist symbol regardless -- that's the remaining, larger
-cost, and closing it for real likely means either populating Redis
-properly (DEBT-6) so each of those 4 reads is fast regardless of watchlist
-size, or accepting a genuine heuristic pre-filter (with an explicit
-recall/speed trade-off the user should sign off on, not one invented
-silently) rather than assessing every symbol in full.
+cost. **Correction 2026-07-16:** this entry previously pointed at DEBT-6
+(thin Redis coverage) as the likely next lever -- DEBT-6 is now Resolved
+(97.4% cache hit rate, all 25 symbols have a populated `:D` key), and
+DEBT-7 is *still* 3-4x over target, so Redis population was never the
+bottleneck here. The remaining cost is genuine per-symbol computation
+inside each engine's `assess()` (scoring/aggregation over already-cached
+feature values), not cache-miss latency. Closing it for real likely means
+either optimizing that computation itself, or accepting a genuine
+heuristic pre-filter (with an explicit recall/speed trade-off the user
+should sign off on, not one invented silently) rather than assessing
+every symbol in full.
 **Logged:** 2026-07-15 (Volume 1 postflight); root-caused and partially
 mitigated 2026-07-16 (concurrency bound + cancel-based pre-filter, both
 live-verified insufficient alone -- see re-measurement notes above; the
@@ -276,6 +271,36 @@ not deferred).
 ---
 
 ## Resolved
+
+### ~~DEBT-6: Redis online-store coverage is partial~~ — resolved by usage, 2026-07-16
+Not fixed by any code change -- the caching wiring was already correct
+when this was logged (2026-07-15), confirmed by reading
+`FeatureStore._write_online`/`.latest()`/`.refresh_online_ttl()` in
+`app/features/store.py`: Redis-first read with Postgres fallback,
+merge-not-overwrite on write (several engines share one key per
+symbol/timeframe), and a prior fix (`94d8eb5` era) that re-extends a key's
+TTL on a no-op run so a feature slower than `online_ttl_seconds` doesn't
+silently fall out of the cache. What was actually thin was *population* --
+measured 2026-07-15 against a 3-symbol watchlist with comparatively little
+elapsed runtime, so there simply hadn't been enough write activity yet to
+fill the cache, not because anything was broken.
+
+Re-checked live 2026-07-16, after the watchlist expansion (3 -> 25
+symbols) and several more hours of normal operation: **97.4% cache hit
+rate** (9,756 hits / 261 misses via `/collectors/cache/metrics`), **all 25
+watchlist symbols plus MARKET have a populated `:D` key** (the exact gap
+originally called out), 181 total Redis keys (up from ~21), healthy TTLs
+(~3400s of the 3600s window, recently refreshed). The "intelligence read
+path effectively always falls through to Postgres" claim in the original
+entry no longer holds.
+
+Cross-referenced from DEBT-7 (still Active) as "populating Redis is the
+likely next win" -- corrected there too: DEBT-7 is still 3-4x over its
+<2s target even with DEBT-6 resolved, so Redis population was never
+DEBT-7's actual bottleneck. Its remaining cost is genuine per-symbol
+computation inside each engine's `assess()`, not cache-miss latency.
+**Logged:** 2026-07-15; re-measured and resolved 2026-07-16 (no code
+change -- cold-cache artifact of an early measurement, not a defect).
 
 ### ~~DEBT-5: CI is broken~~ — resolved by decision, 2026-07-15
 Not fixed — **removed on purpose, a second time.** Found non-functional
