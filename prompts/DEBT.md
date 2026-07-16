@@ -244,11 +244,23 @@ Factors 2/3 reduce wasted CPU and memory but do not resolve factor 1 —
 own article volume. Cutting `MAX_ARTICLES_PER_QUERY`/query count, or
 accepting a longer interval, would be the next lever if this still isn't
 fast enough after the above.
+
+**Re-checked live 2026-07-16 evening (post-market-close, light news
+flow):** `news_intelligence` avg_latency_ms down to ~3,524 (from ~42,000),
+`global_shock_news` down to ~2,933 (from ~47,000) — both comfortably
+within their own interval budgets, latency quality scores 98.85/99.55.
+**Not enough to call this resolved:** both runs found zero new articles
+(`last_run_collected: 0`), so this confirms factors 2/3's fixes are
+working but does NOT confirm factor 1 (the genuine BERT-inference cost at
+a large article batch) survives a real high-volume moment. Left
+**Active** deliberately — plan is to re-check live during market hours
+tomorrow (2026-07-17), when a heavier/breaking news cycle is more likely
+to actually exercise a large batch, before considering this resolved.
 **Expiry condition:** When Volume 2 collector work or news/event-driven
 signal quality is next worked on.
 **Logged:** 2026-07-15 (Volume 2 preflight,
 `docs/volumes/preflight-vol2-2026-07-15.md`); root-caused and partially
-fixed 2026-07-16.
+fixed 2026-07-16; re-check planned for market hours 2026-07-17.
 
 ### DEBT-9 · Feature Selection Engine has never run live
 **What:** `feature_usage` (Ch.8 of Volume 3: "which models/modules consume
