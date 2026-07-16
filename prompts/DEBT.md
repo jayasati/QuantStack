@@ -192,7 +192,13 @@ feature values), not cache-miss latency. Closing it for real likely means
 either optimizing that computation itself, or accepting a genuine
 heuristic pre-filter (with an explicit recall/speed trade-off the user
 should sign off on, not one invented silently) rather than assessing
-every symbol in full.
+every symbol in full. **Note 2026-07-16:** DEBT-9's resolution hit the
+same 4-vCPU contention class from a different angle -- the new
+`features.selection_sweep` job measurably degraded this same endpoint's
+latency (to 36-46s) for the ~3min it runs, gated to after-hours only since
+selection has no reason to run mid-session. Confirms this box's capacity
+ceiling is a recurring constraint across unrelated schedulers, not
+specific to `scan()`.
 **Logged:** 2026-07-15 (Volume 1 postflight); root-caused and partially
 mitigated 2026-07-16 (concurrency bound + cancel-based pre-filter, both
 live-verified insufficient alone -- see re-measurement notes above; the
@@ -262,27 +268,64 @@ signal quality is next worked on.
 `docs/volumes/preflight-vol2-2026-07-15.md`); root-caused and partially
 fixed 2026-07-16; re-check planned for market hours 2026-07-17.
 
-### DEBT-9 · Feature Selection Engine has never run live
-**What:** `feature_usage` (Ch.8 of Volume 3: "which models/modules consume
-which features") is empty — 0 rows live, vs. every other feature-metadata
-table (registry/versions/dependencies/quality/statistics/drift) genuinely
-populated. Not a code gap: `FeatureSelectionEngine.persist()` correctly
-writes to it. It's reachable only via `POST /features/selection/run`
-(`api/features.py:200`) — never scheduled in `main.py`, so there is zero
-live evidence it has ever executed.
-**Risk while open:** Volume 3's own acceptance criterion "feature selection
-identifies the strongest predictors" can't be called operational. Low
-urgency — nothing downstream currently depends on its output.
-**Expiry condition:** When feature/model selection quality is next worked
-on. Resolve either by scheduling it periodically or by explicitly deciding
-it's on-demand-only (and updating this entry to reflect that as accepted,
-not deferred).
-**Logged:** 2026-07-15 (Volume 3 preflight,
-`docs/volumes/preflight-vol3-2026-07-15.md`).
-
 ---
 
 ## Resolved
+
+### ~~DEBT-9: Feature Selection Engine has never run live~~ — resolved 2026-07-16
+`feature_usage` was empty (0 rows) despite `FeatureSelectionEngine.persist()`
+being correct code -- reachable only via `POST /features/selection/{symbol}`,
+never scheduled in `main.py`. Scheduling it live (`features.selection_sweep`,
+`main.py`) surfaced two real bugs neither on-demand single-symbol testing nor
+the small-column unit tests ever would have:
+
+1. **O(features^2) redundancy scan.** `select_features()`'s pairwise-
+   correlation pass compared every stored feature against every other
+   before ever truncating to the `MODEL_CANDIDATES` (20) actually used
+   downstream. Measured live against real HDFCBANK/D data (781 stored
+   features): **12.5s of CPU per symbol.** Fixed with an early exit: once
+   `MODEL_CANDIDATES` MI-ranked survivors are found, nothing later in the
+   list can ever enter `candidates` regardless of its own redundancy status,
+   so the scan stops. Verified correctness-preserving against the exact
+   live matrix pulled from the VM (`recommended`/`ranking` byte-identical
+   before/after; only `redundant`/`correlated_pairs` shrink, from an
+   already-partial 175 pairs to 61 -- expected, matches their existing
+   bounded nature). 2.7s -> 0.7s on that fixture locally. Wrapped the
+   remaining cost in `asyncio.to_thread` (I-4) -- not trivial even after
+   the fix, same convention as trend/volatility/correlation/analogs.
+2. **feature_usage's unique constraint was `(feature_name, consumer)` only**
+   -- symbol/timeframe lived inside JSONB `data`, not real columns.
+   Reproduced live: selection across 5 watchlist symbols x 10 features each
+   produced only 48 rows, not 50 (HDFCBANK's `volume_mfi_50`/`price_alpha_50`
+   silently overwritten by ICICIBANK's/TCS's). Migration 0006 adds real
+   `symbol`/`timeframe` columns and widens the edge to
+   `(feature_name, consumer, symbol, timeframe)`. Live-verified at full
+   scale post-fix: 25 symbols x 10 features = exactly 250 rows, 250
+   distinct edges, zero collisions.
+3. **Scheduling contention with the request path (cross-reference DEBT-7).**
+   The first live run (even post-fix) still took ~3min of real CPU across
+   the full 25-symbol watchlist and measurably degraded
+   `/prediction/candidates` from its ~4.7s steady state to 36s/10.7s/14.6s
+   while running -- the same CPU-contention class DEBT-7 documents on this
+   4-vCPU box. `feature_selection_interval` (21600s) divides 24h exactly,
+   so an unguarded interval trigger would hit the same time-of-day daily,
+   inside market hours, forever. Fixed by skipping the sweep entirely via
+   `is_nse_market_open()` (the same check collectors' `after_hours_only`
+   gate uses) -- there's no upside to running mid-session anyway, since
+   selection reads `timeframe="D"`, which only updates once/day at
+   midnight (DEBT-1). Re-verified live after this fix: the after-hours run
+   still costs the same ~3min/CPU-contention hit (46s/14.8s measured
+   mid-sweep) but resolves on its own once the sweep completes (steady
+   state ~4.5-5.0s confirmed after) -- an acceptable, bounded, low-frequency
+   (3 of 4 daily ticks) cost for a non-trading-hours window, not something
+   this chunk needed to eliminate entirely.
+
+New consumer added per I-2: `GET /features/usage/{symbol}` (feature_usage's
+first real read path, matching quality/drift's existing history-endpoint
+pattern) -- feature_usage is no longer a write-only table.
+**Logged:** 2026-07-15 (Volume 3 preflight); resolved 2026-07-16
+(`c56140f`, `a882d14`, migration 0006,
+`docs/volumes/preflight-vol3-2026-07-16.md`).
 
 ### ~~DEBT-6: Redis online-store coverage is partial~~ — resolved by usage, 2026-07-16
 Not fixed by any code change -- the caching wiring was already correct
