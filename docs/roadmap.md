@@ -9,7 +9,7 @@ The core technical architecture is complete. The final roadmap below tracks ever
 | [1](volumes/volume-1.md) | ✅ | Foundation & Data Collection Platform |
 | [2](volumes/volume-2.md) | ✅ | Data Processing & Market Intelligence Layer |
 | [3](volumes/volume-3.md) | ✅ ([postflight](volumes/postflight-vol3-2026-07-16.md): COMPLETE-WITH-DEBT) | Feature Store & Data Quality |
-| [4](volumes/volume-4.md) | ✅ | Market Intelligence & Regime Analysis |
+| [4](volumes/volume-4.md) | ✅ ([postflight](volumes/postflight-vol4-2026-07-16.md): COMPLETE-WITH-DEBT) | Market Intelligence & Regime Analysis |
 | [5](volumes/volume-5.md) | ✅ | Opportunity Detection & Prediction |
 | [5.5](volumes/volume-5-5.md) | ✅ | Alpha Research Engine |
 | [5.75](volumes/volume-5-75.md) | ✅ | Opportunity Portfolio Intelligence |

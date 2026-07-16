@@ -335,6 +335,32 @@ or before claiming 100% quality-score coverage anywhere.
 **Logged:** 2026-07-16 (Volume 3 postflight,
 `docs/volumes/postflight-vol3-2026-07-16.md`).
 
+### DEBT-12 · Explainability's persisted history has zero API consumers
+**What:** `app/intelligence/explain.py`'s own docstring claims
+"ExplainabilityStore persists the full record... so a dashboard can query
+exactly how any past score was constructed... Prompt 4.17 exposes this
+over an API." Checked directly: `ExplainabilityStore` is constructed and
+`.record()`-called from exactly two places (`composite.py`,
+`prediction/opportunity.py`) -- both writers. Grepped the entire `app/api/`
+tree for any call to `.history()` or `.latest()` (its only two read
+methods): zero matches. The docstring's claim does not match reality --
+not a stale comment about something later removed, a capability that
+appears to have never been wired at all.
+**Risk while open:** Ch.23's own acceptance criterion ("all intelligence
+outputs are explainable and available through APIs") is only partially
+met -- every component's *immediate* contributions/reasoning genuinely is
+available live (confirmed on every component checked this session), but
+the *persisted history* + confidence interval Ch.20 specifically added is
+write-only. 50,000+ rows and growing, unreadable by anyone without a
+direct SQL query.
+**Expiry condition:** When Explainability/dashboard work is next touched,
+or before citing Ch.23's explainability criterion as fully met anywhere.
+Resolve by adding `GET /intelligence/explainability/{component}/{symbol}/{timeframe}`
+(or similar) wrapping `ExplainabilityStore.history()`, matching the
+existing `regime_history`/`feature_quality_history` endpoint pattern.
+**Logged:** 2026-07-16 (Volume 4 postflight,
+`docs/volumes/postflight-vol4-2026-07-16.md`).
+
 ---
 
 ## Resolved
