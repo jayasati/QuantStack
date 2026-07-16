@@ -22,20 +22,25 @@ features. Verified live: `ms_breakout_probability`, `ms_trend_direction`,
 `ms_structural_bias` for HDFCBANK last updated 00:00 IST; the system held a
 "long" bias through a real 1.1% collapse at 12:45 IST. See DEBT-1.
 
-**Partial improvement 2026-07-16:** trend/market_structure/momentum/
-volatility now blend a 5m intraday overlay (DEBT-1) with real weight, and
-the blended read is live-verified to respond to same-day price action, not
-just tomorrow's D bar (HDFCBANK: bullish D-evidence, but a real -1.06%
-session move dropped confidence to 0.49 and shifted the dominant state to
-`range_bound`, persisted via the scheduled `market_intelligence_sweep`, not
-just a manual check). Still recorded **VIOLATED**, not HELD: (1)
-relative_strength remains D-only, (2) the underlying D-based sub-features
-(`ms_trend_direction`, `price_momentum_*`, etc.) still only update at
-midnight even for the 4 fixed engines — only the blended output refreshes
-faster. A genuinely-HELD I-1 needs relative_strength fixed too, plus this
-same overlay pattern proven to update in near-real-time during an actual
-live session (only verified so far against the day's final snapshot, since
-this fix was built and deployed after market close).
+**Substantial improvement 2026-07-16:** all 5 named components (trend,
+market_structure, momentum, volatility, relative_strength) now blend a 5m
+intraday overlay (DEBT-1, resolved) with real weight, and the blended read
+is live-verified to respond to same-day price action, not just tomorrow's
+D bar (HDFCBANK: bullish D-evidence, but a real -1.06% session move
+dropped trend confidence to 0.49 and shifted the dominant state to
+`range_bound`, persisted via the scheduled `market_intelligence_sweep`,
+not just a manual check; relative_strength separately confirmed live
+folding in both Nifty and Sensex). Still recorded **VIOLATED**, not HELD,
+for two reasons that are about rigor of verification, not missing scope:
+(1) the underlying D-based sub-features (`ms_trend_direction`,
+`price_momentum_*`, `rs_*_strength_*`, etc.) still only update at midnight
+— only the *blended* output now refreshes faster, the D-based half of the
+blend is unchanged; (2) both build chunks were built and deployed after
+market close, so "updates in near-real-time during a live session" is
+verified against the day's *final* snapshot only — a genuine live-market-
+hours check (watching the blended read visibly change across consecutive
+5-minute ticks during an actual session) hasn't been done yet. Upgrade to
+HELD only after that market-hours check.
 
 ## I-2 · Every producer has a consumer
 Every feature, table column, engine output, or event written by the system
