@@ -77,3 +77,42 @@ def test_no_data_defaults_to_neutral_consolidation_low_confidence() -> None:
     dominant = max(result.states, key=lambda s: result.states[s])
     assert dominant == "consolidation"
     assert result.metrics["structural_bias"] is None
+
+
+# --- Intraday overlay (DEBT-1/DEBT-2, 2026-07-16) -----------------------------
+
+
+def test_omitted_intraday_matches_none_exactly() -> None:
+    with_none = assess_market_structure(markup_features(), intraday_features=None)
+    omitted = assess_market_structure(markup_features())
+    assert with_none.score == omitted.score
+    assert with_none.confidence == omitted.confidence
+    assert with_none.states == omitted.states
+
+
+def test_intraday_collapse_docks_confidence_on_markup_read() -> None:
+    calm = assess_market_structure(
+        markup_features(),
+        intraday_features={
+            "intraday_move_from_open_pct": 0.2, "intraday_current_drawdown_pct": 0.1,
+        },
+    )
+    collapsing = assess_market_structure(
+        markup_features(),
+        intraday_features={
+            "intraday_move_from_open_pct": -3.5, "intraday_current_drawdown_pct": 3.5,
+        },
+    )
+    assert collapsing.confidence < calm.confidence
+    assert any("invalidating" in c.effect for c in collapsing.contributions)
+
+
+def test_intraday_agreement_keeps_markup_dominant() -> None:
+    result = assess_market_structure(
+        markup_features(),
+        intraday_features={
+            "intraday_move_from_open_pct": 1.2, "intraday_current_drawdown_pct": 0.2,
+        },
+    )
+    dominant = max(result.states, key=lambda s: result.states[s])
+    assert dominant == "markup"

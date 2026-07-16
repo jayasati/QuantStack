@@ -25,6 +25,15 @@ from app.intelligence.base import (
 COMPONENT = "volatility"
 
 VOL_WINDOWS = (5, 20, 50, 100)
+# Same intraday-overlay family as trend/structure/momentum (DEBT-1/DEBT-2,
+# 2026-07-16), but volatility's own overlay is a ratio, not a direction:
+# today's session-so-far realized vol (IntradayRiskFeatureEngine) compared
+# against the D-based historical-vol baseline already in `features`.
+INTRADAY_VOL_WEIGHT = 0.2
+# Ratio-to-tanh scale: intraday_realized_vol_pct at 2.5x the D baseline
+# saturates the tilt toward "elevated".
+INTRADAY_VOL_RATIO_SCALE = 1.5
+INTRADAY_VOL_CONFLICT_CONFIDENCE_PENALTY = 0.2
 
 # Anchor positions on the 0 (extremely low) .. 1 (extreme) level axis that
 # each regime label is centered on; a level maps to a blended distribution
@@ -55,8 +64,15 @@ def _window_values(features: Mapping[str, float], feature: str) -> list[float]:
     ]
 
 
-def assess_volatility(features: Mapping[str, float]) -> IntelligenceResult:
-    """Pure volatility assessment from the latest feature values."""
+def assess_volatility(
+    features: Mapping[str, float],
+    intraday_features: Mapping[str, float] | None = None,
+) -> IntelligenceResult:
+    """Pure volatility assessment from the latest feature values.
+
+    ``intraday_features`` is optional and additive (DEBT-1/DEBT-2): absent,
+    every calculation is byte-identical to before this parameter existed.
+    """
     contributions: list[Contribution] = []
     reasoning: list[str] = []
 
@@ -87,11 +103,45 @@ def assess_volatility(features: Mapping[str, float]) -> IntelligenceResult:
             effect="implied running hot" if vix_distance < 0 else "realized running hot",
         ))
 
-    level = clamp(
+    d_level = clamp(
         (0.85 * regime_level + 0.15 * (0.5 + 0.5 * vix_tilt))
         if vix_distance is not None else regime_level,
         0.0, 1.0,
     )
+
+    # Today's session-so-far realized vol (IntradayRiskFeatureEngine, 5m)
+    # vs. the D-based historical-vol baseline already in `features` -- a
+    # ratio, since the two are on the same annualized-% scale but drawn
+    # from very different sample sizes (a full bar's history vs. a few
+    # hours today).
+    intraday_vol_pct = (intraday_features or {}).get("intraday_realized_vol_pct")
+    baseline_vols = _window_values(features, "volatility_hist")
+    intraday_vol_tilt = None
+    intraday_vol_conflict = 0.0
+    if intraday_vol_pct is not None and baseline_vols:
+        baseline = sum(baseline_vols) / len(baseline_vols)
+        if baseline > 1e-6:
+            intraday_vol_tilt = clamp(
+                math.tanh((intraday_vol_pct / baseline - 1.0) / INTRADAY_VOL_RATIO_SCALE), -1.0, 1.0
+            )
+    if intraday_vol_tilt is not None:
+        level = clamp(
+            (1 - INTRADAY_VOL_WEIGHT) * d_level
+            + INTRADAY_VOL_WEIGHT * (0.5 + 0.5 * intraday_vol_tilt),
+            0.0, 1.0,
+        )
+        contributions.append(Contribution(
+            feature="intraday_realized_vol_pct", value=intraday_vol_pct,
+            weight=INTRADAY_VOL_WEIGHT,
+            effect="today running hotter than baseline" if intraday_vol_tilt > 0
+                   else "today running calmer than baseline",
+        ))
+        # Conflict: today's realized vol is materially higher than baseline
+        # while the D-based regime read is still on the low/calm side (or
+        # vice versa) -- the regime read may already be stale.
+        intraday_vol_conflict = max(0.0, intraday_vol_tilt * (0.5 - d_level) * 2)
+    else:
+        level = d_level
 
     compressions = _window_values(features, "volatility_compression")
     expansions = _window_values(features, "volatility_expansion_prob")
@@ -144,9 +194,15 @@ def assess_volatility(features: Mapping[str, float]) -> IntelligenceResult:
         + 0.35 * window_agreement
         + 0.2 * data_completeness
         + 0.1 * (1.0 if vix_distance is not None else 0.0)
-        - 0.15 * instability,
+        - 0.15 * instability
+        - INTRADAY_VOL_CONFLICT_CONFIDENCE_PENALTY * intraday_vol_conflict,
         0.0, 1.0,
     )
+    if intraday_vol_conflict > 0:
+        reasoning.append(
+            f"Today's realized vol disagrees with the D-based regime read "
+            f"(conflict {intraday_vol_conflict:.0%}) -- confidence docked."
+        )
 
     score = clamp(100 * level)
 
@@ -163,6 +219,8 @@ def assess_volatility(features: Mapping[str, float]) -> IntelligenceResult:
         f"{expansion_probability:.0%}; vol-of-vol instability {instability:.0%}.",
         f"Dominant state: {dominant}.",
     ])
+    if intraday_vol_pct is not None:
+        reasoning.append(f"Today's session-so-far realized vol: {intraday_vol_pct:.2f}%.")
 
     return IntelligenceResult(
         component=COMPONENT,
@@ -182,6 +240,9 @@ def assess_volatility(features: Mapping[str, float]) -> IntelligenceResult:
             ),
             "vol_of_vol_instability": round(instability, 4),
             "volatility_confidence": round(confidence, 4),
+            "intraday_realized_vol_pct": (
+                round(intraday_vol_pct, 4) if intraday_vol_pct is not None else None
+            ),
         },
         contributions=contributions,
         reasoning=reasoning,
@@ -196,9 +257,10 @@ class VolatilityIntelligenceEngine(IntelligenceComponent):
     ) -> IntelligenceResult:
         symbol = symbol or self._settings.feature_benchmark_symbol
         features = await self.latest_values(symbol, timeframe)
+        intraday_features = await self.intraday_values(symbol) if timeframe == "D" else None
         # Offloaded to a worker thread (perf-audit-2026-07-14 finding 13),
         # same convention as BaseFeatureEngine.run().
-        result = await asyncio.to_thread(assess_volatility, features)
+        result = await asyncio.to_thread(assess_volatility, features, intraday_features)
         result.metrics["symbol"] = symbol
         await self._publish_assessment(symbol, result)
         return result

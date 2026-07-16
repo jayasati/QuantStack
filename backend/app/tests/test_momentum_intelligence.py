@@ -81,3 +81,27 @@ def test_more_complete_data_increases_confidence() -> None:
 def test_missing_windows_do_not_crash_and_still_produce_a_result() -> None:
     result = assess_momentum({"price_momentum_20": 10.0})
     assert 0.0 <= result.score <= 100.0
+
+
+# --- Intraday overlay (DEBT-1/DEBT-2, 2026-07-16) -----------------------------
+
+
+def test_omitted_intraday_matches_none_exactly() -> None:
+    with_none = assess_momentum(bullish_building_features(), intraday_features=None)
+    omitted = assess_momentum(bullish_building_features())
+    assert with_none.score == omitted.score
+    assert with_none.confidence == omitted.confidence
+    assert with_none.states == omitted.states
+
+
+def test_intraday_reversal_docks_confidence_on_bullish_read() -> None:
+    calm = assess_momentum(
+        bullish_building_features(),
+        intraday_features={"intraday_move_from_open_pct": 0.3},
+    )
+    reversing = assess_momentum(
+        bullish_building_features(),
+        intraday_features={"intraday_move_from_open_pct": -4.0},
+    )
+    assert reversing.confidence < calm.confidence
+    assert reversing.metrics["momentum_level"] < calm.metrics["momentum_level"]

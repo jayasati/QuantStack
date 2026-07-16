@@ -22,8 +22,11 @@ from app.intelligence.base import (
     IntelligenceComponent,
     IntelligenceResult,
     clamp,
+    intraday_direction_signal,
+    intraday_reversal_warning,
     normalize_states,
 )
+from app.intelligence.base import sign as _sign
 
 COMPONENT = "trend"
 
@@ -32,17 +35,32 @@ MOMENTUM_WINDOWS = (5, 20, 50, 200)
 MOMENTUM_SCALE = {5: 3.0, 20: 6.0, 50: 10.0, 200: 20.0}
 TREND_AGE_SATURATION_BARS = 60
 STABILITY_LOOKBACK = 20
-
-
-def _sign(value: float) -> float:
-    return 1.0 if value > 0 else (-1.0 if value < 0 else 0.0)
+# Weight given to today's intraday move once it's available -- the D-based
+# blend below (momentum/structure/bias) is scaled down proportionally so
+# the two sum back to 1.0, not simply added on top of it.
+INTRADAY_DIRECTION_WEIGHT = 0.3
+# Confidence lost when today's intraday move fully opposes the (D-based)
+# direction -- the HDFCBANK 2026-07-15 fix: a "long" read whose own
+# intraday evidence is collapsing should visibly lose confidence, not sit
+# unchanged until tomorrow's D bar.
+INTRADAY_CONFLICT_CONFIDENCE_PENALTY = 0.3
+# Weight the reversal warning (today's give-back from its session high)
+# adds to exhaustion, on top of the existing D-based components.
+INTRADAY_REVERSAL_EXHAUSTION_WEIGHT = 0.25
 
 
 def assess_trend(
     features: Mapping[str, float],
     direction_history: Sequence[float] = (),
+    intraday_features: Mapping[str, float] | None = None,
 ) -> IntelligenceResult:
-    """Pure trend assessment from the latest feature values."""
+    """Pure trend assessment from the latest feature values.
+
+    ``intraday_features`` is `IntradayRiskFeatureEngine`'s (Volume 3) 5m
+    session-relative output for the same symbol -- optional and additive
+    (DEBT-1/DEBT-2): when absent, every calculation below is byte-identical
+    to before this parameter existed.
+    """
     contributions: list[Contribution] = []
     reasoning: list[str] = []
 
@@ -75,11 +93,33 @@ def assess_trend(
     momentum_mean = (
         sum(momentum_signals) / len(momentum_signals) if momentum_signals else 0.0
     )
-    direction = (
+    d_direction = (
         0.5 * momentum_mean
         + 0.3 * (structure_direction or 0.0)
         + 0.2 * (structural_bias or 0.0)
     )
+
+    intraday_dir = intraday_direction_signal(intraday_features)
+    intraday_conflict = 0.0
+    if intraday_dir is not None:
+        direction = (
+            (1 - INTRADAY_DIRECTION_WEIGHT) * d_direction
+            + INTRADAY_DIRECTION_WEIGHT * intraday_dir
+        )
+        contributions.append(Contribution(
+            feature="intraday_move_from_open_pct",
+            value=(intraday_features or {}).get("intraday_move_from_open_pct"),
+            weight=INTRADAY_DIRECTION_WEIGHT,
+            effect="bullish today" if intraday_dir > 0 else
+                   ("bearish today" if intraday_dir < 0 else "flat today"),
+        ))
+        # How much today's actual move opposes the D-based read -- 0 when
+        # they agree (or D-based is flat), up to 1 when fully opposed.
+        # This is what HDFCBANK 2026-07-15 needed: a same-day collapse
+        # should visibly cost confidence, not wait for tomorrow's D bar.
+        intraday_conflict = max(0.0, -intraday_dir * _sign(d_direction))
+    else:
+        direction = d_direction
     direction = max(-1.0, min(1.0, direction))
     strength = min(
         1.0,
@@ -123,6 +163,16 @@ def assess_trend(
         proximity = 1 - min(abs(distance), 5.0) / 5.0 if distance is not None else 0.0
     exhaustion = min(1.0, 0.4 * age_fraction + 0.4 * opposing + 0.2 * proximity * opposing)
 
+    reversal = intraday_reversal_warning(intraday_features)
+    if reversal is not None:
+        exhaustion = min(1.0, exhaustion + INTRADAY_REVERSAL_EXHAUSTION_WEIGHT * reversal)
+        contributions.append(Contribution(
+            feature="intraday_current_drawdown_pct",
+            value=(intraday_features or {}).get("intraday_current_drawdown_pct"),
+            weight=INTRADAY_REVERSAL_EXHAUSTION_WEIGHT,
+            effect="giving back today's gains" if reversal > 0.5 else "holding today's move",
+        ))
+
     # Volume confirmation only when the instrument reports volume.
     volume_confirmation = None
     rvol = features.get("volume_rvol_20")
@@ -152,6 +202,12 @@ def assess_trend(
     confidence = 0.25 + 0.45 * agreement + 0.2 * stability
     if volume_confirmation is not None:
         confidence += 0.1 * volume_confirmation
+    if intraday_conflict > 0:
+        confidence -= INTRADAY_CONFLICT_CONFIDENCE_PENALTY * intraday_conflict
+        reasoning.append(
+            f"Today's intraday move opposes the underlying read "
+            f"(conflict {intraday_conflict:.0%}) -- confidence docked."
+        )
     confidence = max(0.0, min(1.0, confidence))
 
     breakout_probability = features.get("ms_breakout_probability") or 0.0
@@ -181,6 +237,12 @@ def assess_trend(
         f"Dominant state: "
         f"{max(states, key=lambda s: states[s]) if states else 'unknown'}.",
     ])
+    if intraday_dir is not None:
+        move = (intraday_features or {}).get("intraday_move_from_open_pct")
+        reasoning.append(
+            f"Today's session move {move:+.2f}% from open "
+            f"(intraday signal {intraday_dir:+.2f})."
+        )
 
     return IntelligenceResult(
         component=COMPONENT,
@@ -198,6 +260,8 @@ def assess_trend(
             "volume_confirmation": (
                 round(volume_confirmation, 4) if volume_confirmation is not None else None
             ),
+            "intraday_direction": round(intraday_dir, 4) if intraday_dir is not None else None,
+            "intraday_reversal_warning": round(reversal, 4) if reversal is not None else None,
         },
         contributions=contributions,
         reasoning=reasoning,
@@ -215,10 +279,16 @@ class TrendIntelligenceEngine(IntelligenceComponent):
         direction_history = await self.feature_history(
             "ms_trend_direction", symbol, timeframe
         )
+        # Only for the "current" read (D) -- intraday data is always "as of
+        # right now", so overlaying it onto a non-D/historical timeframe
+        # read would mix live data into what should be a point-in-time view.
+        intraday_features = await self.intraday_values(symbol) if timeframe == "D" else None
         # Offloaded to a worker thread: pure CPU work, same convention as
         # BaseFeatureEngine.run() (perf-audit-2026-07-14 finding 13 -- py-spy
         # caught this running synchronously on the event loop mid-request).
-        result = await asyncio.to_thread(assess_trend, features, direction_history)
+        result = await asyncio.to_thread(
+            assess_trend, features, direction_history, intraday_features
+        )
         result.metrics["symbol"] = symbol
         await self._publish_assessment(symbol, result)
         return result

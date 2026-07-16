@@ -31,8 +31,10 @@ from app.intelligence.base import (
     IntelligenceComponent,
     IntelligenceResult,
     clamp,
+    intraday_direction_signal,
     normalize_states,
 )
+from app.intelligence.base import sign as _sign
 
 COMPONENT = "momentum"
 
@@ -43,10 +45,22 @@ MOMENTUM_SCALE = {5: 3.0, 20: 6.0, 50: 10.0, 200: 20.0}
 ACCELERATION_SCALE = {5: 1.5, 20: 3.0, 50: 5.0, 200: 10.0}
 # |z-score| at/above this reads as an "extreme" momentum reading.
 EXTREME_Z_THRESHOLD = 2.0
+# Same intraday-overlay convention as trend.py/structure.py (DEBT-1/DEBT-2,
+# 2026-07-16) -- today's move-from-open reads as the "window 0" momentum
+# term, the freshest possible reading in this ladder.
+INTRADAY_DIRECTION_WEIGHT = 0.3
+INTRADAY_CONFLICT_CONFIDENCE_PENALTY = 0.3
 
 
-def assess_momentum(features: Mapping[str, float]) -> IntelligenceResult:
-    """Pure momentum assessment from the latest feature values."""
+def assess_momentum(
+    features: Mapping[str, float],
+    intraday_features: Mapping[str, float] | None = None,
+) -> IntelligenceResult:
+    """Pure momentum assessment from the latest feature values.
+
+    ``intraday_features`` is optional and additive (DEBT-1/DEBT-2): absent,
+    every calculation is byte-identical to before this parameter existed.
+    """
     contributions: list[Contribution] = []
     reasoning: list[str] = []
 
@@ -60,7 +74,8 @@ def assess_momentum(features: Mapping[str, float]) -> IntelligenceResult:
             signal = math.tanh(momentum / MOMENTUM_SCALE[window])
             momentum_signals.append(signal)
             contributions.append(Contribution(
-                feature=f"price_momentum_{window}", value=momentum, weight=1 / len(MOMENTUM_WINDOWS),
+                feature=f"price_momentum_{window}", value=momentum,
+                weight=1 / len(MOMENTUM_WINDOWS),
                 effect="bullish momentum" if signal > 0 else "bearish momentum",
             ))
 
@@ -77,9 +92,24 @@ def assess_momentum(features: Mapping[str, float]) -> IntelligenceResult:
         if z is not None:
             z_scores.append(z)
 
-    level = (
+    d_level = (
         sum(momentum_signals) / len(momentum_signals) if momentum_signals else 0.0
     )
+
+    intraday_dir = intraday_direction_signal(intraday_features)
+    intraday_conflict = 0.0
+    if intraday_dir is not None:
+        level = (1 - INTRADAY_DIRECTION_WEIGHT) * d_level + INTRADAY_DIRECTION_WEIGHT * intraday_dir
+        contributions.append(Contribution(
+            feature="intraday_move_from_open_pct",
+            value=(intraday_features or {}).get("intraday_move_from_open_pct"),
+            weight=INTRADAY_DIRECTION_WEIGHT,
+            effect="bullish today" if intraday_dir > 0 else
+                   ("bearish today" if intraday_dir < 0 else "flat today"),
+        ))
+        intraday_conflict = max(0.0, -intraday_dir * _sign(d_level))
+    else:
+        level = d_level
     level = clamp(level, -1.0, 1.0)
 
     acceleration_mean = (
@@ -96,7 +126,16 @@ def assess_momentum(features: Mapping[str, float]) -> IntelligenceResult:
         sign_agreement = sum(
             1 for s in momentum_signals if (1 if s >= 0 else -1) == dominant_sign
         ) / len(momentum_signals)
-    confidence = clamp(0.4 * data_completeness + 0.4 * sign_agreement + 0.2 * bool(z_scores), 0.0, 1.0)
+    confidence = clamp(
+        0.4 * data_completeness + 0.4 * sign_agreement + 0.2 * bool(z_scores)
+        - INTRADAY_CONFLICT_CONFIDENCE_PENALTY * intraday_conflict,
+        0.0, 1.0,
+    )
+    if intraday_conflict > 0:
+        reasoning.append(
+            f"Today's intraday move opposes the underlying read "
+            f"(conflict {intraday_conflict:.0%}) -- confidence docked."
+        )
 
     # "Accelerating" means the move is INTENSIFYING: bullish momentum getting
     # more positive, or bearish momentum getting more negative -- level and
@@ -116,10 +155,12 @@ def assess_momentum(features: Mapping[str, float]) -> IntelligenceResult:
 
     score = clamp(50 + 50 * level)
     dominant = max(states, key=lambda s: states[s]) if states else "unknown"
+    accel_state = (
+        "building" if acceleration_mean > 0 else "fading" if acceleration_mean < 0 else "flat"
+    )
     reasoning.append(
         f"Momentum level {level:+.2f} from {len(momentum_signals)}/{len(MOMENTUM_WINDOWS)} "
-        f"windows; acceleration {acceleration_mean:+.2f} "
-        f"({'building' if acceleration_mean > 0 else 'fading' if acceleration_mean < 0 else 'flat'})."
+        f"windows; acceleration {acceleration_mean:+.2f} ({accel_state})."
     )
     if z_scores:
         reasoning.append(
@@ -127,6 +168,12 @@ def assess_momentum(features: Mapping[str, float]) -> IntelligenceResult:
             + (" -- an extreme reading relative to trailing history." if is_extreme else ".")
         )
     reasoning.append(f"Dominant state: {dominant}.")
+    if intraday_dir is not None:
+        move = (intraday_features or {}).get("intraday_move_from_open_pct")
+        reasoning.append(
+            f"Today's session move {move:+.2f}% from open "
+            f"(intraday signal {intraday_dir:+.2f})."
+        )
 
     return IntelligenceResult(
         component=COMPONENT,
@@ -138,6 +185,7 @@ def assess_momentum(features: Mapping[str, float]) -> IntelligenceResult:
             "acceleration": round(acceleration_mean, 4),
             "max_abs_z": round(max_abs_z, 4) if z_scores else None,
             "is_extreme": is_extreme,
+            "intraday_direction": round(intraday_dir, 4) if intraday_dir is not None else None,
         },
         contributions=contributions,
         reasoning=reasoning,
@@ -154,7 +202,8 @@ class MomentumIntelligenceEngine(IntelligenceComponent):
     async def assess(self, symbol: str | None = None, timeframe: str = "D") -> IntelligenceResult:
         symbol = symbol or self._settings.feature_benchmark_symbol
         features = await self.latest_values(symbol, timeframe)
-        result = assess_momentum(features)
+        intraday_features = await self.intraday_values(symbol) if timeframe == "D" else None
+        result = assess_momentum(features, intraday_features)
         result.metrics["symbol"] = symbol
         await self._publish_assessment(symbol, result)
         return result

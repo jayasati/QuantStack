@@ -111,3 +111,76 @@ def test_explainability_payload_present() -> None:
     payload = result.to_dict()
     assert payload["component"] == "trend"
     assert isinstance(payload["contributions"], list)
+
+
+# --- Intraday overlay (DEBT-1/DEBT-2, 2026-07-16) -----------------------------
+
+
+def test_no_intraday_features_is_byte_identical_to_omitting_the_param() -> None:
+    """Explicit None must match the default -- callers can't accidentally
+    change behavior by passing None instead of omitting the argument."""
+    with_none = assess_trend(bull_features(), direction_history=[1.0] * 30, intraday_features=None)
+    without_arg = assess_trend(bull_features(), direction_history=[1.0] * 30)
+    assert with_none.score == without_arg.score
+    assert with_none.confidence == without_arg.confidence
+    assert with_none.states == without_arg.states
+    assert with_none.metrics == without_arg.metrics
+
+
+def test_intraday_move_agreeing_with_trend_keeps_bullish_read() -> None:
+    result = assess_trend(
+        bull_features(), direction_history=[1.0] * 30,
+        intraday_features={
+            "intraday_move_from_open_pct": 1.5, "intraday_current_drawdown_pct": 0.1,
+        },
+    )
+    assert result.metrics["trend_direction"] > 0.5
+    assert result.metrics["intraday_direction"] > 0
+    assert max(result.states, key=lambda s: result.states[s]) == "strong_bull_trend"
+
+
+def test_intraday_collapse_docks_confidence_on_an_otherwise_bullish_read() -> None:
+    """The HDFCBANK 2026-07-15 scenario: D-based evidence says bullish, but
+    today's actual session move is a real decline -- confidence must drop
+    visibly rather than sit unchanged like the original incident."""
+    calm = assess_trend(
+        bull_features(), direction_history=[1.0] * 30,
+        intraday_features={
+            "intraday_move_from_open_pct": 0.1, "intraday_current_drawdown_pct": 0.2,
+        },
+    )
+    collapsing = assess_trend(
+        bull_features(), direction_history=[1.0] * 30,
+        intraday_features={
+            "intraday_move_from_open_pct": -3.0, "intraday_current_drawdown_pct": 3.2,
+        },
+    )
+    assert collapsing.confidence < calm.confidence
+    assert collapsing.metrics["trend_exhaustion"] > calm.metrics["trend_exhaustion"]
+    assert any("opposes" in r.lower() for r in collapsing.reasoning)
+
+
+def test_large_enough_intraday_move_can_flip_direction() -> None:
+    """A strong enough same-day move against a weak D-based read should be
+    able to flip the blended direction, not just dampen confidence."""
+    weak_bull = {
+        "price_momentum_5": 0.3, "price_momentum_20": 0.5,
+        "ms_trend_direction": 0.2, "ms_structural_bias": 0.1,
+    }
+    without_intraday = assess_trend(weak_bull, direction_history=[1.0] * 5)
+    with_selloff = assess_trend(
+        weak_bull, direction_history=[1.0] * 5,
+        intraday_features={"intraday_move_from_open_pct": -4.0},
+    )
+    assert without_intraday.metrics["trend_direction"] > 0
+    assert with_selloff.metrics["trend_direction"] < without_intraday.metrics["trend_direction"]
+
+
+def test_missing_intraday_move_from_open_degrades_to_no_overlay() -> None:
+    """Present but incomplete intraday data (e.g. cold start, no move-from-
+    open computed yet) must not crash or silently fabricate a signal."""
+    result = assess_trend(
+        bull_features(), direction_history=[1.0] * 30,
+        intraday_features={"intraday_realized_vol_pct": 12.0},  # no move_from_open key
+    )
+    assert result.metrics["intraday_direction"] is None

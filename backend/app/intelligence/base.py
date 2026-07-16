@@ -12,7 +12,8 @@ and their history from the offline store; they never touch collectors —
 the Feature Store is the single source of truth (Volume 3, Chapter 1).
 """
 
-from collections.abc import Callable, Sequence
+import math
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -64,6 +65,10 @@ def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
 
 
+def sign(value: float) -> float:
+    return 1.0 if value > 0 else (-1.0 if value < 0 else 0.0)
+
+
 def normalize_states(raw: dict[str, float]) -> dict[str, float]:
     """Turn non-negative evidence weights into a probability distribution."""
     total = sum(max(v, 0.0) for v in raw.values())
@@ -88,6 +93,51 @@ def slope(values: Sequence[float]) -> float:
     return cov / var_t
 
 
+# Intraday overlay (DEBT-1/DEBT-2, 2026-07-16): shared by every per-symbol
+# directional component (trend, market_structure, momentum, volatility) so
+# each blends `IntradayRiskFeatureEngine`'s 5m session-relative features
+# (Volume 3) into its otherwise D-only read the same way. Before this, these
+# engines' "current" assessment for a symbol only ever changed once/day at
+# midnight -- HDFCBANK 2026-07-15 held a "long" bias through a real 1.1%
+# intraday collapse because nothing fed the day's actual price action in
+# until tomorrow's D bar landed.
+INTRADAY_DIRECTION_SCALE = 2.0  # % move-from-open that saturates the signal
+INTRADAY_REVERSAL_SCALE = 1.5  # % current-drawdown-from-session-high that saturates
+
+
+def intraday_direction_signal(
+    intraday_features: Mapping[str, float] | None,
+    scale: float = INTRADAY_DIRECTION_SCALE,
+) -> float | None:
+    """Today's session move-from-open as a saturating -1..1 directional
+    signal, or None if no intraday data is available (weekends, cold start,
+    or the caller simply didn't fetch it -- every consumer must handle
+    None as "fall back to the D-only read", not fabricate a value)."""
+    if not intraday_features:
+        return None
+    move = intraday_features.get("intraday_move_from_open_pct")
+    if move is None:
+        return None
+    return math.tanh(move / scale)
+
+
+def intraday_reversal_warning(
+    intraday_features: Mapping[str, float] | None,
+    scale: float = INTRADAY_REVERSAL_SCALE,
+) -> float | None:
+    """0..1: how much of today's session has already been given back from
+    its running high-so-far, right now. Magnitude-only (always >= 0,
+    regardless of the symbol's overall direction) -- a real-time "this read
+    may be stale" warning, the same role Market Structure's Change of
+    Character penalty already plays for its own component."""
+    if not intraday_features:
+        return None
+    drawdown = intraday_features.get("intraday_current_drawdown_pct")
+    if drawdown is None:
+        return None
+    return min(1.0, drawdown / scale)
+
+
 class IntelligenceComponent:
     name = "intelligence_component"
 
@@ -102,6 +152,14 @@ class IntelligenceComponent:
         self._sessions = session_factory
         self._bus = bus
         self.store = FeatureStore(session_factory=session_factory, cache=cache)
+
+    async def intraday_values(self, symbol: str) -> dict[str, float]:
+        """`IntradayRiskFeatureEngine`'s session-relative features for this
+        symbol (Volume 3), at `Settings.feature_intraday_timeframe` (5m by
+        default) -- the intraday overlay input for DEBT-1/DEBT-2. Empty
+        dict on no data (weekend/cold-start), same convention as
+        `latest_values` -- never raises."""
+        return await self.latest_values(symbol, self._settings.feature_intraday_timeframe)
 
     async def latest_values(self, symbol: str, timeframe: str) -> dict[str, float]:
         """Latest feature values flattened to {feature_name: value}."""

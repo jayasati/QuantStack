@@ -109,3 +109,36 @@ def test_expected_move_prefers_shortest_available_window() -> None:
         volatility_expected_move_5=100.0, volatility_expected_move_20=250.0,
     ))
     assert result.metrics["expected_move_price"] == 100.0
+
+
+# --- Intraday overlay (DEBT-1/DEBT-2, 2026-07-16) -----------------------------
+
+
+def test_omitted_intraday_matches_none_exactly() -> None:
+    with_none = assess_volatility(low_vol_features(), intraday_features=None)
+    omitted = assess_volatility(low_vol_features())
+    assert with_none.score == omitted.score
+    assert with_none.confidence == omitted.confidence
+    assert with_none.states == omitted.states
+
+
+def test_intraday_vol_spike_tilts_a_calm_regime_up_and_docks_confidence() -> None:
+    """D-based regime says calm (~9% realized vol baseline), but today's
+    session-so-far is running much hotter -- the read should tilt up and
+    lose some confidence, not sit unchanged until tomorrow's D bar."""
+    calm = assess_volatility(
+        low_vol_features(), intraday_features={"intraday_realized_vol_pct": 9.5}
+    )
+    spiking = assess_volatility(
+        low_vol_features(), intraday_features={"intraday_realized_vol_pct": 60.0}
+    )
+    assert spiking.metrics["volatility_level"] > calm.metrics["volatility_level"]
+    assert spiking.confidence < calm.confidence
+    assert spiking.metrics["intraday_realized_vol_pct"] == 60.0
+
+
+def test_missing_intraday_realized_vol_degrades_to_no_overlay() -> None:
+    result = assess_volatility(
+        low_vol_features(), intraday_features={"intraday_move_from_open_pct": 1.0}
+    )
+    assert result.metrics["intraday_realized_vol_pct"] is None
