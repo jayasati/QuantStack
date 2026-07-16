@@ -151,14 +151,34 @@ CPU contention for wall-clock time, it doesn't reduce the total work.
 watchlist symbol just to rank them, before truncating to the top 20 --
 that cost scales directly with watchlist size regardless of concurrency
 tuning. Left **Active**, not moved to Resolved.
+**Pre-filter added 2026-07-16 -- correctness-preserving, not a heuristic:**
+of `detect()`'s "6-way fan-out", only 4 (trend, market_structure,
+institutional_flow/relative_strength/volatility, events) actually feed
+`evaluate_triggers()` -- confirmed by reading its real inputs.
+`market_confidence` and `composite_score`/`composite_confidence` are pure
+display metadata attached to `OpportunityCandidate`, never read by trigger
+evaluation, but were being computed for every symbol regardless of whether
+it triggered. Deferred both until after `if not triggers: return None` --
+zero behavior change for symbols that do trigger (identical values,
+computed later), and the ~2 reads are skipped entirely for symbols that
+don't (the majority in practice). This is a real correctness-preserving
+cut, not the "lightweight score gate" heuristic floated below -- that
+would trade recall for speed and wasn't implemented; explicitly deferred,
+see below.
 **Expiry condition:** Before citing Volume 1's performance target as met
 anywhere, or when request latency is next worked (pairs naturally with
-DEBT-6 — populating Redis is the likely next win). Real fix likely needs a
-cheaper pre-filter ahead of the full 6-way fan-out (e.g. a lightweight
-score gate before running all 6 engines per symbol), not just tighter
-concurrency bounds.
+DEBT-6 — populating Redis is the likely next win). The 4 real per-symbol
+engines (trend, market_structure, relative_strength, volatility) still run
+for every watchlist symbol regardless -- that's the remaining, larger
+cost, and closing it for real likely means either populating Redis
+properly (DEBT-6) so each of those 4 reads is fast regardless of watchlist
+size, or accepting a genuine heuristic pre-filter (with an explicit
+recall/speed trade-off the user should sign off on, not one invented
+silently) rather than assessing every symbol in full.
 **Logged:** 2026-07-15 (Volume 1 postflight); root-caused and partially
-mitigated 2026-07-16 (concurrency bound live-verified insufficient alone).
+mitigated 2026-07-16 (concurrency bound + correctness-preserving
+pre-filter, both live-verified insufficient alone -- see re-measurement
+notes above and below).
 
 ### DEBT-8 · news_intelligence / global_shock_news chronically slow, low quality
 **What:** Live `/collectors` check: `avg_latency_ms` 33,696 (news_intelligence,

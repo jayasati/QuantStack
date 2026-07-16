@@ -320,12 +320,6 @@ class OpportunityDetectionEngine:
                 return value
             return await safe(factory())
 
-        # Separate tasks (not folded into the gather below) so their float |
-        # None returns don't collapse the tuple's per-position typing to a
-        # union across every element.
-        confidence_task = asyncio.ensure_future(self._market_confidence(symbol))
-        composite_task = asyncio.ensure_future(self._composite_context(symbol))
-
         trend, structure, flow, relative, volatility, events = await asyncio.gather(
             safe(self._trend.assess(symbol=symbol)),
             safe(self._market_structure.assess(symbol=symbol)),
@@ -334,8 +328,6 @@ class OpportunityDetectionEngine:
             safe(self._volatility.assess(symbol=symbol)),
             reuse_or_fetch(events, self._events.assess),
         )
-        confidence_report = await confidence_task
-        composite_score, composite_confidence = await composite_task
 
         trend_transition = None
         structure_transition = None
@@ -371,6 +363,21 @@ class OpportunityDetectionEngine:
         triggers = evaluate_triggers(component_results)
         if not triggers:
             return None
+
+        # DEBT-7 pre-filter (2026-07-16): market_confidence/composite_score
+        # are pure display metadata on OpportunityCandidate -- evaluate_triggers()
+        # above never reads them, only component_results does. Computing
+        # them for every watchlist symbol meant paying for two extra
+        # per-symbol reads on every non-triggering symbol (the large
+        # majority in practice) just to throw the result away a moment
+        # later. Deferred until here: only symbols that already triggered
+        # via the real per-symbol engines above pay this cost. Zero
+        # behavior change -- every symbol that used to get a
+        # market_confidence/composite_score still gets the identical one,
+        # just computed later.
+        confidence_report, (composite_score, composite_confidence) = await asyncio.gather(
+            self._market_confidence(symbol), self._composite_context(symbol),
+        )
 
         candidate = OpportunityCandidate(
             symbol=symbol,

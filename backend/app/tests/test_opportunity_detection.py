@@ -243,3 +243,81 @@ async def test_scan_bounds_concurrent_symbol_detections() -> None:
     assert len(candidates) == 0  # empty universe, nothing triggers -- fine, not the point
     assert trend.max_observed <= OpportunityDetectionEngine.MAX_CONCURRENT_SYMBOL_DETECTIONS
     assert trend.max_observed > 1  # still genuinely concurrent, not accidentally serial
+
+
+class _FixedAssessEngine:
+    """Generic fake for detect()'s six per-symbol/market-wide component
+    engines -- returns the same IntelligenceResult regardless of symbol."""
+
+    def __init__(self, component_result: IntelligenceResult) -> None:
+        self._result = component_result
+
+    async def assess(self, symbol: str | None = None) -> IntelligenceResult:
+        return self._result
+
+
+def _make_engine(*, market_structure: IntelligenceResult, calls: list[str]) -> OpportunityDetectionEngine:
+    async def counting_market_confidence(symbol: str):
+        calls.append("market_confidence")
+        return 55.0
+
+    async def counting_composite_context(symbol: str):
+        calls.append("composite_context")
+        return 60.0, 0.5
+
+    engine = OpportunityDetectionEngine(
+        session_factory=None,
+        trend_engine=_FixedAssessEngine(result("trend")),
+        market_structure_engine=_FixedAssessEngine(market_structure),
+        institutional_flow_engine=_FixedAssessEngine(result("institutional_flow")),
+        relative_strength_engine=_FixedAssessEngine(result("relative_strength")),
+        volatility_engine=_FixedAssessEngine(result("volatility")),
+        event_engine=_FixedAssessEngine(result("events", score=0.0)),
+    )
+    # Method-level override, independent of session_factory internals --
+    # the actual claim under test is call *timing/count*, not what these
+    # two return (already covered by their own dedicated tests above).
+    engine._market_confidence = counting_market_confidence  # type: ignore[method-assign]
+    engine._composite_context = counting_composite_context  # type: ignore[method-assign]
+    return engine
+
+
+async def test_market_confidence_and_composite_context_skipped_for_non_triggering_symbol() -> None:
+    """DEBT-7 pre-filter (2026-07-16): both are pure display metadata on
+    OpportunityCandidate, never read by evaluate_triggers() -- computing
+    them for a symbol that doesn't trigger is pure waste. Zero
+    triggers here (neutral market_structure), so neither should run."""
+    calls: list[str] = []
+    engine = _make_engine(market_structure=result("market_structure"), calls=calls)
+
+    candidate = await engine.detect(
+        "HDFCBANK",
+        institutional_flow=result("institutional_flow"),
+        events=result("events", score=0.0),
+    )
+
+    assert candidate is None
+    assert calls == []
+
+
+async def test_market_confidence_and_composite_context_run_for_triggering_symbol() -> None:
+    """Same as above but market_structure crosses the breakout-probability
+    threshold -- a real trigger fires, so both metadata reads must still
+    happen (identical final behavior to before the deferral, just later)."""
+    calls: list[str] = []
+    triggering_structure = result(
+        "market_structure", metrics={"breakout_probability": BREAKOUT_PROBABILITY_THRESHOLD + 0.1}
+    )
+    engine = _make_engine(market_structure=triggering_structure, calls=calls)
+
+    candidate = await engine.detect(
+        "HDFCBANK",
+        institutional_flow=result("institutional_flow"),
+        events=result("events", score=0.0),
+    )
+
+    assert candidate is not None
+    assert candidate.market_confidence == 55.0
+    assert candidate.composite_score == 60.0
+    assert candidate.composite_confidence == 0.5
+    assert sorted(calls) == ["composite_context", "market_confidence"]
