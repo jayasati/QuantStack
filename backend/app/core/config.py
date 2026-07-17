@@ -107,24 +107,20 @@ class Settings(BaseSettings):
 
     # Feature engineering (Volume 3).
     feature_windows: list[int] = Field(default_factory=lambda: [5, 10, 20, 50, 100, 200])
-    # "5m" was added 2026-07-17 for I-1/intraday-heavy work and reverted
-    # the same day: live-verified on quantstack-vm that the scheduled
-    # per-engine run_all() sweep (25 watchlist symbols x 7-8 engines x 2
-    # timeframes, every feature_engine_interval) cannot complete within one
-    # cycle -- "maximum number of running instances reached" repeating for
-    # PriceFeatureEngine/VolatilityFeatureEngine/LiquidityFeatureEngine/
-    # RelativeStrengthEngine/MarketStructureEngine/RiskFeatureEngine every
-    # tick, cascading into candidate_generation_sweep/market_intelligence_
-    # sweep/composite_intelligence_sweep also missing their own schedule,
-    # and /prediction/candidates degrading from a 5.7-6.5s baseline to
-    # 494-613s. An after-hours single-symbol capacity check (EXPLAIN
-    # ANALYZE, clean latency baseline) before deploying did NOT catch this
-    # -- it never exercised the full 25-symbol scheduled path, only a
-    # one-off manual call. See DEBT-15 for the real fix this needs
-    # (staggering the 5m pass onto its own schedule, like
-    # IntradayRiskFeatureEngine already has, rather than doubling the
-    # existing sweep's own per-cycle cost) before re-attempting this.
-    feature_timeframes: list[str] = Field(default_factory=lambda: ["D"])
+    # "5m" added 2026-07-17 (I-1/intraday-heavy work): this project's actual
+    # goal is same-day F&O trading, which a D-only feature layer was never
+    # serving (I-1, INVARIANTS.md, VIOLATED since 2026-07-15). First attempt
+    # this same day overloaded the scheduled sweep on a 4-vCPU box (25
+    # watchlist symbols x 7-8 affected engines x 2 timeframes couldn't
+    # complete within one feature_engine_interval cycle -- "maximum number
+    # of running instances reached" repeating, /prediction/candidates
+    # degraded from 5.7-6.5s to 494-613s) and was reverted, then
+    # re-attempted here after resizing quantstack-vm e2-standard-4 ->
+    # e2-standard-8 (4 -> 8 vCPU) specifically to give this CPU-bound
+    # workload the headroom it needed -- memory was never the constraint
+    # (12GB+ free throughout). See DEBT-15 for the full incident record and
+    # the live re-verification after the resize.
+    feature_timeframes: list[str] = Field(default_factory=lambda: ["D", "5m"])
     feature_benchmark_symbol: str = "NIFTY"
     feature_engine_interval: int = 300
     # Candles loaded per run; must exceed the largest rolling window.

@@ -49,13 +49,41 @@ chunk to avoid rushing a change to live signal-generation logic.
 engines' 5m output is next worked, or before citing I-1 as HELD (it stays
 VIOLATED -- more raw intraday data exists now, but nothing in the
 decision-making layer reads it, which is the actual substance of I-1).
-Also expires if a real market-hours capacity check (this chunk was only
-verified after-hours, market closed at the time) finds the doubled
-feature-engine load pushes `/prediction/candidates` materially past its
-existing DEBT-7 baseline -- re-check live during the next trading session,
-matching the DEBT-8 precedent for exactly this kind of after-hours-only
-verification gap.
-**Logged:** 2026-07-17.
+
+**Capacity incident, same day:** the first deploy of this change (still
+`e2-standard-4`, 4 vCPU) was caught live within ~20 minutes -- the
+scheduled `run_all()` sweep (25 watchlist symbols x 7-8 affected engines x
+2 timeframes) could not complete within one `feature_engine_interval`
+cycle. APScheduler logged "maximum number of running instances reached"
+repeating for `PriceFeatureEngine`/`VolatilityFeatureEngine`/
+`LiquidityFeatureEngine`/`RelativeStrengthEngine`/`MarketStructureEngine`/
+`RiskFeatureEngine` every tick, cascading into
+`candidate_generation_sweep`/`market_intelligence_sweep`/
+`composite_intelligence_sweep` also missing their own schedule --
+`/prediction/candidates` degraded from a clean 5.7-6.5s baseline to
+**494-613 seconds**. The after-hours capacity check done before that
+deploy (EXPLAIN ANALYZE on the date-range query, a clean latency baseline,
+one manual single-symbol call) did not catch this because it never
+exercised the real cost driver -- the scheduled sweep at full 25-symbol
+scale, not a one-off proxy for it. Reverted immediately
+(`feature_timeframes` back to `["D"]`), confirmed recovery attempted but
+still degraded (14-21s, CPU 140%) even after a fresh container restart --
+root-caused to the wrong assumption that this was purely a cold-start
+artifact; the user redirected to resizing compute instead of chasing the
+revert further. `quantstack-vm` resized `e2-standard-4` -> `e2-standard-8`
+(4 -> 8 vCPU, 16 -> 32GB RAM; memory was never the constraint -- 12GB+
+free throughout the incident) via `gcloud compute instances stop/
+set-machine-type/start` (docker-compose's `restart: unless-stopped`
+brought all 3 containers back up automatically, confirmed live). `"5m"`
+re-added to `feature_timeframes` on the resized box; re-verification
+in progress as of this entry -- see the next update or a linked
+postflight-style note for the post-resize measurement, and do not treat
+the resize alone as proof this is resolved without that live number.
+**Expiry condition (added):** before citing this capacity fix as
+confirmed, or if a genuine market-hours check (this was still after-hours)
+finds the doubled load still pushes latency materially past the DEBT-7
+baseline even on 8 vCPUs.
+**Logged:** 2026-07-17; capacity incident and VM resize same day.
 
 ### DEBT-14 · Composite/conviction scenario tests broken by today's 5m-ensemble fixture change — I-11 gate was red before this chunk started, not caused by it
 **What:** Discovered while running the full local suite (I-11) as part of
