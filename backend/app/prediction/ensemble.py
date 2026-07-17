@@ -33,12 +33,27 @@ standardized value for Logistic Regression -- exact; feature_importance x
 standardized value for every tree model -- a heuristic, not real SHAP,
 since Chapter 16 / Prompt 5.16 is where the doc actually introduces SHAP).
 
-Training is on-demand and held in memory per engine instance (train() then
-predict()), the same "runs on demand, not scheduled" shape as Prompt 5.5's
-label_history() -- there is no model-artifact blob store in this codebase
-to persist a serialized estimator into, so model_version is a descriptive
-string (algorithm set + training timestamp + sample count), not a
-retrievable handle.
+Training is held in memory per engine instance (train() then predict()) --
+there is no model-artifact blob store in this codebase to persist a
+serialized estimator into, so model_version is a descriptive string
+(algorithm set + training timestamp + sample count), not a retrievable
+handle. Scheduled live since 2026-07-17 (DEBT-13,
+`prediction.ensemble_training_sweep` in main.py) via the container-resolved
+singleton, so a trained ensemble stays cached for every subsequent
+predict() call in the same process.
+
+Timeframe/holding-period are training() parameters, not hardcoded --
+`labeling.py`'s barrier sizing scales off *per-bar* trailing realized
+volatility (never annualized, no daily-percentage assumption baked in), so
+it adapts to whatever candle size is passed automatically. Live default
+is 5m bars / 30min hold (6 bars) -- DEBT-13's 2026-07-17 follow-up, since
+same-day F&O trading (this project's actual goal) was never served by the
+original D-bar / 10-trading-day default. One known v1 calibration gap at
+5m: `labeling.MIN_TRAILING_VOL` (0.002, tuned for daily bars) sits close
+to real 5m per-bar volatility for liquid names (measured live: mean 0.0022,
+often at the floor) -- barrier width is somewhat less differentiated
+intraday than for D bars, not left silently unmeasured, but not fixed
+here either.
 """
 
 import asyncio
@@ -138,6 +153,26 @@ ENSEMBLE_FEATURE_SPECS: tuple[tuple[str, str, str], ...] = (
     ("options_iv_rank", INSTRUMENT, "chain"),
     ("options_gamma_exposure", INSTRUMENT, "chain"),
     ("options_dealer_positioning", INSTRUMENT, "chain"),
+    # IntradayRiskFeatureEngine (Volume 3, DEBT-1/DEBT-2's intraday overlay
+    # work) -- session-relative features at feature_intraday_timeframe (5m
+    # by default). Added for intraday (5m/30min-hold) training, DEBT-13's
+    # 2026-07-17 follow-up: same-day F&O trading is this project's actual
+    # goal (see project memory), and a 10-trading-day D-bar holding period
+    # was never a same-day signal to begin with. Like the quote/chain
+    # features above, these are recent (IntradayRiskFeatureEngine features
+    # only exist from ~2026-07-15 onward) so they're auxiliary, not core --
+    # but unlike quote/chain, the underlying 5m *candles* go back to
+    # 2026-07-07 (confirmed live), so 5m *labels* have real depth even
+    # where these specific features are still absent and mean-imputed.
+    ("intraday_move_from_open_pct", INSTRUMENT, "5m"),
+    ("intraday_current_drawdown_pct", INSTRUMENT, "5m"),
+    ("intraday_max_drawdown_pct", INSTRUMENT, "5m"),
+    ("intraday_realized_vol_pct", INSTRUMENT, "5m"),
+    ("intraday_expected_move_next_30m_pct", INSTRUMENT, "5m"),
+    ("intraday_var95_next_30m_pct", INSTRUMENT, "5m"),
+    ("intraday_expected_move_rest_of_session_pct", INSTRUMENT, "5m"),
+    ("intraday_var95_rest_of_session_pct", INSTRUMENT, "5m"),
+    ("intraday_time_elapsed_pct", INSTRUMENT, "5m"),
 )
 FEATURE_NAMES: tuple[str, ...] = tuple(spec[0] for spec in ENSEMBLE_FEATURE_SPECS)
 # The "D" subset has ~2 years of history; the quote/chain/breadth/flow/events

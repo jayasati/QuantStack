@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.prediction.alpha_research import (
+    CANDIDATE_FEATURE_SPECS,
     DECAY_WARNING_THRESHOLD,
     MIN_FEATURE_SAMPLES,
     RECOMMENDATION_THRESHOLD,
@@ -14,6 +15,7 @@ from app.prediction.alpha_research import (
     build_feature_label_pairs,
     evaluate_feature,
 )
+from app.prediction.ensemble import ENSEMBLE_FEATURE_SPECS
 from app.prediction.labeling import BarrierConfig, Label
 
 BASE_TS = datetime(2026, 7, 1, tzinfo=UTC)
@@ -165,8 +167,10 @@ async def test_compare_against_production_without_a_db_is_insufficient_data() ->
     assert result.winner == "insufficient_data"
     assert result.champion_holdout_accuracy is None
     assert result.challenger_holdout_accuracy is None
-    assert result.champion_feature_count == 30  # len(ENSEMBLE_FEATURE_SPECS), incl. 5 options_* features
-    assert result.challenger_feature_count == 40  # champion + len(CANDIDATE_FEATURE_SPECS)
+    assert result.champion_feature_count == len(ENSEMBLE_FEATURE_SPECS)
+    assert result.challenger_feature_count == len(ENSEMBLE_FEATURE_SPECS) + len(
+        CANDIDATE_FEATURE_SPECS
+    )
 
 
 async def test_feature_leaderboard_without_a_db_is_empty() -> None:

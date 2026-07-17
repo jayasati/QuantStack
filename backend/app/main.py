@@ -177,6 +177,16 @@ async def lifespan(app: FastAPI):
         30 features, 14 of which only started existing ~1-2 days ago, so no
         historical label could ever qualify -- see DEBT-13/DEBT.md).
 
+        Trains on 5m bars / 30min holding period (6 bars), not the
+        engine's own D/10-trading-day defaults: this project's actual goal
+        is same-day F&O trading (see project memory), which a multi-day
+        swing hold was never serving. 5m reuses IntradayRiskFeatureEngine's
+        already-live session-relative features (DEBT-1/DEBT-2) with zero
+        new feature engineering, and 5m candles have ~7-8 trading days of
+        real history (confirmed live) versus the ~1-2 days the newer
+        feature set itself has -- same core/auxiliary coverage split as
+        the D-timeframe fix handles automatically.
+
         Uses the container-resolved singleton, not a fresh instance, so a
         trained ensemble stays cached in memory (EnsemblePredictionEngine's
         own in-memory-only design, no blob store in this codebase) for
@@ -184,11 +194,12 @@ async def lifespan(app: FastAPI):
         this sweep, the API, or downstream Volume 5 stages.
 
         Same after-hours gate and reasoning as feature_selection_sweep:
-        training fits against timeframe="D" labels/features that only
-        change once/day, live-measured ~3.5s/symbol -- no upside to running
-        or re-running mid-session, and the CPU cost is real at 25-symbol
-        scale (matches this box's already-documented capacity ceiling,
-        DEBT-7/DEBT-8/DEBT-9)."""
+        training doesn't benefit from re-running faster than a full
+        session's worth of new 5m bars accumulates, live-measured
+        ~3.5s/symbol on the D path (5m has more rows per symbol, so
+        somewhat more per-symbol cost expected) -- and the CPU cost is
+        real at 25-symbol scale (matches this box's already-documented
+        capacity ceiling, DEBT-7/DEBT-8/DEBT-9)."""
         from app.collectors.base import is_nse_market_open
         from app.prediction.ensemble import EnsemblePredictionEngine
 
@@ -197,7 +208,7 @@ async def lifespan(app: FastAPI):
         engine = container.resolve(EnsemblePredictionEngine)
         for symbol in settings.watchlist:
             try:
-                await engine.predict(symbol)
+                await engine.predict(symbol, timeframe="5m", max_holding_bars=6)
             except Exception as exc:
                 logger.error(
                     "ensemble training sweep failed",

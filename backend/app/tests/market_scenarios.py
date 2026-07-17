@@ -192,8 +192,9 @@ async def write_ensemble_training_history(
     n_days: int = 150, daily_drift_pct: float = 0.004, noise_std_pct: float = 0.01,
 ) -> None:
     """Real OHLCV candles (drift + noise) + matching daily feature_store
-    rows for all 30 ENSEMBLE_FEATURE_SPECS features, spanning the same
-    date range -- enough for TripleBarrierLabelingEngine to produce a
+    rows for every ENSEMBLE_FEATURE_SPECS feature (30 D/quote/chain/
+    breadth/flow/events + 9 5m intraday, as of 2026-07-17), spanning the
+    same date range -- enough for TripleBarrierLabelingEngine to produce a
     majority-win (bullish) or majority-loss (bearish) label set and for
     EnsemblePredictionEngine.train() to actually clear MIN_TRAINING_SAMPLES.
 
@@ -253,6 +254,18 @@ async def write_ensemble_training_history(
         "options_pcr": 0.7 if direction == "bullish" else 1.3,
         "options_max_pain_distance_pct": s * 3.0, "options_iv_rank": 50.0,
         "options_gamma_exposure": s * 0.3, "options_dealer_positioning": s * 0.6,
+        # IntradayRiskFeatureEngine (5m, DEBT-13's 2026-07-17 intraday
+        # follow-up) -- move_from_open signed with direction like the other
+        # directional features above; drawdown/vol/expected-move are
+        # magnitude-only (always >= 0) so a small, healthy-session value
+        # for either direction, consistent with the clean, unambiguous
+        # trend every other feature here already encodes.
+        "intraday_move_from_open_pct": s * 1.0,
+        "intraday_current_drawdown_pct": 0.5, "intraday_max_drawdown_pct": 0.8,
+        "intraday_realized_vol_pct": 20.0,
+        "intraday_expected_move_next_30m_pct": 0.3, "intraday_var95_next_30m_pct": 0.5,
+        "intraday_expected_move_rest_of_session_pct": 1.0,
+        "intraday_var95_rest_of_session_pct": 1.5, "intraday_time_elapsed_pct": 0.5,
     }
     assert set(feature_values) == {spec[0] for spec in ENSEMBLE_FEATURE_SPECS}
 

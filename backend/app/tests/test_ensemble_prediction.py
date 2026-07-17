@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.prediction.ensemble import (
+    CORE_FEATURE_NAMES,
+    ENSEMBLE_FEATURE_SPECS,
     FEATURE_NAMES,
     MIN_LABEL_QUALITY,
     EnsemblePredictionEngine,
@@ -145,6 +147,20 @@ def test_assemble_dataset_maps_win_and_partial_success_to_one() -> None:
 
 def test_min_label_quality_matches_documented_floor() -> None:
     assert MIN_LABEL_QUALITY == 0.2
+
+
+def test_intraday_5m_features_are_auxiliary_not_core() -> None:
+    """DEBT-13 2026-07-17 follow-up: IntradayRiskFeatureEngine's 5m
+    features are as recent as the quote/chain/breadth/flow/events set --
+    they must stay out of CORE_FEATURE_NAMES (derived from timeframe=="D")
+    or 5m-timeframe training would hit the exact same all-rows-fail-
+    coverage bug this chunk just fixed for the D path."""
+    intraday_names = {
+        name for name, _, timeframe in ENSEMBLE_FEATURE_SPECS if timeframe == "5m"
+    }
+    assert intraday_names, "expected at least one 5m feature spec"
+    assert intraday_names.isdisjoint(CORE_FEATURE_NAMES)
+    assert intraday_names.issubset(FEATURE_NAMES)
 
 
 # --- feature stats ---------------------------------------------------------
