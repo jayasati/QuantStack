@@ -140,6 +140,21 @@ ENSEMBLE_FEATURE_SPECS: tuple[tuple[str, str, str], ...] = (
     ("options_dealer_positioning", INSTRUMENT, "chain"),
 )
 FEATURE_NAMES: tuple[str, ...] = tuple(spec[0] for spec in ENSEMBLE_FEATURE_SPECS)
+# The "D" subset has ~2 years of history; the quote/chain/breadth/flow/events
+# subset (options intelligence, institutional flow, market breadth) only
+# started being collected in the last ~1-2 days of this project's own build
+# history (verified live 2026-07-17: every one of those features' first-ever
+# row is between 2026-07-15 23:17 and 2026-07-16 14:55). Coverage is gated on
+# this "core" subset alone -- the newer features are still included in every
+# training row whenever available (mean-imputed otherwise, the existing
+# convention), they just can't be a REQUIREMENT for a row to qualify, or no
+# historical label before ~2026-07-16 could ever pass and training could
+# never produce a model until ~40 days of new-feature history accumulates.
+# Self-maintaining: any future D-timeframe addition to ENSEMBLE_FEATURE_SPECS
+# automatically becomes core, any non-D addition automatically stays optional.
+CORE_FEATURE_NAMES: tuple[str, ...] = tuple(
+    name for name, _, timeframe in ENSEMBLE_FEATURE_SPECS if timeframe == "D"
+)
 
 
 # --- Pure math: disagreement / uncertainty / blending -----------------------
@@ -207,10 +222,20 @@ def assemble_dataset(
     feature_series: Mapping[str, Sequence[tuple[datetime, float]]],
     feature_names: Sequence[str] = FEATURE_NAMES,
     min_coverage: float = MIN_FEATURE_COVERAGE,
+    core_feature_names: Sequence[str] = CORE_FEATURE_NAMES,
 ) -> list[TrainingRow]:
     """One row per label with enough feature coverage as-of its entry_ts.
     Labels are pre-filtered by label_quality upstream (train()); this
-    function only gates on feature availability."""
+    function only gates on feature availability.
+
+    Coverage is checked against `core_feature_names` (the long-history "D"
+    subset) only -- newer, shorter-history features are still opportunistically
+    included in `values` whenever available, they just aren't REQUIRED for a
+    row to qualify. Gating on the full feature list would mean no label
+    predating a feature's very first collected row could ever qualify; with
+    several features only ~1-2 days old against ~2 years of label history,
+    that would make training impossible until the newer features accumulate
+    ~40 days of their own history."""
     rows: list[TrainingRow] = []
     for label in labels:
         values: dict[str, float] = {}
@@ -218,7 +243,8 @@ def assemble_dataset(
             value = _as_of_value(feature_series.get(name, ()), label.entry_ts)
             if value is not None:
                 values[name] = value
-        if len(values) / len(feature_names) < min_coverage:
+        core_present = sum(1 for name in core_feature_names if name in values)
+        if core_present / len(core_feature_names) < min_coverage:
             continue
         target = 1 if label.label in ("win", "partial_success") else 0
         rows.append(TrainingRow(ts=label.entry_ts, features=values, label=target))

@@ -96,18 +96,44 @@ def test_assemble_dataset_uses_the_last_value_at_or_before_entry_ts() -> None:
         ]
     }
     labels = [make_label(1, "win")]  # entry_ts == BASE_TS + 1 day
-    rows = assemble_dataset(labels, series, feature_names=("price_momentum_20",), min_coverage=1.0)
+    rows = assemble_dataset(
+        labels, series, feature_names=("price_momentum_20",), min_coverage=1.0,
+        core_feature_names=("price_momentum_20",),
+    )
     assert len(rows) == 1
     assert rows[0].features["price_momentum_20"] == 1.0
 
 
 def test_assemble_dataset_drops_rows_below_coverage_threshold() -> None:
+    """Coverage is gated on core_feature_names specifically -- a row can
+    qualify with `b` entirely missing as long as the core set is covered."""
     series = {"a": [(BASE_TS, 1.0)], "b": []}
     labels = [make_label(1, "win")]
-    rows = assemble_dataset(labels, series, feature_names=("a", "b"), min_coverage=1.0)
+    rows = assemble_dataset(
+        labels, series, feature_names=("a", "b"), min_coverage=1.0,
+        core_feature_names=("a", "b"),
+    )
     assert rows == []
-    rows = assemble_dataset(labels, series, feature_names=("a", "b"), min_coverage=0.5)
+    rows = assemble_dataset(
+        labels, series, feature_names=("a", "b"), min_coverage=0.5,
+        core_feature_names=("a", "b"),
+    )
     assert len(rows) == 1
+
+
+def test_assemble_dataset_coverage_ignores_non_core_features() -> None:
+    """A feature outside core_feature_names being entirely absent must not
+    block a row that has full core coverage -- this is the actual fix for
+    DEBT-13: quote/chain/breadth/flow/events features only ~1-2 days old
+    must not gate out ~2 years of otherwise-usable D-timeframe history."""
+    series = {"core_a": [(BASE_TS, 1.0)], "new_feature": []}
+    labels = [make_label(1, "win")]
+    rows = assemble_dataset(
+        labels, series, feature_names=("core_a", "new_feature"), min_coverage=1.0,
+        core_feature_names=("core_a",),
+    )
+    assert len(rows) == 1
+    assert rows[0].features == {"core_a": 1.0}
 
 
 def test_assemble_dataset_maps_win_and_partial_success_to_one() -> None:
