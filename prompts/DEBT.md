@@ -361,7 +361,7 @@ existing `regime_history`/`feature_quality_history` endpoint pattern.
 **Logged:** 2026-07-16 (Volume 4 postflight,
 `docs/volumes/postflight-vol4-2026-07-16.md`).
 
-### DEBT-13 · Volume 5's decision pipeline beyond candidate generation has never run live
+### DEBT-13 · Volume 5's decision pipeline beyond candidate generation has never run live (1 of 11 links fixed: Ensemble Prediction)
 **What:** All 16 Volume 5 modules exist in code (`app/prediction/`), but
 `main.py` schedules exactly one job (`prediction.candidate_generation`,
 covering Prompts 5.1-5.3 only). Checked every remaining module's own
@@ -376,6 +376,42 @@ outside of ad-hoc calls made during this investigation. (5.5 Triple Barrier
 Labeling is a deliberate exception -- on-demand training-data generator by
 design, not a live signal.)
 
+**Ensemble Prediction (5.6) fixed 2026-07-17.** First live `train()` call
+(HDFCBANK) produced `n_samples=0` -- every one of 470 quality-filtered
+labels failed the 60%-feature-coverage gate, because `ENSEMBLE_FEATURE_SPECS`
+mixes 16 D-timeframe features with ~2 years of history against 14 quote/
+chain/breadth/flow/events features (options intelligence, institutional
+flow, market breadth) that only started being collected ~1-2 days earlier
+in this project's own build history -- confirmed live, every one of those
+14 features' first-ever row falls between 2026-07-15 23:17 and 2026-07-16
+14:55. No historical label could ever have reached 60% coverage across all
+30 features; training could not have produced a model until ~40 days from
+now regardless of retries. Not a bug in the point-in-time join itself
+(correctly returns None for a feature that didn't exist yet). Fixed by
+gating coverage on `CORE_FEATURE_NAMES` (the D-timeframe subset, derived
+from `ENSEMBLE_FEATURE_SPECS` itself, not a second hand-maintained list) --
+newer features stay opportunistically included via the existing mean-
+imputation convention, they're just not required. Re-verified live
+post-fix: `train()` now produces 470 samples / 94 holdout / 3 real models
+(random_forest 0.5426, extra_trees 0.4468, logistic_regression 0.4574
+holdout accuracy -- plausible, not suspiciously perfect, for daily-
+direction prediction). `predict()` persists genuine
+`ensemble_prediction.result` rows (0 -> 5 during this verification).
+Scheduled `prediction.ensemble_training_sweep` (after-hours-gated, same
+pattern as DEBT-9's `feature_selection_sweep`, using the
+container-resolved singleton so trained models stay cached in memory for
+every subsequent `predict()` call). Confirmed registered live
+(`next_run_time` computed correctly to land after today's close). The
+scheduled trigger's own first live fire hadn't been directly observed as
+of this note (deployed mid-session, market open) -- only the manual
+verification calls above are confirmed; worth confirming the sweep
+itself fired cleanly at its first post-close tick.
+
+**Remaining scope: Multi-Horizon Prediction (5.4) and the 9 modules from
+Calibration (5.7) through Explainability Report (5.16)** -- Calibration
+specifically now has real input to calibrate against (5.6's
+`calibration_pairs`) for the first time, making it the natural next link.
+
 Confirmed genuinely "never scheduled" rather than "broken": manually
 invoked `GET /prediction/conviction/MARUTI` against a real live candidate.
 Returns HTTP 200 with a structured result -- the code runs, degrades
@@ -385,7 +421,12 @@ gracefully (I-8 held) -- but 3 of Conviction's 9 weighted evidence sources
 confidence: 0.0`, the default-degradation value, because no ensemble model
 has ever been trained (`ensemble.py` has no model persistence mechanism at
 all beyond the never-written result event) and nothing downstream of it has
-real input to compute from.
+real input to compute from. **Still true even after the 2026-07-17 Ensemble
+fix below** -- `calibrated_probability` names Calibration's (5.7) output
+specifically, not Ensemble's raw probability directly, and Calibration
+itself is still unscheduled/unwired to Ensemble's now-real
+`calibration_pairs`; re-verify conviction's live evidence sources once 5.7
+lands, don't assume this is fixed by the Ensemble chunk alone.
 
 **Risk while open:** Volume 5's own framing calls itself "the decision-
 making core of QuantStack -- the 'brain' of the platform." That brain has
@@ -399,14 +440,15 @@ at all. Misleading explainability, even in a fail-safe direction, is still
 a problem for Ch.16's "Reason Codes" requirement.
 **Expiry condition:** Before any Volume 5.5+ or Volume 6 work proceeds, or
 before citing Volume 5's roadmap "✅" status without a linked postflight
-that specifically re-verifies this pipeline runs live. Resolve by training
-a real ensemble model and scheduling calibration/agreement/market-context/
-conviction/qualification/priority into a live job (either folded into
-`candidate_generation_sweep` or a closely-following one), then verifying
-with live evidence that a real signal travels end-to-end with genuine
-(non-default) evidence behind every weighted input.
+that specifically re-verifies this pipeline runs live. Resolve the
+remaining scope by wiring Calibration next (real `calibration_pairs` now
+exist to fit against), then Agreement/Historical-Similarity/Market-Context/
+Conviction/Qualification/Priority into a live job, verifying at each step
+with live evidence that genuine (non-default) evidence flows end-to-end.
 **Logged:** 2026-07-16 (Volume 5 preflight,
-`docs/volumes/preflight-vol5-2026-07-16.md`).
+`docs/volumes/preflight-vol5-2026-07-16.md`); Ensemble Prediction (5.6)
+fixed and scheduled 2026-07-17 (`b41f3dd` coverage-gate fix, `0bc6338`
+scheduling).
 
 ---
 
