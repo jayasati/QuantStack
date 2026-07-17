@@ -407,10 +407,47 @@ of this note (deployed mid-session, market open) -- only the manual
 verification calls above are confirmed; worth confirming the sweep
 itself fired cleanly at its first post-close tick.
 
-**Remaining scope: Multi-Horizon Prediction (5.4) and the 9 modules from
-Calibration (5.7) through Explainability Report (5.16)** -- Calibration
-specifically now has real input to calibrate against (5.6's
-`calibration_pairs`) for the first time, making it the natural next link.
+**Switched to intraday (5m/30min-hold) 2026-07-17, same day**, per explicit
+user direction: this project's actual purpose is same-day F&O trading, and
+a 10-trading-day D-bar hold was never serving that. Added 9
+`IntradayRiskFeatureEngine` features to `ENSEMBLE_FEATURE_SPECS` at their
+native 5m timeframe (auxiliary, same coverage-gate treatment as the
+quote/chain set -- these features are equally recent, but 5m *candles* go
+back to 2026-07-07, ~7-8 trading days, confirmed live, independent of how
+recent the features themselves are). Verified the barrier-sizing math is
+genuinely timeframe-agnostic first (`trailing_volatility()` computes
+per-bar, never-annualized realized vol, no daily-percentage assumption
+baked in) -- but found and documented one real v1 calibration gap:
+`MIN_TRAILING_VOL=0.002` was tuned for daily bars and sits close to real
+5m per-bar volatility (measured live: mean 0.0022, often at the floor), so
+5m barrier width is less differentiated than for D bars. Not fixed here.
+
+Re-verified live with the new config: `train('HDFCBANK', timeframe='5m',
+max_holding_bars=6)` produces 474 samples / 95 holdout / 3 models with
+holdout accuracy 64.2%/73.7%/71.6% -- **notably higher than the D-bar
+model's 54.3%/44.7%/45.7%, and this needs an honest caveat, not a
+celebration:** entries are generated every 5m bar with a 30-minute (6-bar)
+holding window, so adjacent labels' outcome windows overlap by up to 25
+minutes. This is materially more samples, but not materially more
+*independent* information -- part of the accuracy lift plausibly reflects
+short-term autocorrelation the model can exploit across overlapping
+windows, not a stronger genuine edge. Not de-overlapped or sample-weighted
+in this chunk (the standard fix, per Lopez de Prado's triple-barrier
+literature this design already follows) -- worth doing before trusting
+these specific accuracy numbers for anything real. `predict()` persists
+genuine predictions (probability 0.1053, confidence 0.7066, disagreement
+0.041 for HDFCBANK/long -- a real, non-default read). Live event count:
+0 -> 6 `ensemble_prediction.result` rows across both timeframes' manual
+verification this session. `prediction.ensemble_training_sweep` (main.py)
+now trains on 5m/6-bar live, D-bar path still exists in the engine but is
+no longer scheduled.
+
+**Remaining scope: Multi-Horizon Prediction (5.4), de-overlapping/sample-
+weighting for the 5m label set (new, from this same-day follow-up), and
+the 9 modules from Calibration (5.7) through Explainability Report
+(5.16)** -- Calibration specifically now has real input to calibrate
+against (5.6's `calibration_pairs`) for the first time, making it the
+natural next functional link.
 
 Confirmed genuinely "never scheduled" rather than "broken": manually
 invoked `GET /prediction/conviction/MARUTI` against a real live candidate.
