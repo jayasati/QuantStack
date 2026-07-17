@@ -167,6 +167,52 @@ async def lifespan(app: FastAPI):
         next_run_time=datetime.now(UTC),
     )
 
+    async def ensemble_training_sweep() -> None:
+        """Train (or reuse an already-cached) ensemble and persist a fresh
+        prediction per watchlist symbol (Prompt 5.6, DEBT-13) -- previously
+        reachable only via POST /prediction/ensemble/{symbol}/train, never
+        scheduled, so ensemble_prediction.result had zero live rows despite
+        the engine's own code being correct (first live train() call found
+        and fixed a real bug: the feature-coverage gate required 60% across
+        30 features, 14 of which only started existing ~1-2 days ago, so no
+        historical label could ever qualify -- see DEBT-13/DEBT.md).
+
+        Uses the container-resolved singleton, not a fresh instance, so a
+        trained ensemble stays cached in memory (EnsemblePredictionEngine's
+        own in-memory-only design, no blob store in this codebase) for
+        every subsequent predict() call this process serves, whether from
+        this sweep, the API, or downstream Volume 5 stages.
+
+        Same after-hours gate and reasoning as feature_selection_sweep:
+        training fits against timeframe="D" labels/features that only
+        change once/day, live-measured ~3.5s/symbol -- no upside to running
+        or re-running mid-session, and the CPU cost is real at 25-symbol
+        scale (matches this box's already-documented capacity ceiling,
+        DEBT-7/DEBT-8/DEBT-9)."""
+        from app.collectors.base import is_nse_market_open
+        from app.prediction.ensemble import EnsemblePredictionEngine
+
+        if is_nse_market_open():
+            return
+        engine = container.resolve(EnsemblePredictionEngine)
+        for symbol in settings.watchlist:
+            try:
+                await engine.predict(symbol)
+            except Exception as exc:
+                logger.error(
+                    "ensemble training sweep failed",
+                    extra={"symbol": symbol, "error": str(exc)},
+                )
+
+    scheduler.add_job(
+        ensemble_training_sweep,
+        trigger="interval",
+        seconds=settings.ensemble_training_interval,
+        id="prediction.ensemble_training_sweep",
+        replace_existing=True,
+        next_run_time=datetime.now(UTC),
+    )
+
     # CandidateGenerationEngine.generate() reads each watchlist symbol's
     # Market State Report via report_as_of() -- a persisted-read, not a live
     # compute -- so without a scheduled writer that report (and therefore

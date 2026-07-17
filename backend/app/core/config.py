@@ -190,6 +190,12 @@ class Settings(BaseSettings):
     # (DEBT-1) -- anything faster than a few hours re-ranks against
     # unchanged data for pure CPU cost.
     feature_selection_interval: int = 21600
+    # Ensemble training/prediction sweep interval, seconds (Prompt 5.6,
+    # DEBT-13). Same cadence reasoning as feature_selection_interval:
+    # training fits against timeframe="D" labels/features that only change
+    # once/day, so anything faster just re-trains against unchanged data
+    # for real CPU cost (~3.5s/symbol measured live 2026-07-17).
+    ensemble_training_interval: int = 21600
     # Number of OS processes serving this app (e.g. `uvicorn --workers N` /
     # gunicorn worker count). MUST be kept truthful by whoever changes the
     # deploy command -- OpportunityLifecycleManager's in-process asyncio.Lock
