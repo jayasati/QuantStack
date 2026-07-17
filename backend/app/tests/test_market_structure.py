@@ -156,3 +156,15 @@ def test_registration_and_z_companions() -> None:
     assert all(d.version == "v1" for d in definitions)
     order = engine.registry.dependency_order()
     assert order.index("ms_structural_bias") < order.index("ms_breakout_probability")
+
+
+async def test_run_only_runs_the_session_pass_on_daily_timeframe() -> None:
+    """Found live 2026-07-17 while adding "5m" to feature_timeframes
+    (I-1/intraday-heavy work): _run_session_features always loads its own
+    fixed intraday timeframe regardless of what run() was called with, so
+    it must only fire once per cycle, not once per configured timeframe."""
+    engine = MarketStructureEngine(session_factory=None)
+    daily_result = await engine.run("NIFTY", timeframe="D")
+    intraday_result = await engine.run("NIFTY", timeframe="5m")
+    assert "session_pass" in daily_result
+    assert "session_pass" not in intraday_result

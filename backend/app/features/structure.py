@@ -502,9 +502,19 @@ class MarketStructureEngine(BaseFeatureEngine):
         regeneration item) only date-range the primary OHLCV pass
         (`super().run()`) -- the intraday session pass loads its own fixed
         intraday-timeframe window, a separate scope this chunk doesn't
-        extend (documented boundary, not an oversight)."""
+        extend (documented boundary, not an oversight).
+
+        The primary pass genuinely benefits from running at every
+        configured timeframe (D and 5m both compute real, different
+        structure features) -- but `_run_session_features` always loads
+        its own fixed `feature_intraday_timeframe` regardless of the
+        `timeframe` argument, so it must only fire once per cycle, not
+        once per configured timeframe (found live 2026-07-17 while adding
+        "5m" to feature_timeframes; same redundancy class as options.py's
+        guard, invisible until a second timeframe value ever existed)."""
         summary = await super().run(symbol, timeframe, full=full, start=start, end=end)
-        summary["session_pass"] = await self._run_session_features(symbol, full=full)
+        if timeframe == "D":
+            summary["session_pass"] = await self._run_session_features(symbol, full=full)
         return summary
 
     async def _run_session_features(self, symbol: str, full: bool = False) -> dict:

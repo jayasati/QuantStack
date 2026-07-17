@@ -17,6 +17,46 @@ Rules:
 
 ## Active
 
+### DEBT-15 · 8 feature engines now compute at 5m (I-1 progress) but the intelligence layer doesn't read any of it yet — a new, deliberate I-2 gap
+**What:** `feature_timeframes` changed from `["D"]` to `["D", "5m"]`
+(`Settings`/`configs/default.yaml`, 2026-07-17) so price/volume/volatility/
+liquidity/options/structure/risk/relative_strength (the 8 engines using
+`BaseFeatureEngine.run_all()`'s default loop, either directly or via their
+own override that still iterates `feature_timeframes`) now genuinely
+compute and store real 5m-resolution features, not just the narrow
+9-feature `IntradayRiskFeatureEngine` overlay DEBT-1 already blends. Three
+redundant-computation bugs this change would otherwise have exposed
+(options/structure's session pass/liquidity's quote+delivery pass all
+ignore `timeframe` and would have silently doubled their own cost once a
+second timeframe value ever existed) were found and fixed as part of this
+same chunk, live-verified via `EXPLAIN ANALYZE` and a clean after-hours
+latency baseline before deploying (5.7-6.5s, matching the existing DEBT-7
+reference range, not degraded).
+
+**Risk while open:** every intelligence-layer engine that reads these
+features (trend/market_structure/volatility/relative_strength via
+`FeatureStore.latest(symbol, timeframe="D")`, hardcoded) still only reads
+the "D" row. The new 5m data is real, stored, and readable via the API --
+but nothing in `app/intelligence/` consumes it yet. This is a genuine I-2
+violation, logged deliberately rather than left implicit: wiring it in
+means extending DEBT-1's existing intraday-overlay blend mechanism (or a
+new one) to read these engines' own native 5m output, not just
+`IntradayRiskFeatureEngine`'s 9 session-relative features -- real design
+work on its own, not a trivial follow-up, and explicitly NOT done in this
+chunk to avoid rushing a change to live signal-generation logic.
+
+**Expiry condition:** When intelligence-layer consumption of these 8
+engines' 5m output is next worked, or before citing I-1 as HELD (it stays
+VIOLATED -- more raw intraday data exists now, but nothing in the
+decision-making layer reads it, which is the actual substance of I-1).
+Also expires if a real market-hours capacity check (this chunk was only
+verified after-hours, market closed at the time) finds the doubled
+feature-engine load pushes `/prediction/candidates` materially past its
+existing DEBT-7 baseline -- re-check live during the next trading session,
+matching the DEBT-8 precedent for exactly this kind of after-hours-only
+verification gap.
+**Logged:** 2026-07-17.
+
 ### DEBT-14 · Composite/conviction scenario tests broken by today's 5m-ensemble fixture change — I-11 gate was red before this chunk started, not caused by it
 **What:** Discovered while running the full local suite (I-11) as part of
 the data-foundation model-registry chunk (2026-07-17, preflight in

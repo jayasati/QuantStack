@@ -42,6 +42,17 @@ hours check (watching the blended read visibly change across consecutive
 5-minute ticks during an actual session) hasn't been done yet. Upgrade to
 HELD only after that market-hours check.
 
+**More raw data, same gap, 2026-07-17:** `feature_timeframes` now includes
+"5m" (DEBT-15), so price/volume/volatility/liquidity/structure/risk/
+relative_strength genuinely compute at 5m resolution, not just the narrow
+9-feature `IntradayRiskFeatureEngine` overlay. This does NOT move I-1
+toward HELD — every intelligence-layer read is still hardcoded to
+`timeframe="D"` (DEBT-15), so the new intraday data exists and is stored
+but nothing in the decision-making layer reads it. Recording this
+precisely so "we compute 5m features now" is never mistaken for "I-1 is
+closer to resolved" — the D-only *read* pattern is I-1's actual substance,
+unchanged by adding more unread intraday *writes*.
+
 ## I-2 · Every producer has a consumer
 Every feature, table column, engine output, or event written by the system
 must have at least one downstream consumer, or a DEBT.md entry naming when a
@@ -50,6 +61,9 @@ consumer will exist. Write-only outputs are dead code wearing a disguise.
 **Status: VIOLATED** — `IntradayRiskFeatureEngine` writes 5m-timeframe
 features nothing in Volume 4/5 reads (DEBT-2). Historical precedent:
 `CompositeMarketIntelligenceEngine` sat unwired for weeks (since fixed).
+**New instance, 2026-07-17:** 8 more engines' 5m output joins the same
+unconsumed pile (DEBT-15) — deliberately logged with an expiry condition
+at write time, not discovered later the way DEBT-2 was.
 
 ## I-3 · No unbounded reads at production scale
 Any query against feature_store / market_events / ohlcv_candles must be

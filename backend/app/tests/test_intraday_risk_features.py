@@ -176,3 +176,19 @@ async def test_run_uses_intraday_timeframe_not_daily() -> None:
     result = await engine.run("NIFTY")  # no session_factory -> _load_candles returns []
     assert result["timeframe"] == engine._settings.feature_intraday_timeframe
     assert result["skipped"] is True
+
+
+async def test_run_falls_back_to_intraday_default_given_an_incompatible_timeframe() -> None:
+    """Found live 2026-07-17: POST /features/run/{symbol} (api/features.py)
+    iterates every engine under one shared timeframe query param, default
+    "D" -- this engine only ever supports intraday timeframes and crashed
+    the whole multi-engine endpoint the first time it was actually
+    exercised with that default. timeframe=None already meant "use the
+    configured default"; an explicit but incompatible value ("D", or
+    anything timeframe_minutes() can't parse) must degrade the same way,
+    not raise -- an intraday-risk engine on an intraday F&O platform should
+    never silently accept a daily timeframe as a valid request."""
+    engine = IntradayRiskFeatureEngine(settings=Settings())
+    result = await engine.run("NIFTY", timeframe="D")
+    assert result["timeframe"] == engine._settings.feature_intraday_timeframe
+    assert result["skipped"] is True

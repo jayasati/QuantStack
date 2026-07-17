@@ -185,3 +185,15 @@ def test_every_feature_has_z_companion_and_registration() -> None:
     order = engine.registry.dependency_order()
     assert order.index("liquidity_score") < order.index("liquidity_trend_5")
     assert order.index("liquidity_current_spread") < order.index("liquidity_spread_pct")
+
+
+async def test_run_only_runs_quote_and_delivery_passes_on_daily_timeframe() -> None:
+    """Found live 2026-07-17 while adding "5m" to feature_timeframes
+    (I-1/intraday-heavy work): quote/delivery observations have no
+    timeframe concept of their own, so they must only fire once per cycle,
+    not once per configured timeframe."""
+    engine = LiquidityFeatureEngine(session_factory=None)
+    daily_result = await engine.run("NIFTY", timeframe="D")
+    intraday_result = await engine.run("NIFTY", timeframe="5m")
+    assert "quote_pass" in daily_result and "delivery_pass" in daily_result
+    assert "quote_pass" not in intraday_result and "delivery_pass" not in intraday_result

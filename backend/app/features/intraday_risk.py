@@ -262,8 +262,25 @@ class IntradayRiskFeatureEngine(BaseFeatureEngine):
         end: datetime | None = None,
     ) -> dict:
         """`start`/`end`: data foundation audit 2026-07-17, historical
-        regeneration item."""
+        regeneration item.
+
+        Pre-existing bug found live during this chunk's verification
+        (2026-07-17, quantstack-vm): `POST /features/run/{symbol}` iterates
+        every engine under one shared `timeframe` query param
+        (`api/features.py`), which is "D" by default -- this engine only
+        ever supports intraday timeframes ("5m"/"15m"/"1H"), so
+        `timeframe_minutes("D")` raised ValueError and crashed the whole
+        endpoint the first time it was ever actually exercised live with
+        its default timeframe. `timeframe=None` already meant "use the
+        configured default" (`feature_intraday_timeframe`); extending that
+        same fallback to "an explicit but incompatible value" is the
+        graceful-degradation convention this codebase already uses
+        elsewhere (I-8), not new behavior invented for this fix."""
         tf = timeframe or self._settings.feature_intraday_timeframe
+        try:
+            timeframe_minutes(tf)
+        except ValueError:
+            tf = self._settings.feature_intraday_timeframe
         candles = await self._load_candles(symbol, tf, start=start, end=end)
         if start is not None or end is not None:
             full = True

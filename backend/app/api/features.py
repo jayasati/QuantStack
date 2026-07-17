@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
+from app.core.logging import get_logger
 from app.features.base import BaseFeatureEngine
 from app.features.breadth import BreadthFeatureEngine
 from app.features.events import EventRiskEngine
@@ -24,6 +25,8 @@ from app.features.structure import MarketStructureEngine
 from app.features.timefeat import TimeFeatureEngine
 from app.features.volatility import VolatilityFeatureEngine
 from app.features.volume import VolumeFeatureEngine
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/features", tags=["features"])
 
@@ -427,8 +430,23 @@ async def run_feature_engines(
     """
     results = []
     for engine in _engines():
-        result = await engine.run(symbol, timeframe, **_run_kwargs(engine, full, start, end))
-        results.append({"engine": engine.name, **result})
+        try:
+            result = await engine.run(symbol, timeframe, **_run_kwargs(engine, full, start, end))
+            results.append({"engine": engine.name, **result})
+        except Exception as exc:
+            # Found live 2026-07-17: this endpoint had no per-engine
+            # isolation at all -- one engine raising 500'd the entire
+            # multi-engine call, unlike run_all()'s existing per-symbol
+            # try/except. First surfaced by IntradayRiskFeatureEngine
+            # rejecting the default timeframe="D" (now fixed at the engine
+            # level too, see its own run() docstring) -- this is the
+            # matching endpoint-level defense so a future engine-specific
+            # bug can't repeat the same full-endpoint failure.
+            logger.error(
+                "feature run failed",
+                extra={"engine": engine.name, "symbol": symbol, "error": str(exc)},
+            )
+            results.append({"engine": engine.name, "symbol": symbol, "error": str(exc)})
     return results
 
 

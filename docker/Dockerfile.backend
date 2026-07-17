@@ -1,5 +1,11 @@
 FROM python:3.12-slim
 
+WORKDIR /repo
+
+# Install dependencies first for layer caching
+COPY backend/pyproject.toml backend/pyproject.toml
+RUN pip install --no-cache-dir ./backend
+
 # Baked in at build time from the deploying host's own git state
 # (docker-compose.yml's build.args, VERIFY-COOKBOOK.md §10) -- .git itself
 # is deliberately never copied into this image (keeps it lean, avoids
@@ -7,14 +13,16 @@ FROM python:3.12-slim
 # the only way the app can know which commit it's running. Settings.git_commit
 # reads it back out via the GIT_COMMIT env var; "unknown" is the honest
 # default for a build that didn't set the arg (e.g. local dev).
+#
+# Placed AFTER the dependency-install layer above, not before: an ARG's
+# value changing invalidates every subsequent layer's cache, and
+# GIT_COMMIT changes on every single deploy -- found live 2026-07-17, a
+# deploy that should have reused cached layers instead took ~380s,
+# almost entirely re-exporting the torch/transformers install because the
+# original placement (before COPY pyproject.toml) busted that cache every
+# time. Only the code-copy layers below need to re-run per deploy anyway.
 ARG GIT_COMMIT=unknown
 ENV GIT_COMMIT=$GIT_COMMIT
-
-WORKDIR /repo
-
-# Install dependencies first for layer caching
-COPY backend/pyproject.toml backend/pyproject.toml
-RUN pip install --no-cache-dir ./backend
 
 # Application code and runtime config
 COPY backend backend

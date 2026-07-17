@@ -317,10 +317,19 @@ class LiquidityFeatureEngine(BaseFeatureEngine):
         (`super().run()`) -- quote/delivery are MarketEvent-observation-
         based with their own lookback-count loading, a different mechanism
         this chunk doesn't extend (documented scope boundary, not an
-        oversight)."""
+        oversight).
+
+        The primary candle-based pass genuinely benefits from every
+        configured timeframe -- but quote/delivery observations have no
+        timeframe concept of their own (whatever's most recently reported),
+        so they must only run once per cycle, not once per configured
+        timeframe (found live 2026-07-17 while adding "5m" to
+        feature_timeframes; same redundancy class as options.py/
+        structure.py's guards)."""
         summary = await super().run(symbol, timeframe, full=full, start=start, end=end)
-        summary["quote_pass"] = await self._run_quote_features(symbol, full=full)
-        summary["delivery_pass"] = await self._run_delivery_features(symbol, full=full)
+        if timeframe == "D":
+            summary["quote_pass"] = await self._run_quote_features(symbol, full=full)
+            summary["delivery_pass"] = await self._run_delivery_features(symbol, full=full)
         return summary
 
     async def _run_delivery_features(self, symbol: str, full: bool = False) -> dict:

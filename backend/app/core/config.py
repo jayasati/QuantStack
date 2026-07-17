@@ -107,7 +107,19 @@ class Settings(BaseSettings):
 
     # Feature engineering (Volume 3).
     feature_windows: list[int] = Field(default_factory=lambda: [5, 10, 20, 50, 100, 200])
-    feature_timeframes: list[str] = Field(default_factory=lambda: ["D"])
+    # "5m" added 2026-07-17 (I-1/intraday-heavy work): this project's actual
+    # goal is same-day F&O trading, which a D-only feature layer was never
+    # serving -- I-1 (INVARIANTS.md) has recorded this VIOLATED since
+    # 2026-07-15. Every engine using BaseFeatureEngine.run_all()'s default
+    # loop (price/volume/volatility/liquidity/options/structure/risk/
+    # relative_strength -- 8 of 16) now computes at both timeframes; the
+    # 8 market-wide/observation-based engines that override run_all() are
+    # unaffected (they don't loop over this list at all). Three engines
+    # (options, structure's session pass, liquidity's quote/delivery pass)
+    # needed a same-day guard first -- their secondary computations ignore
+    # `timeframe` entirely and would otherwise redundantly re-run once per
+    # configured value; see each one's own `run()` docstring.
+    feature_timeframes: list[str] = Field(default_factory=lambda: ["D", "5m"])
     feature_benchmark_symbol: str = "NIFTY"
     feature_engine_interval: int = 300
     # Candles loaded per run; must exceed the largest rolling window.

@@ -159,3 +159,14 @@ def test_every_feature_has_z_companion_and_registration() -> None:
     assert order.index("options_call_writing_score") < order.index(
         "options_dealer_positioning"
     )
+
+
+async def test_run_skips_non_daily_timeframes() -> None:
+    """Found live 2026-07-17 while adding "5m" to feature_timeframes
+    (I-1/intraday-heavy work): this engine's real computation ignores
+    `timeframe` entirely, so run_all()'s loop over every configured
+    timeframe would otherwise redundantly recompute the same chain
+    snapshot once per timeframe. Guarded to only actually run on "D"."""
+    engine = OptionsFeatureEngine(settings=Settings())
+    result = await engine.run("NIFTY", timeframe="5m")
+    assert result == {"symbol": "NIFTY", "timeframe": "5m", "stored": 0, "skipped": True}

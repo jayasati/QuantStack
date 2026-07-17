@@ -271,7 +271,18 @@ class OptionsFeatureEngine(BaseFeatureEngine):
         candle date range. Genuine date-range regeneration for options
         would need `_load_labeled_observations` to grow its own `since`/
         `until` bounds -- a real, separate piece of work (data foundation
-        audit 2026-07-17, historical regeneration item), not done here."""
+        audit 2026-07-17, historical regeneration item), not done here.
+
+        Guard: only actually runs on timeframe=="D" -- found live 2026-07-17
+        while adding "5m" to feature_timeframes (I-1/intraday-heavy work):
+        since this engine's real computation ignores `timeframe` entirely,
+        `run_all()`'s loop over every configured timeframe would otherwise
+        run this exact same chain-snapshot computation once per configured
+        timeframe, purely redundant CPU with zero behavior difference. This
+        was invisible while feature_timeframes only ever held one value;
+        latent, not new."""
+        if timeframe != "D":
+            return {"symbol": symbol, "timeframe": timeframe, "stored": 0, "skipped": True}
         observations = await self._load_labeled_observations(
             "options.observation", symbol, "feature",
             self._settings.feature_options_lookback,
