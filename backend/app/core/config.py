@@ -107,19 +107,24 @@ class Settings(BaseSettings):
 
     # Feature engineering (Volume 3).
     feature_windows: list[int] = Field(default_factory=lambda: [5, 10, 20, 50, 100, 200])
-    # "5m" added 2026-07-17 (I-1/intraday-heavy work): this project's actual
-    # goal is same-day F&O trading, which a D-only feature layer was never
-    # serving -- I-1 (INVARIANTS.md) has recorded this VIOLATED since
-    # 2026-07-15. Every engine using BaseFeatureEngine.run_all()'s default
-    # loop (price/volume/volatility/liquidity/options/structure/risk/
-    # relative_strength -- 8 of 16) now computes at both timeframes; the
-    # 8 market-wide/observation-based engines that override run_all() are
-    # unaffected (they don't loop over this list at all). Three engines
-    # (options, structure's session pass, liquidity's quote/delivery pass)
-    # needed a same-day guard first -- their secondary computations ignore
-    # `timeframe` entirely and would otherwise redundantly re-run once per
-    # configured value; see each one's own `run()` docstring.
-    feature_timeframes: list[str] = Field(default_factory=lambda: ["D", "5m"])
+    # "5m" was added 2026-07-17 for I-1/intraday-heavy work and reverted
+    # the same day: live-verified on quantstack-vm that the scheduled
+    # per-engine run_all() sweep (25 watchlist symbols x 7-8 engines x 2
+    # timeframes, every feature_engine_interval) cannot complete within one
+    # cycle -- "maximum number of running instances reached" repeating for
+    # PriceFeatureEngine/VolatilityFeatureEngine/LiquidityFeatureEngine/
+    # RelativeStrengthEngine/MarketStructureEngine/RiskFeatureEngine every
+    # tick, cascading into candidate_generation_sweep/market_intelligence_
+    # sweep/composite_intelligence_sweep also missing their own schedule,
+    # and /prediction/candidates degrading from a 5.7-6.5s baseline to
+    # 494-613s. An after-hours single-symbol capacity check (EXPLAIN
+    # ANALYZE, clean latency baseline) before deploying did NOT catch this
+    # -- it never exercised the full 25-symbol scheduled path, only a
+    # one-off manual call. See DEBT-15 for the real fix this needs
+    # (staggering the 5m pass onto its own schedule, like
+    # IntradayRiskFeatureEngine already has, rather than doubling the
+    # existing sweep's own per-cycle cost) before re-attempting this.
+    feature_timeframes: list[str] = Field(default_factory=lambda: ["D"])
     feature_benchmark_symbol: str = "NIFTY"
     feature_engine_interval: int = 300
     # Candles loaded per run; must exceed the largest rolling window.
