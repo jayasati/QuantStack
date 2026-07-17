@@ -304,8 +304,21 @@ class LiquidityFeatureEngine(BaseFeatureEngine):
             candles, self._settings.feature_normalization_window
         )
 
-    async def run(self, symbol: str, timeframe: str = "D", full: bool = False) -> dict:
-        summary = await super().run(symbol, timeframe, full=full)
+    async def run(
+        self,
+        symbol: str,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> dict:
+        """`start`/`end` (data foundation audit 2026-07-17, historical
+        regeneration item) only date-range the candle-based OHLCV pass
+        (`super().run()`) -- quote/delivery are MarketEvent-observation-
+        based with their own lookback-count loading, a different mechanism
+        this chunk doesn't extend (documented scope boundary, not an
+        oversight)."""
+        summary = await super().run(symbol, timeframe, full=full, start=start, end=end)
         summary["quote_pass"] = await self._run_quote_features(symbol, full=full)
         summary["delivery_pass"] = await self._run_delivery_features(symbol, full=full)
         return summary

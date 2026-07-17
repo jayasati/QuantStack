@@ -115,7 +115,10 @@ async def test_mixed_conflicting_signals_lower_conviction_vs_coherent_bullish(
     assert mixed_composite.score < coherent_composite.score
     # expected_opportunity = 100 * |overall_level| * stability -- conflicting
     # evidence pulls overall_level toward zero, so this should shrink too.
-    assert mixed_composite.metrics["expected_opportunity"] < coherent_composite.metrics["expected_opportunity"]
+    assert (
+        mixed_composite.metrics["expected_opportunity"]
+        < coherent_composite.metrics["expected_opportunity"]
+    )
 
 
 async def test_missing_data_degrades_confidence_but_does_not_crash(test_session_factory) -> None:
@@ -187,10 +190,65 @@ async def test_full_pipeline_with_real_ohlcv_history_trains_the_ensemble(
     assert training.is_trained, f"expected a trained ensemble, got n_samples={training.n_samples}"
     assert training.n_samples >= 40
 
+    # Model/dataset registry (data foundation audit 2026-07-17): a real
+    # training run against a real DB must produce a real registry row,
+    # not just an in-memory EnsembleTraining.
+    registered = await ensemble.model_registry(symbol=SYMBOL, limit=1)
+    assert registered, "expected a model_versions row for a real trained run"
+    assert registered[0]["data_hash"]
+    assert registered[0]["git_commit"] is not None
+    assert registered[0]["feature_versions"], "feature_versions provenance must be recorded"
+    assert registered[0]["feature_versions"]["price_momentum_20"] == "v1"
+
+    runs = await ensemble.retraining_history(symbol=SYMBOL, limit=1)
+    assert runs and runs[0]["status"] == "trained"
+    assert runs[0]["model_version_id"] == registered[0]["id"]
+
+    # Dataset registry (data foundation audit 2026-07-17, data-versioning
+    # item): a named, independently queryable dataset record, linked from
+    # the model that trained on it.
+    datasets = await ensemble.dataset_registry(limit=1)
+    assert datasets, "expected a dataset_versions row for a real trained run"
+    assert datasets[0]["data_hash"] == registered[0]["data_hash"]
+    assert datasets[0]["row_count"] == training.n_samples
+    assert datasets[0]["symbol_scope"] == [SYMBOL]
+    assert datasets[0]["date_range_start"] is not None
+    assert datasets[0]["date_range_end"] is not None
+
     prediction = await ensemble.predict(SYMBOL, timeframe="D", direction="long")
     assert prediction.probability > 0.5, (
         f"expected the trained ensemble to lean bullish, got probability={prediction.probability}"
     )
+
+
+async def test_identical_retrains_reuse_one_dataset_version_row(test_session_factory) -> None:
+    """Data foundation audit 2026-07-17, data-versioning item:
+    dataset_versions is get-or-create keyed on data_hash -- two train()
+    calls against unchanged underlying data must produce the SAME
+    dataset_hash and therefore share one row, not duplicate it."""
+    await write_ensemble_training_history(test_session_factory, SYMBOL, "bullish")
+    ensemble = EnsemblePredictionEngine(session_factory=test_session_factory)
+
+    await ensemble.train(SYMBOL, timeframe="D", direction="long")
+    first = await ensemble.dataset_registry(limit=10)
+
+    # A second, fresh engine instance (no in-memory cache) retrains against
+    # the identical, unchanged DB state.
+    await EnsemblePredictionEngine(session_factory=test_session_factory).train(
+        SYMBOL, timeframe="D", direction="long",
+    )
+    second = await ensemble.dataset_registry(limit=10)
+
+    assert len(second) == len(first), "a second identical train() must not add a new dataset row"
+    assert second[0]["id"] == first[0]["id"]
+
+    # But it DOES get its own retraining_runs + model_versions row, both
+    # pointing at the same shared dataset.
+    runs = await ensemble.retraining_history(symbol=SYMBOL, limit=10)
+    models = await ensemble.model_registry(symbol=SYMBOL, limit=10)
+    assert len(runs) == 2
+    assert len(models) == 2
+    assert models[0]["data_hash"] == models[1]["data_hash"]
 
 
 async def test_low_liquidity_snapshot_causes_qualification_to_reject(test_session_factory) -> None:

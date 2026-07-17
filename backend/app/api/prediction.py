@@ -172,6 +172,36 @@ async def ensemble_history(
     return await engine.recent(symbol=symbol, limit=limit)
 
 
+@router.get("/models")
+async def model_registry(
+    symbol: str | None = None, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Registered model versions, newest first -- data hash + git commit
+    provenance for every model that actually finished training (data
+    foundation audit 2026-07-17, model/dataset registry item)."""
+    engine = container.resolve(EnsemblePredictionEngine)
+    return await engine.model_registry(symbol=symbol, limit=limit)
+
+
+@router.get("/models/retraining-runs")
+async def retraining_runs(
+    symbol: str | None = None, limit: int = Query(default=50, ge=1, le=500)
+) -> list[dict]:
+    """Every train() attempt, successful or not -- complements /models,
+    which only shows attempts that produced a real model."""
+    engine = container.resolve(EnsemblePredictionEngine)
+    return await engine.retraining_history(symbol=symbol, limit=limit)
+
+
+@router.get("/datasets")
+async def dataset_registry(limit: int = Query(default=50, ge=1, le=500)) -> list[dict]:
+    """Registered training datasets, newest first -- a named, queryable
+    record of dataset provenance distinct from any one model's own
+    data_hash (data foundation audit 2026-07-17, data-versioning item)."""
+    engine = container.resolve(EnsemblePredictionEngine)
+    return await engine.dataset_registry(limit=limit)
+
+
 @router.post("/calibration/{symbol}/train")
 async def train_calibration(
     symbol: str,

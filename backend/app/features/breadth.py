@@ -22,6 +22,7 @@ Every feature ships a look-ahead-safe rolling z-score companion (_z).
 """
 
 from collections.abc import Sequence
+from datetime import datetime
 from statistics import fmean
 
 from app.core.logging import get_logger
@@ -191,9 +192,18 @@ class BreadthFeatureEngine(BaseFeatureEngine):
         return {}  # breadth features live on collector-run time, not bars
 
     async def run(
-        self, symbol: str = MARKET_SYMBOL, timeframe: str = "D", full: bool = False
+        self,
+        symbol: str = MARKET_SYMBOL,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> dict:
         """Breadth is market-wide: the symbol/timeframe arguments are ignored
+        (as are start/end -- this engine's `_load_labeled_observations` is a
+        lookback-COUNT read from MarketEvent, not a candle date range;
+        accepted here only for signature compatibility with the base class,
+        data foundation audit 2026-07-17, historical regeneration item)
         in favor of MARKET/"breadth"."""
         observations = await self._load_labeled_observations(
             "breadth.observation", MARKET_SYMBOL, "metric",
@@ -214,7 +224,9 @@ class BreadthFeatureEngine(BaseFeatureEngine):
             MARKET_SYMBOL, BREADTH_TIMEFRAME, [s.ts for s in snapshots], series, full=full
         )
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self, full: bool = False, start: datetime | None = None, end: datetime | None = None,
+    ) -> list[dict]:
         """One market-wide run — the watchlist does not apply here."""
         try:
             return [await self.run()]

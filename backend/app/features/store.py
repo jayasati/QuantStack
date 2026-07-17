@@ -124,6 +124,15 @@ class FeatureStore:
     async def _write_offline(self, values: list[FeatureValue]) -> int:
         if self._sessions is None or not values:
             return 0
+        # Stamped once for the whole batch, not per-value: "when this batch
+        # was (re)written," distinct from `ts` (observation time) and the
+        # inherited `created_at` (insert-only -- server_default=func.now()
+        # does NOT refresh on an ON CONFLICT UPDATE, so it can't serve this
+        # purpose for a full=True re-upsert of an already-existing row).
+        # Included in the upsert's own `set_` below so it refreshes on
+        # every re-write, not just first insert (data foundation audit
+        # 2026-07-17, feature-row metadata item).
+        last_updated = datetime.now(UTC)
         rows = [
             {
                 "feature_name": v.feature_name,
@@ -133,6 +142,9 @@ class FeatureStore:
                 "ts": v.ts,
                 "value": v.value,
                 "window_size": v.window,
+                "collector_version": v.collector_version,
+                "last_updated": last_updated,
+                "feature_quality_score": v.feature_quality_score,
             }
             for v in values
         ]
@@ -145,7 +157,12 @@ class FeatureStore:
                         index_elements=[
                             "feature_name", "feature_version", "symbol", "timeframe", "ts"
                         ],
-                        set_={"value": stmt.excluded.value},
+                        set_={
+                            "value": stmt.excluded.value,
+                            "collector_version": stmt.excluded.collector_version,
+                            "last_updated": stmt.excluded.last_updated,
+                            "feature_quality_score": stmt.excluded.feature_quality_score,
+                        },
                     )
                 )
             await session.commit()
@@ -223,9 +240,23 @@ class FeatureStore:
             return False
         return await self._cache.set_safe(key, payload, ttl_seconds=self._online_ttl)
 
-    async def latest(self, symbol: str, timeframe: str) -> dict[str, Any]:
-        """Latest value per feature: Redis first, offline store as fallback."""
-        if self._cache is not None:
+    async def latest(
+        self, symbol: str, timeframe: str, version: str | None = None
+    ) -> dict[str, Any]:
+        """Latest value per feature: Redis first, offline store as fallback.
+
+        `version`, when given, pins the result to one feature_version
+        instead of "whichever row is newest regardless of version" (the
+        default, unchanged) -- data foundation audit 2026-07-17, feature-
+        versioning item. Matters once a feature's calculation logic bumps
+        version: without pinning, a consumer reading mid-rollout (some
+        symbols already on v2, others still catching up on v1) gets an
+        ambiguous mix depending purely on write timing. Bypasses the Redis
+        fast path when set (the online cache holds one unversioned blob per
+        symbol/timeframe, per _write_online's own merge logic) and always
+        reads the offline store instead -- correctness over latency for a
+        caller that specifically asked to pin."""
+        if version is None and self._cache is not None:
             cached = await self._cache.get_safe(_online_key(symbol, timeframe))
             if cached:
                 return cached
@@ -243,18 +274,24 @@ class FeatureStore:
             # to LATEST_LOOKBACK_DAYS -- see its own comment for why this
             # bound is load-bearing, not optional, at real production scale.
             since = datetime.now(UTC) - timedelta(days=LATEST_LOOKBACK_DAYS)
+            filters = [
+                FeatureStoreRow.symbol == symbol,
+                FeatureStoreRow.timeframe == timeframe,
+                FeatureStoreRow.ts >= since,
+            ]
+            if version is not None:
+                filters.append(FeatureStoreRow.feature_version == version)
             result = await session.execute(
                 select(
                     FeatureStoreRow.feature_name,
                     FeatureStoreRow.value,
                     FeatureStoreRow.feature_version,
                     FeatureStoreRow.ts,
+                    FeatureStoreRow.collector_version,
+                    FeatureStoreRow.last_updated,
+                    FeatureStoreRow.feature_quality_score,
                 )
-                .where(
-                    FeatureStoreRow.symbol == symbol,
-                    FeatureStoreRow.timeframe == timeframe,
-                    FeatureStoreRow.ts >= since,
-                )
+                .where(*filters)
                 .distinct(FeatureStoreRow.feature_name)
                 .order_by(FeatureStoreRow.feature_name, desc(FeatureStoreRow.ts))
             )
@@ -264,6 +301,9 @@ class FeatureStore:
                 "value": row.value,
                 "version": row.feature_version,
                 "ts": row.ts.isoformat(),
+                "collector_version": row.collector_version,
+                "last_updated": row.last_updated.isoformat() if row.last_updated else None,
+                "feature_quality_score": row.feature_quality_score,
             }
             for row in rows
         }
@@ -302,6 +342,9 @@ class FeatureStore:
             FeatureStoreRow.ts,
             FeatureStoreRow.value,
             FeatureStoreRow.window_size,
+            FeatureStoreRow.collector_version,
+            FeatureStoreRow.last_updated,
+            FeatureStoreRow.feature_quality_score,
         ).where(FeatureStoreRow.feature_name == feature_name)
         if symbol is not None:
             query = query.where(FeatureStoreRow.symbol == symbol)
@@ -323,6 +366,9 @@ class FeatureStore:
                 "ts": row.ts if raw_ts else row.ts.isoformat(),
                 "value": row.value,
                 "window": row.window_size,
+                "collector_version": row.collector_version,
+                "last_updated": row.last_updated.isoformat() if row.last_updated else None,
+                "feature_quality_score": row.feature_quality_score,
             }
             for row in rows
         ]

@@ -52,7 +52,7 @@ def _synthetic_candles(n: int = 10) -> list[Candle]:
 async def test_run_offloads_compute_and_does_not_block_the_event_loop(monkeypatch) -> None:
     engine = _SlowFeatureEngine(session_factory=None)
 
-    async def fake_load_candles(symbol: str, timeframe: str) -> list[Candle]:
+    async def fake_load_candles(symbol: str, timeframe: str, start=None, end=None) -> list[Candle]:
         return _synthetic_candles()
 
     monkeypatch.setattr(engine, "_load_candles", fake_load_candles)
@@ -86,7 +86,7 @@ async def test_run_offloads_compute_and_does_not_block_the_event_loop(monkeypatc
     # removed, because the damage is entirely in the start-to-first-tick
     # gap). Prepending `start` makes that gap visible.
     assert len(heartbeat_times) > 5
-    gaps = [b - a for a, b in zip([start, *heartbeat_times], heartbeat_times)]
+    gaps = [b - a for a, b in zip([start, *heartbeat_times], heartbeat_times, strict=False)]
     max_gap = max(gaps)
     assert max_gap < SLOW_COMPUTE_SECONDS / 2, (
         f"largest gap before/between heartbeats was {max_gap:.3f}s (compute "

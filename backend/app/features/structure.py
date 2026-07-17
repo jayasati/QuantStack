@@ -490,8 +490,20 @@ class MarketStructureEngine(BaseFeatureEngine):
             self._settings.feature_normalization_window,
         )
 
-    async def run(self, symbol: str, timeframe: str = "D", full: bool = False) -> dict:
-        summary = await super().run(symbol, timeframe, full=full)
+    async def run(
+        self,
+        symbol: str,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> dict:
+        """`start`/`end` (data foundation audit 2026-07-17, historical
+        regeneration item) only date-range the primary OHLCV pass
+        (`super().run()`) -- the intraday session pass loads its own fixed
+        intraday-timeframe window, a separate scope this chunk doesn't
+        extend (documented boundary, not an oversight)."""
+        summary = await super().run(symbol, timeframe, full=full, start=start, end=end)
         summary["session_pass"] = await self._run_session_features(symbol, full=full)
         return summary
 

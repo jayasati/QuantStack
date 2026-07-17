@@ -17,6 +17,7 @@ from app.prediction.ensemble import (
     assemble_dataset,
     blend_predictions,
     blended_probabilities,
+    dataset_hash,
     disagreement_score,
     feature_stats,
     predict_from_training,
@@ -161,6 +162,54 @@ def test_intraday_5m_features_are_auxiliary_not_core() -> None:
     assert intraday_names, "expected at least one 5m feature spec"
     assert intraday_names.isdisjoint(CORE_FEATURE_NAMES)
     assert intraday_names.issubset(FEATURE_NAMES)
+
+
+# --- dataset hash (model registry data_hash provenance) --------------------
+
+
+def test_dataset_hash_is_deterministic_for_identical_input() -> None:
+    rows = [
+        TrainingRow(ts=BASE_TS, features={"a": 1.0, "b": 2.0}, label=1),
+        TrainingRow(ts=BASE_TS + timedelta(minutes=5), features={"a": 3.0}, label=0),
+    ]
+    assert dataset_hash(rows, feature_names=("a", "b")) == dataset_hash(
+        rows, feature_names=("a", "b")
+    )
+
+
+def test_dataset_hash_is_insensitive_to_feature_dict_insertion_order() -> None:
+    row_ab = TrainingRow(ts=BASE_TS, features={"a": 1.0, "b": 2.0}, label=1)
+    row_ba = TrainingRow(ts=BASE_TS, features={"b": 2.0, "a": 1.0}, label=1)
+    assert dataset_hash([row_ab], feature_names=("a", "b")) == dataset_hash(
+        [row_ba], feature_names=("a", "b")
+    )
+
+
+def test_dataset_hash_changes_when_a_value_changes() -> None:
+    rows_a = [TrainingRow(ts=BASE_TS, features={"a": 1.0}, label=1)]
+    rows_b = [TrainingRow(ts=BASE_TS, features={"a": 1.5}, label=1)]
+    assert dataset_hash(rows_a, feature_names=("a",)) != dataset_hash(
+        rows_b, feature_names=("a",)
+    )
+
+
+def test_dataset_hash_changes_when_a_label_changes() -> None:
+    rows_a = [TrainingRow(ts=BASE_TS, features={"a": 1.0}, label=1)]
+    rows_b = [TrainingRow(ts=BASE_TS, features={"a": 1.0}, label=0)]
+    assert dataset_hash(rows_a, feature_names=("a",)) != dataset_hash(
+        rows_b, feature_names=("a",)
+    )
+
+
+def test_dataset_hash_changes_when_row_count_changes() -> None:
+    row = TrainingRow(ts=BASE_TS, features={"a": 1.0}, label=1)
+    assert dataset_hash([row], feature_names=("a",)) != dataset_hash(
+        [row, row], feature_names=("a",)
+    )
+
+
+def test_dataset_hash_of_empty_rows_is_stable() -> None:
+    assert dataset_hash([], feature_names=("a",)) == dataset_hash([], feature_names=("a",))
 
 
 # --- feature stats ---------------------------------------------------------
@@ -330,3 +379,26 @@ async def test_predict_without_a_db_returns_a_neutral_prediction() -> None:
 async def test_recent_returns_empty_list_without_a_session_factory() -> None:
     engine = EnsemblePredictionEngine(session_factory=None)
     assert await engine.recent("NIFTY") == []
+
+
+async def test_model_registry_returns_empty_list_without_a_session_factory() -> None:
+    engine = EnsemblePredictionEngine(session_factory=None)
+    assert await engine.model_registry("NIFTY") == []
+
+
+async def test_retraining_history_returns_empty_list_without_a_session_factory() -> None:
+    engine = EnsemblePredictionEngine(session_factory=None)
+    assert await engine.retraining_history("NIFTY") == []
+
+
+async def test_dataset_registry_returns_empty_list_without_a_session_factory() -> None:
+    engine = EnsemblePredictionEngine(session_factory=None)
+    assert await engine.dataset_registry() == []
+
+
+async def test_train_without_a_db_does_not_raise_on_registry_persist() -> None:
+    """_persist_registry's session_factory=None guard must fire even on the
+    < MIN_TRAINING_SAMPLES path (data_hash is computed either way)."""
+    engine = EnsemblePredictionEngine(session_factory=None)
+    training = await engine.train("NIFTY", trigger="scheduled")
+    assert training.n_samples == 0

@@ -253,9 +253,20 @@ class IntradayRiskFeatureEngine(BaseFeatureEngine):
         )
         return series
 
-    async def run(self, symbol: str, timeframe: str | None = None, full: bool = False) -> dict:
+    async def run(
+        self,
+        symbol: str,
+        timeframe: str | None = None,
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> dict:
+        """`start`/`end`: data foundation audit 2026-07-17, historical
+        regeneration item."""
         tf = timeframe or self._settings.feature_intraday_timeframe
-        candles = await self._load_candles(symbol, tf)
+        candles = await self._load_candles(symbol, tf, start=start, end=end)
+        if start is not None or end is not None:
+            full = True
         if len(candles) < MIN_CANDLES:
             logger.info(
                 "intraday risk run skipped: not enough candles",
@@ -272,12 +283,17 @@ class IntradayRiskFeatureEngine(BaseFeatureEngine):
             return {"symbol": symbol, "timeframe": tf, "stored": 0, "skipped": True}
         return await self._process_series(symbol, tf, timestamps, series, full=full)
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self,
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[dict]:
         tf = self._settings.feature_intraday_timeframe
         results: list[dict] = []
         for symbol in self._settings.watchlist:
             try:
-                results.append(await self.run(symbol, tf))
+                results.append(await self.run(symbol, tf, full=full, start=start, end=end))
             except Exception as exc:
                 logger.error(
                     "feature run failed",

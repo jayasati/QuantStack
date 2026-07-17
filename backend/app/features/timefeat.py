@@ -226,12 +226,25 @@ class TimeFeatureEngine(BaseFeatureEngine):
         return holidays
 
     async def run(
-        self, symbol: str = MARKET_SYMBOL, timeframe: str = "D", full: bool = False
+        self,
+        symbol: str = MARKET_SYMBOL,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> dict:
-        """Time features are market-wide: symbol argument is ignored."""
+        """Time features are market-wide: symbol argument is ignored.
+
+        `start`/`end` (data foundation audit 2026-07-17, historical
+        regeneration item) DO apply to the calendar-day pass below (it's
+        genuinely candle-derived, unlike this file's own market-wide
+        peers) -- NOT to the `clock_pass` further down, which is inherently
+        "right now," not a historical range."""
         benchmark = await self._load_candles(
-            self._settings.feature_benchmark_symbol, "D"
+            self._settings.feature_benchmark_symbol, "D", start=start, end=end
         )
+        if start is not None or end is not None:
+            full = True
         summary: dict = {"symbol": MARKET_SYMBOL, "timeframe": "D", "stored": 0}
         if len(benchmark) >= 2:
             timestamps = [c.ts for c in benchmark]
@@ -255,9 +268,11 @@ class TimeFeatureEngine(BaseFeatureEngine):
         )
         return summary
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self, full: bool = False, start: datetime | None = None, end: datetime | None = None,
+    ) -> list[dict]:
         try:
-            return [await self.run()]
+            return [await self.run(full=full, start=start, end=end)]
         except Exception as exc:
             logger.error("time feature run failed", extra={"error": str(exc)})
             return [{"symbol": MARKET_SYMBOL, "error": str(exc)}]

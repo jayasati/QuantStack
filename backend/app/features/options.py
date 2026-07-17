@@ -37,6 +37,7 @@ Every feature ships a look-ahead-safe rolling z-score companion (_z).
 
 import math
 from collections.abc import Sequence
+from datetime import datetime
 
 from app.features.base import BaseFeatureEngine
 from app.features.normalize import (
@@ -251,9 +252,26 @@ class OptionsFeatureEngine(BaseFeatureEngine):
     ) -> dict[str, Series]:
         return {}  # options features live on chain-snapshot time, not bars
 
-    async def run(self, symbol: str, timeframe: str = "D", full: bool = False) -> dict:
+    async def run(
+        self,
+        symbol: str,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> dict:
         """Options features ignore the bar timeframe — they live on chain
-        snapshots under the synthetic timeframe "chain"."""
+        snapshots under the synthetic timeframe "chain".
+
+        `start`/`end` are accepted (not ignored-by-crash) for call-site
+        uniformity with the other engines `api/features.py`'s
+        `POST /features/run/{symbol}` iterates over, but NOT applied --
+        this engine's data source is `_load_labeled_observations`'s
+        lookback-COUNT read from MarketEvent (chain snapshots), not a
+        candle date range. Genuine date-range regeneration for options
+        would need `_load_labeled_observations` to grow its own `since`/
+        `until` bounds -- a real, separate piece of work (data foundation
+        audit 2026-07-17, historical regeneration item), not done here."""
         observations = await self._load_labeled_observations(
             "options.observation", symbol, "feature",
             self._settings.feature_options_lookback,

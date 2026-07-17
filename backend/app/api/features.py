@@ -1,5 +1,8 @@
 """Feature store observability and access API (Volume 3)."""
 
+import inspect
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.container import container
@@ -381,15 +384,84 @@ async def feature_drift_history(
     }
 
 
+def _run_kwargs(engine: BaseFeatureEngine, full: bool, start, end) -> dict:
+    """Not every engine's run() accepts start/end -- 4 of 16 (price, volume,
+    volatility, risk) inherit BaseFeatureEngine.run() unmodified and always
+    do; liquidity/structure/relative/intraday_risk/options were extended to
+    accept them explicitly; the remaining 7 (breadth/macro/events/news/
+    institutional_flow/timefeat/sector) are MarketEvent-observation-based
+    with their own lookback-COUNT loading, a different mechanism this chunk
+    doesn't extend (data foundation audit 2026-07-17, historical
+    regeneration item -- documented scope boundary, not an oversight).
+    Checking the bound method's real signature, rather than hardcoding
+    which engines qualify, means this stays correct automatically as more
+    engines gain support later."""
+    kwargs = {"full": full}
+    if "start" in inspect.signature(engine.run).parameters:
+        kwargs["start"] = start
+        kwargs["end"] = end
+    return kwargs
+
+
 @router.post("/run/{symbol}")
-async def run_feature_engines(symbol: str, timeframe: str = "D", full: bool = False) -> list[dict]:
+async def run_feature_engines(
+    symbol: str,
+    timeframe: str = "D",
+    full: bool = False,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> list[dict]:
     """Compute and store features for one symbol on demand, across every engine.
 
     `full=true` bypasses incremental watermarks and re-upserts the whole
     history — use after backfilling raw candles older than stored features.
+
+    `start`/`end` (data foundation audit 2026-07-17, historical
+    regeneration item) scope regeneration to an explicit date range instead
+    of each engine's default trailing-lookback window -- "regenerate March
+    2026 for HDFCBANK" rather than only whatever the current lookback
+    covers. Providing either bound forces full=True semantics for that
+    engine regardless of the `full` argument (see BaseFeatureEngine.run's
+    own docstring for why). Applies only to engines whose run() accepts
+    these params -- see `_run_kwargs`'s docstring for exactly which.
     """
     results = []
     for engine in _engines():
-        result = await engine.run(symbol, timeframe, full=full)
+        result = await engine.run(symbol, timeframe, **_run_kwargs(engine, full, start, end))
         results.append({"engine": engine.name, **result})
+    return results
+
+
+@router.post("/run")
+async def run_feature_engines_for_watchlist(
+    full: bool = False,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> dict:
+    """Watchlist-wide regeneration across every symbol and every engine
+    (data foundation audit 2026-07-17, historical regeneration item) --
+    `POST /features/run/{symbol}` scoped to one symbol at a time. Real CPU
+    cost at 25-symbol x 16-engine scale (perf-audit-2026-07-14 already
+    found this box strains under far less concurrent load during market
+    hours) -- deliberately NOT auto-scheduled anywhere; call this only as a
+    deliberate, manually-triggered, after-hours operation, same convention
+    as `feature_selection_sweep`/`ensemble_training_sweep`'s own
+    `after_hours_only` gate in main.py (this endpoint has no such gate
+    itself -- the caller is responsible for choosing when, matching how
+    the existing per-symbol `/run/{symbol}` also has no gate)."""
+    results: dict[str, list[dict]] = {}
+    for engine in _engines():
+        run_all_params = inspect.signature(engine.run_all).parameters
+        if "start" in run_all_params:
+            results[engine.name] = await engine.run_all(full=full, start=start, end=end)
+        elif "full" in run_all_params:
+            results[engine.name] = await engine.run_all(full=full)
+        else:
+            # The remaining market-wide, observation-based engines
+            # (breadth/macro/events/news/institutional_flow/timefeat/
+            # sector) override run_all() as a zero-arg single call --
+            # unaffected by full/start/end, same scope boundary as
+            # _run_kwargs above (relative/intraday_risk were extended to
+            # accept full/start/end here; those 7 were not).
+            results[engine.name] = await engine.run_all()
     return results

@@ -227,10 +227,18 @@ class SectorFeatureEngine(BaseFeatureEngine):
         return {}  # sector features live on collector-run time, not bars
 
     async def run(
-        self, symbol: str = SECTORS_SYMBOL, timeframe: str = "D", full: bool = False
+        self,
+        symbol: str = SECTORS_SYMBOL,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> dict:
         """Sector features cover every sector at once — the symbol/timeframe
-        arguments are ignored in favor of the sector universe."""
+        arguments are ignored in favor of the sector universe (as are
+        start/end -- accepted only for signature compatibility with the
+        base class, data foundation audit 2026-07-17, historical
+        regeneration item)."""
         observations = await self._load_sector_observations()
         snapshots = bucket_observations(observations)
         if len(snapshots) < 2:
@@ -265,7 +273,9 @@ class SectorFeatureEngine(BaseFeatureEngine):
             "online_entries": online,
         }
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self, full: bool = False, start: datetime | None = None, end: datetime | None = None,
+    ) -> list[dict]:
         """One universe-wide run — the watchlist does not apply here."""
         try:
             return [await self.run()]

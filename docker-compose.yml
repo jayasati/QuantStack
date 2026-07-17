@@ -55,6 +55,13 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
+      args:
+        # Model registry provenance (data foundation audit 2026-07-17) --
+        # set GIT_COMMIT=$(git rev-parse HEAD) before `docker compose up
+        # --build` (VERIFY-COOKBOOK.md §10) so Settings.git_commit reflects
+        # what's actually running. "unknown" (Dockerfile's own ARG default)
+        # if unset, e.g. local dev without exporting it first.
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
     restart: unless-stopped
     env_file:
       - path: .env

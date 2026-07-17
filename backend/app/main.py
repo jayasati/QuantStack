@@ -208,7 +208,9 @@ async def lifespan(app: FastAPI):
         engine = container.resolve(EnsemblePredictionEngine)
         for symbol in settings.watchlist:
             try:
-                await engine.predict(symbol, timeframe="5m", max_holding_bars=6)
+                await engine.predict(
+                    symbol, timeframe="5m", max_holding_bars=6, trigger="scheduled"
+                )
             except Exception as exc:
                 logger.error(
                     "ensemble training sweep failed",

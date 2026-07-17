@@ -139,10 +139,18 @@ class MacroFeatureEngine(BaseFeatureEngine):
         return {}  # macro features live on collector-run time, not bars
 
     async def run(
-        self, symbol: str = "MACRO_PRESSURE", timeframe: str = "D", full: bool = False
+        self,
+        symbol: str = "MACRO_PRESSURE",
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> dict:
         """Macro covers every factor at once — the symbol/timeframe arguments
-        are ignored in favor of the factor universe found in the data."""
+        are ignored in favor of the factor universe found in the data
+        (as are start/end -- accepted only for signature compatibility with
+        the base class, data foundation audit 2026-07-17, historical
+        regeneration item)."""
         rows = await self._load_macro_observations()
         snapshots = bucket_observations(rows)
         if len(snapshots) < 2:
@@ -172,7 +180,9 @@ class MacroFeatureEngine(BaseFeatureEngine):
             "online_entries": online,
         }
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self, full: bool = False, start: datetime | None = None, end: datetime | None = None,
+    ) -> list[dict]:
         """One run covering every factor — the watchlist does not apply here."""
         try:
             return [await self.run()]

@@ -133,7 +133,8 @@ pool_size = SCRAM churn (perf-audit item 18).
 git push origin main
 # VM:
 cd /opt/quantstack && sudo git pull origin main
-sudo docker compose up -d --build backend        # runs alembic on start
+export GIT_COMMIT=$(git rev-parse HEAD)          # model registry provenance (2026-07-17)
+sudo -E docker compose up -d --build backend     # -E: preserve GIT_COMMIT for compose; runs alembic on start
 until sudo docker inspect --format='{{.State.Health.Status}}' quantstack-backend-1 \
   | grep -q healthy; do sleep 2; done
 # then: §1 logs clean, §5 latency, and observe the changed behavior itself.

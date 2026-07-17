@@ -17,6 +17,66 @@ Rules:
 
 ## Active
 
+### DEBT-14 · Composite/conviction scenario tests broken by today's 5m-ensemble fixture change — I-11 gate was red before this chunk started, not caused by it
+**What:** Discovered while running the full local suite (I-11) as part of
+the data-foundation model-registry chunk (2026-07-17, preflight in
+`docs/volumes/preflight-data-foundation-2026-07-17.md`): 5 tests in
+`test_market_scenarios.py` fail on current `main` (`f8c3d76`), confirmed via
+`git stash` against a clean checkout before touching anything -- **this
+chunk did not cause them.** Root-caused to commit level (not further):
+`git log` shows `backend/app/tests/market_scenarios.py` (the shared fixture
+builder `snapshot_rows()`) was last touched by `740697e`
+("Switch live ensemble training to 5m/30min-hold"), which added 9
+`IntradayRiskFeatureEngine` (5m) features to the shared bullish/bearish
+snapshot fixture for the ensemble-training scenario. `test_market_scenarios.py`
+itself (the assertions) was untouched since `9fc1570` -- so the fixture
+changed under tests that hadn't been updated to match.
+
+Failures, live-verified this session (`python -m pytest
+app/tests/test_market_scenarios.py -q`):
+- `test_bullish_snapshot_produces_a_clearly_bullish_composite_score`:
+  expected `score > 65.0`, got exactly `50.0` (flat neutral).
+- `test_bearish_snapshot_produces_a_clearly_bearish_composite_score`:
+  expected `score < 35.0`, got exactly `50.0` -- **the same 50.0 as the
+  bullish case**, i.e. `CompositeMarketIntelligenceEngine.assess()` produced
+  an identical, fully neutral result regardless of whether the seeded
+  snapshot was clearly bullish or clearly bearish.
+- `test_bullish_snapshot_gives_conviction_a_bullish_tilt`: expected
+  `conviction_score > 52.0`, got `47.5`.
+- `test_mixed_conflicting_signals_lower_conviction_vs_coherent_bullish`:
+  expected the mixed-signal composite score to be strictly lower than the
+  coherent-bullish one; both came out `50.0`, so `50.0 < 50.0` is false.
+- `test_low_liquidity_snapshot_causes_qualification_to_reject`: rejection
+  fires, but not for a liquidity-worded reason (weaker signal, likely
+  related but not analyzed this pass).
+
+**Not root-caused beyond the commit**, deliberately -- diagnosing *why*
+adding intraday features to the shared fixture flips composite/conviction
+to flat-neutral (a scale/sign mismatch in the new intraday blend? a
+fallback path that defaults to neutral when the D-based and intraday reads
+disagree in a way this fixture didn't exercise before?) is real
+investigative work belonging to whoever next touches DEBT-1's intraday
+overlay or this test file, not a drive-by fix inside an unrelated
+model-registry chunk.
+
+**Risk while open:** I-11 ("full local suite green before every push to
+main") was already violated on `main` *before* this chunk's commit --
+`740697e`/`f8c3d76` pushed today without this regression being caught.
+Compounding risk: if `CompositeMarketIntelligenceEngine.assess()` really
+does collapse to a flat 50.0 whenever intraday features are present but
+disagree with (or are structured differently than) the D-based read in
+some way this synthetic fixture now exercises, that is a plausible signal-
+quality regression in DEBT-1's "Resolved" intraday overlay work, not just a
+stale test assertion -- unconfirmed, but should not be assumed benign.
+**Expiry condition:** Before the next DEBT-1/intraday-overlay-adjacent
+chunk, or before citing I-11 as HELD without a linked note that this was
+checked. Resolve by determining whether the fixture's new intraday values
+are unrealistic (fix the fixture) or the composite/conviction blend logic
+has a real neutral-collapse bug (fix the engine) -- not by loosening the
+assertions to match whatever the code currently outputs.
+**Logged:** 2026-07-17 (data-foundation model-registry chunk, discovered by
+I-11's own gate-check, not this chunk's target area).
+
 ### DEBT-2 · IntradayRiskFeatureEngine output is unconsumed (3/9 features now fixed; root cause of the stall found: external, not ours)
 **What:** Volume 3's `IntradayRiskFeatureEngine` writes real 5m-timeframe
 features (`intraday_move_from_open_pct`, `intraday_expected_move_next_30m_pct`,

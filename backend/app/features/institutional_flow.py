@@ -30,6 +30,7 @@ Every feature ships a look-ahead-safe rolling z-score companion (_z).
 """
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from app.core.logging import get_logger
 from app.features.base import BaseFeatureEngine
@@ -190,10 +191,18 @@ class InstitutionalFlowFeatureEngine(BaseFeatureEngine):
         return {}  # flow features live on collector-run time, not bars
 
     async def run(
-        self, symbol: str = MARKET_SYMBOL, timeframe: str = "D", full: bool = False
+        self,
+        symbol: str = MARKET_SYMBOL,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> dict:
         """Flow is market-wide: the symbol/timeframe arguments are ignored
-        in favor of MARKET/"flow"."""
+        in favor of MARKET/"flow" (as are start/end -- accepted only for
+        signature compatibility with the base class; this engine's
+        observation read is lookback-COUNT, not date-ranged, data
+        foundation audit 2026-07-17, historical regeneration item)."""
         observations = await self._load_labeled_observations(
             FLOW_EVENT_TYPE, MARKET_SYMBOL, "metric", self._settings.feature_flow_lookback
         )
@@ -212,7 +221,9 @@ class InstitutionalFlowFeatureEngine(BaseFeatureEngine):
             MARKET_SYMBOL, FLOW_TIMEFRAME, [s.ts for s in snapshots], series, full=full
         )
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self, full: bool = False, start: datetime | None = None, end: datetime | None = None,
+    ) -> list[dict]:
         """One market-wide run — the watchlist does not apply here."""
         try:
             return [await self.run()]

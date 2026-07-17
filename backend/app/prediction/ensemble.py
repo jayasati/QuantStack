@@ -58,6 +58,7 @@ here either.
 
 import asyncio
 import bisect
+import hashlib
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -284,6 +285,33 @@ def assemble_dataset(
         target = 1 if label.label in ("win", "partial_success") else 0
         rows.append(TrainingRow(ts=label.entry_ts, features=values, label=target))
     return rows
+
+
+def dataset_hash(rows: Sequence[TrainingRow], feature_names: Sequence[str] = FEATURE_NAMES) -> str:
+    """SHA-256 over a canonical serialization of the assembled training
+    set -- the "data hash" half of the model registry's traceability pair
+    (data foundation audit 2026-07-17, model/dataset registry item; the
+    other half, git_commit, comes from Settings). Deterministic: same
+    rows + same feature_names always produce the same hash, regardless of
+    dict insertion order, since `feature_names` is iterated explicitly
+    rather than relying on `row.features`' own key order. Given no blob
+    store exists in this codebase to persist the actual fitted estimators
+    into (see EnsembleTraining's own docstring), this hash is what makes a
+    registered model's training data reconstructible/comparable at all --
+    two ModelVersion rows with the same data_hash were trained on
+    byte-identical inputs, even if `trained_at` differs.
+
+    Cost is trivial (string formatting + one hash pass over up to a few
+    thousand short rows, well under a millisecond) -- run inline on the
+    event loop, not asyncio.to_thread'd, unlike the actual model fitting
+    below (I-4 is about non-trivial CPU work)."""
+    hasher = hashlib.sha256()
+    for row in rows:
+        parts = [row.ts.isoformat(), str(row.label)]
+        parts.extend(f"{name}={row.features.get(name, '')}" for name in feature_names)
+        hasher.update("|".join(parts).encode("utf-8"))
+        hasher.update(b"\n")
+    return hasher.hexdigest()
 
 
 def feature_stats(
@@ -678,17 +706,27 @@ class EnsemblePredictionEngine:
         direction: str = "long",
         lookback_bars: int = 500,
         max_holding_bars: int = DEFAULT_MAX_HOLDING_BARS,
+        trigger: str = "manual",
     ) -> EnsembleTraining:
         """Assembles a point-in-time-joined training set from Triple Barrier
         labels (Prompt 5.5) + historical feature_store values, then fits
-        every available model. Result is cached in memory for predict()."""
+        every available model. Result is cached in memory for predict().
+
+        `trigger` ("scheduled" | "manual") is registry metadata only -- it
+        does not affect training itself. Passed through by main.py's
+        `ensemble_training_sweep`; every other caller (the API, predict()'s
+        own lazy-train) keeps the "manual" default, matching the codebase
+        convention of new optional params defaulting to today's existing
+        behavior."""
         labels = await self._labeling.label_history(
             symbol, timeframe=timeframe, direction=direction,
             lookback_bars=lookback_bars, max_holding_bars=max_holding_bars,
         )
         quality_labels = [label for label in labels if label.label_quality >= MIN_LABEL_QUALITY]
-        feature_series = await self._fetch_feature_series(symbol)
+        feature_series, feature_versions = await self._fetch_feature_series(symbol)
         rows = assemble_dataset(quality_labels, feature_series)
+        started_at = datetime.now(UTC)
+        data_hash = dataset_hash(rows)
 
         trained_at = datetime.now(UTC)
         if len(rows) < MIN_TRAINING_SAMPLES:
@@ -697,6 +735,10 @@ class EnsemblePredictionEngine:
                 trained_at=trained_at, n_samples=len(rows), n_holdout=0,
                 feature_names=FEATURE_NAMES, feature_means={}, feature_stds={},
                 model_version=f"ensemble_v1-untrained-n{len(rows)}", models=[],
+            )
+            await self._persist_registry(
+                training, rows=rows, data_hash=data_hash, started_at=started_at,
+                trigger=trigger, status="insufficient_data", feature_versions=feature_versions,
             )
         else:
             means, stds = feature_stats(rows)
@@ -713,6 +755,11 @@ class EnsemblePredictionEngine:
                 model_version=f"ensemble_v1-{trained_at.strftime('%Y%m%dT%H%M%S')}-n{len(rows)}",
                 models=models, calibration_pairs=calibration_pairs,
             )
+            status = "trained" if training.is_trained else "no_model_fit"
+            await self._persist_registry(
+                training, rows=rows, data_hash=data_hash, started_at=started_at,
+                trigger=trigger, status=status, feature_versions=feature_versions,
+            )
         self._trained[(symbol, timeframe, direction)] = training
         return training
 
@@ -723,15 +770,19 @@ class EnsemblePredictionEngine:
         direction: str = "long",
         lookback_bars: int = 500,
         max_holding_bars: int = DEFAULT_MAX_HOLDING_BARS,
+        trigger: str = "manual",
     ) -> EnsemblePrediction:
         """Convenience: train (if not already cached for this key), capture
-        a fresh snapshot, then predict from it."""
+        a fresh snapshot, then predict from it. `trigger` is forwarded to
+        train() only -- it's registry provenance for the training run, not
+        the prediction itself."""
         key = (symbol, timeframe, direction)
         training = self._trained.get(key)
         if training is None:
             training = await self.train(
                 symbol, timeframe=timeframe, direction=direction,
                 lookback_bars=lookback_bars, max_holding_bars=max_holding_bars,
+                trigger=trigger,
             )
         snapshot = await self._snapshots.capture(symbol, timeframe=timeframe)
         prediction = predict_from_training(training, snapshot)
@@ -740,20 +791,140 @@ class EnsemblePredictionEngine:
 
     async def _fetch_feature_series(
         self, symbol: str
-    ) -> dict[str, list[tuple[datetime, float]]]:
+    ) -> tuple[dict[str, list[tuple[datetime, float]]], dict[str, str]]:
         """Fetched once per train() call (not once per label), matching
-        labeling.py's own `_breach_dates` convention."""
+        labeling.py's own `_breach_dates` convention.
+
+        Also returns which feature_version each feature's most recent row
+        actually carried (`history()` orders newest-first, so `rows[0]` is
+        it) -- the model registry's provenance record (data foundation
+        audit 2026-07-17, feature-versioning item) needs to name exactly
+        what a training run pinned, not just "whatever v1 currently means."
+        Every feature is still "v1" as of this chunk (DEBT-10), so this is
+        forward-looking scaffolding today -- the moment any feature's
+        version actually bumps, this starts recording real provenance with
+        zero further code changes needed."""
         series: dict[str, list[tuple[datetime, float]]] = {}
+        versions: dict[str, str] = {}
         for feature_name, symbol_mode, timeframe in ENSEMBLE_FEATURE_SPECS:
             key_symbol = symbol if symbol_mode == INSTRUMENT else symbol_mode
             rows = await self.store.history(
                 feature_name, symbol=key_symbol, timeframe=timeframe, limit=FEATURE_HISTORY_LIMIT,
             )
+            if rows:
+                versions[feature_name] = rows[0]["version"]
             series[feature_name] = sorted(
                 (datetime.fromisoformat(row["ts"]), row["value"])
                 for row in rows if row["value"] is not None
             )
-        return series
+        return series, versions
+
+    async def _persist_registry(
+        self,
+        training: EnsembleTraining,
+        rows: Sequence[TrainingRow],
+        data_hash: str,
+        started_at: datetime,
+        trigger: str,
+        status: str,
+        feature_versions: dict[str, str],
+    ) -> None:
+        """Model/dataset registry (data foundation audit 2026-07-17). Every
+        train() call gets a `retraining_runs` row regardless of outcome --
+        the honest attempt log. A row that actually produced a fitted
+        ensemble (`status == "trained"`) also gets a `model_versions` row,
+        linked via `model_version_id` -- this codebase's first foreign key
+        (see RetrainingRun's own docstring in database/tables.py) -- and a
+        `dataset_versions` row (get-or-create on `data_hash`, this
+        codebase's SECOND foreign key, data-versioning item), so the
+        dataset itself is a named, independently queryable record, not
+        just a hash embedded in one model's row. All three writes share
+        one session/commit rather than several, per the perf audit's own
+        "batch the commits" recommendation (2026-07-14, finding 15) --
+        there's no reason this always-written-together set should be
+        multiple round trips.
+
+        I-8 (graceful degradation): silently returns with session_factory=
+        None, exactly like _persist() above -- registry provenance is a
+        real institutional-governance gap this chunk closes, but it must
+        never be a hard dependency of training itself succeeding."""
+        if self._sessions is None:
+            return
+        from sqlalchemy import select
+
+        from app.database.tables import DatasetVersion, ModelVersion, RetrainingRun
+
+        async with self._sessions() as session:
+            dataset_version_id: int | None = None
+            if rows:
+                existing = await session.execute(
+                    select(DatasetVersion.id).where(DatasetVersion.data_hash == data_hash)
+                )
+                dataset_version_id = existing.scalar_one_or_none()
+                if dataset_version_id is None:
+                    timestamps = [row.ts for row in rows]
+                    dataset_version = DatasetVersion(
+                        name=f"{self.name}-{training.symbol}-{training.timeframe}",
+                        timeframe=training.timeframe,
+                        date_range_start=min(timestamps),
+                        date_range_end=max(timestamps),
+                        row_count=len(rows),
+                        data_hash=data_hash,
+                        # symbol_scope is a single-element list today --
+                        # pooled training (multi-symbol scope) stays NO-GO
+                        # per the 2026-07-17 preflight; this shape already
+                        # supports it with zero further schema work.
+                        data={"symbol_scope": [training.symbol]},
+                    )
+                    session.add(dataset_version)
+                    await session.flush()
+                    dataset_version_id = dataset_version.id
+
+            model_version_id: int | None = None
+            if status == "trained":
+                model_version = ModelVersion(
+                    model_name=self.name,
+                    version=training.model_version,
+                    symbol=training.symbol,
+                    timeframe=training.timeframe,
+                    direction=training.direction,
+                    trained_at=training.trained_at,
+                    data_hash=data_hash,
+                    git_commit=self._settings.git_commit,
+                    sample_count=training.n_samples,
+                    holdout_count=training.n_holdout,
+                    status="active",
+                    dataset_version_id=dataset_version_id,
+                    data={
+                        "models": [
+                            {"name": m.name, "kind": m.kind, "holdout_accuracy": m.holdout_accuracy}
+                            for m in training.models
+                        ],
+                        "feature_names": list(training.feature_names),
+                        # Which feature_version each feature's row actually
+                        # carried at training time (data foundation audit
+                        # 2026-07-17, feature-versioning item) -- pinning
+                        # provenance, not just "the current one." All "v1"
+                        # today (DEBT-10); becomes meaningful the moment any
+                        # feature's calculation logic bumps version.
+                        "feature_versions": feature_versions,
+                    },
+                )
+                session.add(model_version)
+                await session.flush()  # need model_version.id for the FK below
+                model_version_id = model_version.id
+            session.add(RetrainingRun(
+                model_name=self.name,
+                symbol=training.symbol,
+                timeframe=training.timeframe,
+                direction=training.direction,
+                trigger=trigger,
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+                status=status,
+                model_version_id=model_version_id,
+            ))
+            await session.commit()
 
     async def _persist(self, prediction: EnsemblePrediction) -> None:
         if self._bus is not None:
@@ -786,3 +957,114 @@ class EnsemblePredictionEngine:
         async with self._sessions() as session:
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    async def model_registry(
+        self, symbol: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Registered model versions, newest first -- the read path for
+        `_persist_registry`'s writes (I-2: no write-only producers). Real
+        typed columns, not a JSONB `MarketEvent` payload, so this is a
+        genuine SELECT against `model_versions`, matching `ModelVersion`'s
+        own narrow-columns-plus-`data`-overflow shape."""
+        if self._sessions is None:
+            return []
+        from sqlalchemy import desc, select
+
+        from app.database.tables import ModelVersion
+
+        query = select(ModelVersion)
+        if symbol is not None:
+            query = query.where(ModelVersion.symbol == symbol)
+        query = query.order_by(desc(ModelVersion.id)).limit(limit)
+        async with self._sessions() as session:
+            result = await session.execute(query)
+            rows = result.scalars().all()
+            return [
+                {
+                    "id": row.id,
+                    "model_name": row.model_name,
+                    "version": row.version,
+                    "symbol": row.symbol,
+                    "timeframe": row.timeframe,
+                    "direction": row.direction,
+                    "trained_at": row.trained_at.isoformat() if row.trained_at else None,
+                    "data_hash": row.data_hash,
+                    "git_commit": row.git_commit,
+                    "sample_count": row.sample_count,
+                    "holdout_count": row.holdout_count,
+                    "status": row.status,
+                    **(row.data or {}),
+                }
+                for row in rows
+            ]
+
+    async def retraining_history(
+        self, symbol: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Every train() attempt, successful or not -- the audit trail
+        `retraining_runs` exists for. Complements `model_registry()`,
+        which only shows attempts that actually produced a model."""
+        if self._sessions is None:
+            return []
+        from sqlalchemy import desc, select
+
+        from app.database.tables import RetrainingRun
+
+        query = select(RetrainingRun)
+        if symbol is not None:
+            query = query.where(RetrainingRun.symbol == symbol)
+        query = query.order_by(desc(RetrainingRun.id)).limit(limit)
+        async with self._sessions() as session:
+            result = await session.execute(query)
+            rows = result.scalars().all()
+            return [
+                {
+                    "id": row.id,
+                    "model_name": row.model_name,
+                    "symbol": row.symbol,
+                    "timeframe": row.timeframe,
+                    "direction": row.direction,
+                    "trigger": row.trigger,
+                    "started_at": row.started_at.isoformat() if row.started_at else None,
+                    "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+                    "status": row.status,
+                    "model_version_id": row.model_version_id,
+                }
+                for row in rows
+            ]
+
+    async def dataset_registry(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Registered training datasets, newest first -- the read path for
+        `_persist_registry`'s get-or-create writes (I-2: no write-only
+        producers; data foundation audit 2026-07-17, data-versioning item).
+        Not filtered by symbol (unlike model_registry/retraining_history)
+        since `symbol_scope` lives inside `data`, a JSONB list, not a
+        queryable column -- becomes worth indexing if/when pooled training
+        makes multi-symbol scopes and cross-dataset symbol lookups real."""
+        if self._sessions is None:
+            return []
+        from sqlalchemy import desc, select
+
+        from app.database.tables import DatasetVersion
+
+        query = select(DatasetVersion).order_by(desc(DatasetVersion.id)).limit(limit)
+        async with self._sessions() as session:
+            result = await session.execute(query)
+            rows = result.scalars().all()
+            return [
+                {
+                    "id": row.id,
+                    "name": row.name,
+                    "timeframe": row.timeframe,
+                    "date_range_start": (
+                        row.date_range_start.isoformat() if row.date_range_start else None
+                    ),
+                    "date_range_end": (
+                        row.date_range_end.isoformat() if row.date_range_end else None
+                    ),
+                    "row_count": row.row_count,
+                    "data_hash": row.data_hash,
+                    **(row.data or {}),
+                }
+                for row in rows
+            ]

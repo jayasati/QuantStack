@@ -9,6 +9,7 @@ pure calculation; everything else lives here.
 import asyncio
 import math
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime
 from statistics import fmean, pstdev
 
@@ -34,6 +35,16 @@ class BaseFeatureEngine:
     category = "feature"
     # Engines whose features regress against the benchmark symbol set this.
     uses_benchmark = False
+    # Code version of THIS engine's _compute() -- stamped onto every
+    # FeatureValue as `collector_version` (data foundation audit
+    # 2026-07-17, feature-row metadata item). Distinct from
+    # FeatureDefinition.version (the calculation's own semantic version,
+    # Chapter 6) -- this instead answers "which revision of the engine
+    # code produced this row," matching Collector.version's existing
+    # default ("1.0.0") for the same concept one layer down. Subclasses
+    # override only when a _compute() rewrite is worth distinguishing from
+    # its prior output at the row level.
+    engine_version = "1.0.0"
 
     def __init__(
         self,
@@ -109,15 +120,38 @@ class BaseFeatureEngine:
                         ts=ts,
                         value=value,
                         window=window,
+                        collector_version=self.engine_version,
                     )
                 )
         return values
 
-    async def run(self, symbol: str, timeframe: str = "D", full: bool = False) -> dict:
+    async def run(
+        self,
+        symbol: str,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> dict:
         """Compute and store features. `full=True` bypasses the incremental
         watermarks and re-upserts the whole history — use after raw-data
-        backfills that add bars older than what is already stored."""
-        candles = await self._load_candles(symbol, timeframe)
+        backfills that add bars older than what is already stored.
+
+        `start`/`end` (data foundation audit 2026-07-17, historical
+        regeneration item) scope regeneration to an explicit date range
+        instead of `_load_candles`'s default trailing-lookback window --
+        "regenerate March 2026 for HDFCBANK" rather than only "regenerate
+        whatever the current lookback window covers." Either bound is
+        optional (half-open ranges work). Providing either one forces
+        `full=True` semantics regardless of the `full` argument: the
+        incremental watermark check (`latest_ts_map`, used when `full` is
+        False) only ever looks at the MOST RECENT stored timestamp, which
+        is almost always newer than a past date range being targeted --
+        without this, a date-ranged call against a symbol with newer data
+        already stored would silently write nothing at all."""
+        candles = await self._load_candles(symbol, timeframe, start=start, end=end)
+        if start is not None or end is not None:
+            full = True
         if len(candles) < 2:
             logger.info(
                 "feature run skipped: not enough candles",
@@ -133,7 +167,7 @@ class BaseFeatureEngine:
         benchmark: list[Candle] | None = None
         reference = self._reference_symbol(symbol)
         if reference is not None:
-            benchmark = await self._load_candles(reference, timeframe)
+            benchmark = await self._load_candles(reference, timeframe, start=start, end=end)
 
         # Offloaded to a worker thread: _compute() is synchronous, pure-Python
         # numerical work (rolling z-scores etc., see normalize.py) that can
@@ -167,6 +201,18 @@ class BaseFeatureEngine:
             since = await self.store.latest_ts_map(symbol, timeframe, feature_names=list(series))
         values = self.build_values_at(symbol, timeframe, timestamps, series, since=since)
         quality = self._quality_check(values)
+        # Quality is computed per-batch (one score per feature_name across
+        # this whole run), only known after build_values_at() already
+        # constructed the (frozen) FeatureValue objects -- dataclasses.replace
+        # attaches each value's own feature's score before it's written
+        # (data foundation audit 2026-07-17, feature-row metadata item).
+        # A feature with no registry definition has no quality entry and
+        # keeps FeatureValue's None default, same as today.
+        values = [
+            replace(v, feature_quality_score=quality[v.feature_name][0])
+            if v.feature_name in quality else v
+            for v in values
+        ]
         stored = await self.store.write(values)
         if not values and not full:
             # Nothing new since the watermark -- still refresh the online
@@ -200,12 +246,29 @@ class BaseFeatureEngine:
             "quality": {name: round(score, 2) for name, (score, _) in quality.items()},
         }
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self,
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[dict]:
+        """`full`/`start`/`end` (data foundation audit 2026-07-17,
+        historical regeneration item) pass through to every symbol's
+        `run()` call -- watchlist-wide regeneration, not just one symbol at
+        a time. Deliberately NOT auto-scheduled anywhere (unlike this
+        method's normal zero-arg use, which IS the scheduled path) -- a
+        date-ranged regeneration across the full watchlist is real CPU cost
+        this box already strains under during market hours (perf-audit
+        2026-07-14), so it should only ever run as a deliberate, manually-
+        triggered, after-hours operation, matching `feature_selection_sweep`/
+        `ensemble_training_sweep`'s existing `after_hours_only` convention."""
         results: list[dict] = []
         for timeframe in self._settings.feature_timeframes:
             for symbol in self._settings.watchlist:
                 try:
-                    results.append(await self.run(symbol, timeframe))
+                    results.append(
+                        await self.run(symbol, timeframe, full=full, start=start, end=end)
+                    )
                 except Exception as exc:
                     logger.error(
                         "feature run failed",
@@ -331,24 +394,44 @@ class BaseFeatureEngine:
             )
         return observations
 
-    async def _load_candles(self, symbol: str, timeframe: str) -> list[Candle]:
+    async def _load_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[Candle]:
+        """`start`/`end` (data foundation audit 2026-07-17, historical
+        regeneration item) replace the default trailing-lookback window
+        with an explicit date range -- used by `run(start=..., end=...)`
+        for targeted historical regeneration. Deliberately no row cap on
+        the ranged path (unlike the lookback default below): a caller
+        asking for a specific historical window needs all of it, not a
+        truncated slice -- this is a manually-triggered admin/backfill
+        operation (`POST /features/run/{symbol}?start=...&end=...`), never
+        a scheduled or request-path query, so I-3's "bound every hot-path
+        query" concern doesn't apply the same way here."""
         if self._sessions is None:
             return []
-        lookback = self._settings.feature_candle_lookback
         async with self._sessions() as session:
             # Column-only select, not the full ORM entity -- runs 96x500
             # rows every 300s sweep across the 16 feature engines (same
             # hydration-cost bug class as FeatureStore.latest(), see its own
             # note on this; perf-audit-2026-07-14 finding 10).
-            result = await session.execute(
-                select(
-                    OhlcvCandle.ts, OhlcvCandle.open, OhlcvCandle.high,
-                    OhlcvCandle.low, OhlcvCandle.close, OhlcvCandle.volume,
-                )
-                .where(OhlcvCandle.symbol == symbol, OhlcvCandle.timeframe == timeframe)
-                .order_by(OhlcvCandle.ts.desc())
-                .limit(lookback)
-            )
+            query = select(
+                OhlcvCandle.ts, OhlcvCandle.open, OhlcvCandle.high,
+                OhlcvCandle.low, OhlcvCandle.close, OhlcvCandle.volume,
+            ).where(OhlcvCandle.symbol == symbol, OhlcvCandle.timeframe == timeframe)
+            if start is not None or end is not None:
+                if start is not None:
+                    query = query.where(OhlcvCandle.ts >= start)
+                if end is not None:
+                    query = query.where(OhlcvCandle.ts <= end)
+                query = query.order_by(OhlcvCandle.ts.desc())
+            else:
+                lookback = self._settings.feature_candle_lookback
+                query = query.order_by(OhlcvCandle.ts.desc()).limit(lookback)
+            result = await session.execute(query)
             rows = result.all()
         return [
             Candle(

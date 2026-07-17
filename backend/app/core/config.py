@@ -213,6 +213,18 @@ class Settings(BaseSettings):
         ]
     )
 
+    # Git commit deployed, for model/dataset registry provenance (data
+    # foundation audit 2026-07-17, model registry item). No `.git` directory
+    # is copied into the backend image (Dockerfile.backend intentionally
+    # keeps it lean and non-root), so this can't be read at runtime the way
+    # a local `git rev-parse HEAD` would -- it's baked in at build time via
+    # the GIT_COMMIT Docker build arg (docker-compose.yml), set from the
+    # deploying host's own `git rev-parse HEAD` (VERIFY-COOKBOOK.md §10).
+    # "unknown" here is the honest default for local dev / any environment
+    # that didn't set the build arg, matching this codebase's graceful-
+    # degradation convention rather than raising.
+    git_commit: str = "unknown"
+
     # Secrets — no defaults; provided via environment or .env only.
     angel_one_api_key: str | None = None
     angel_one_client_id: str | None = None

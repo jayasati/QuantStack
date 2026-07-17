@@ -233,9 +233,17 @@ class EventRiskEngine(BaseFeatureEngine):
         return {}  # event features live on collector-run time, not bars
 
     async def run(
-        self, symbol: str = MARKET_SYMBOL, timeframe: str = "D", full: bool = False
+        self,
+        symbol: str = MARKET_SYMBOL,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> dict:
-        """Event risk is market-wide: symbol/timeframe arguments are ignored."""
+        """Event risk is market-wide: symbol/timeframe arguments are ignored
+        (as are start/end -- accepted only for signature compatibility with
+        the base class; this engine's calendar-row read isn't date-ranged,
+        data foundation audit 2026-07-17, historical regeneration item)."""
         rows = await self._load_calendar_rows()
         snapshots = bucket_event_observations(rows)
         if len(snapshots) < 2:
@@ -252,7 +260,9 @@ class EventRiskEngine(BaseFeatureEngine):
             MARKET_SYMBOL, EVENTS_TIMEFRAME, [s.ts for s in snapshots], series, full=full
         )
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self, full: bool = False, start: datetime | None = None, end: datetime | None = None,
+    ) -> list[dict]:
         try:
             return [await self.run()]
         except Exception as exc:

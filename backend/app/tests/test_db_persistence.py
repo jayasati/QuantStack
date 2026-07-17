@@ -9,7 +9,7 @@ JSON operators -- actually run against a real Postgres.
 """
 
 import shutil
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -133,3 +133,111 @@ async def test_feature_store_upsert_updates_value_on_conflict(test_session_facto
 
     history = await store.history("test_feature", symbol="TESTSYM", timeframe="D")
     assert len(history) == 1  # upsert, not a second row
+
+
+# --- FeatureStore: per-row metadata (data foundation audit 2026-07-17) ------
+
+
+async def test_feature_store_write_populates_row_metadata(test_session_factory) -> None:
+    store = FeatureStore(session_factory=test_session_factory)
+    now = datetime.now(UTC)
+    await store.write([
+        FeatureValue(
+            feature_name="test_feature", feature_version="v1",
+            symbol="TESTSYM", timeframe="D", ts=now, value=42.0,
+            collector_version="9.9.9", feature_quality_score=87.5,
+        ),
+    ])
+
+    latest = await store.latest("TESTSYM", "D")
+    assert latest["test_feature"]["collector_version"] == "9.9.9"
+    assert latest["test_feature"]["feature_quality_score"] == 87.5
+    assert latest["test_feature"]["last_updated"] is not None
+
+    history = await store.history("test_feature", symbol="TESTSYM", timeframe="D")
+    assert history[0]["collector_version"] == "9.9.9"
+    assert history[0]["feature_quality_score"] == 87.5
+    assert history[0]["last_updated"] is not None
+
+
+async def test_feature_store_last_updated_refreshes_on_reupsert(test_session_factory) -> None:
+    """last_updated must reflect the most recent WRITE, not the original
+    insert -- the whole point is distinguishing "recomputed today" from
+    "computed once, never touched since" on a full=True re-run."""
+    store = FeatureStore(session_factory=test_session_factory)
+    now = datetime.now(UTC)
+    value = FeatureValue(
+        feature_name="test_feature", feature_version="v1",
+        symbol="TESTSYM", timeframe="D", ts=now, value=1.0,
+    )
+    await store.write([value])
+    first = (await store.latest("TESTSYM", "D"))["test_feature"]["last_updated"]
+
+    await store.write([FeatureValue(**{**value.__dict__, "value": 2.0})])
+    second = (await store.latest("TESTSYM", "D"))["test_feature"]["last_updated"]
+
+    assert second >= first
+
+
+async def test_feature_store_row_metadata_defaults_are_none_when_unset(
+    test_session_factory,
+) -> None:
+    """A FeatureValue built without collector_version/feature_quality_score
+    still writes cleanly -- collector_version keeps its dataclass default
+    ("1.0.0"), feature_quality_score stays None (no registry quality data
+    for this call), matching every existing construction site's behavior
+    unchanged."""
+    store = FeatureStore(session_factory=test_session_factory)
+    now = datetime.now(UTC)
+    await store.write([
+        FeatureValue(
+            feature_name="test_feature", feature_version="v1",
+            symbol="TESTSYM", timeframe="D", ts=now, value=42.0,
+        ),
+    ])
+
+    latest = await store.latest("TESTSYM", "D")
+    assert latest["test_feature"]["collector_version"] == "1.0.0"
+    assert latest["test_feature"]["feature_quality_score"] is None
+
+
+# --- FeatureStore: version pinning (data foundation audit 2026-07-17) ------
+
+
+async def test_latest_without_a_version_returns_whichever_row_is_newest(
+    test_session_factory,
+) -> None:
+    """Unpinned (today's default, unchanged): the newest row wins regardless
+    of version -- correct for live serving, and exactly the ambiguity Gap B
+    of the design audit flagged for a caller that needs reproducibility."""
+    store = FeatureStore(session_factory=test_session_factory)
+    older = datetime.now(UTC)
+    newer = older + timedelta(seconds=1)
+    await store.write([
+        FeatureValue(feature_name="test_feature", feature_version="v1",
+                     symbol="TESTSYM", timeframe="D", ts=older, value=1.0),
+        FeatureValue(feature_name="test_feature", feature_version="v2",
+                     symbol="TESTSYM", timeframe="D", ts=newer, value=2.0),
+    ])
+
+    latest = await store.latest("TESTSYM", "D")
+    assert latest["test_feature"]["value"] == 2.0
+    assert latest["test_feature"]["version"] == "v2"
+
+
+async def test_latest_with_a_version_pins_to_that_version_even_if_older(
+    test_session_factory,
+) -> None:
+    store = FeatureStore(session_factory=test_session_factory)
+    older = datetime.now(UTC)
+    newer = older + timedelta(seconds=1)
+    await store.write([
+        FeatureValue(feature_name="test_feature", feature_version="v1",
+                     symbol="TESTSYM", timeframe="D", ts=older, value=1.0),
+        FeatureValue(feature_name="test_feature", feature_version="v2",
+                     symbol="TESTSYM", timeframe="D", ts=newer, value=2.0),
+    ])
+
+    pinned = await store.latest("TESTSYM", "D", version="v1")
+    assert pinned["test_feature"]["value"] == 1.0
+    assert pinned["test_feature"]["version"] == "v1"

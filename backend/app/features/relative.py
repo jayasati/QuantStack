@@ -283,8 +283,23 @@ class RelativeStrengthEngine(BaseFeatureEngine):
             s for s in get_settings().watchlist if s.upper() not in INDEX_TOKENS
         ]
 
-    async def run(self, symbol: str, timeframe: str = "D", full: bool = False) -> dict:
-        candles = await self._load_candles(symbol, timeframe)
+    async def run(
+        self,
+        symbol: str,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> dict:
+        """`start`/`end` (data foundation audit 2026-07-17, historical
+        regeneration item): date-ranges the target symbol's own candles AND
+        every reference/peer series it's compared against, so a
+        regenerated window stays internally consistent (not, e.g., a
+        ranged target symbol compared against a peer's full unranged
+        history)."""
+        candles = await self._load_candles(symbol, timeframe, start=start, end=end)
+        if start is not None or end is not None:
+            full = True
         if len(candles) < 2:
             return {"symbol": symbol, "timeframe": timeframe, "stored": 0, "skipped": True}
 
@@ -299,7 +314,7 @@ class RelativeStrengthEngine(BaseFeatureEngine):
             ("industry", industry),
         ):
             if ref_symbol:
-                ref_candles = await self._load_candles(ref_symbol, timeframe)
+                ref_candles = await self._load_candles(ref_symbol, timeframe, start=start, end=end)
                 if ref_candles:
                     references[ref] = ref_candles
 
@@ -307,7 +322,7 @@ class RelativeStrengthEngine(BaseFeatureEngine):
         for peer in self.equity_watchlist():
             if peer == symbol:
                 continue
-            candles_for_peer = await self._load_candles(peer, timeframe)
+            candles_for_peer = await self._load_candles(peer, timeframe, start=start, end=end)
             if candles_for_peer:
                 peer_candles[peer] = candles_for_peer
 
@@ -322,13 +337,20 @@ class RelativeStrengthEngine(BaseFeatureEngine):
             symbol, timeframe, [c.ts for c in candles], series, full=full
         )
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self,
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[dict]:
         """Relative strength applies to equities only — indices are references."""
         results: list[dict] = []
         for timeframe in self._settings.feature_timeframes:
             for symbol in self.equity_watchlist():
                 try:
-                    results.append(await self.run(symbol, timeframe))
+                    results.append(
+                        await self.run(symbol, timeframe, full=full, start=start, end=end)
+                    )
                 except Exception as exc:
                     logger.error(
                         "relative strength run failed",

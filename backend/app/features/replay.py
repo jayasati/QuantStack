@@ -91,6 +91,9 @@ class HistoricalReplayEngine:
                 "value": row.value,
                 "ts": row.ts.isoformat(),
                 "version": row.feature_version,
+                "collector_version": row.collector_version,
+                "last_updated": row.last_updated.isoformat() if row.last_updated else None,
+                "feature_quality_score": row.feature_quality_score,
             }
             for row in rows
         }

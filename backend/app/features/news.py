@@ -265,9 +265,17 @@ class NewsFeatureEngine(BaseFeatureEngine):
         return {}  # news features live on article time, not bars
 
     async def run(
-        self, symbol: str = MARKET_SYMBOL, timeframe: str = "D", full: bool = False
+        self,
+        symbol: str = MARKET_SYMBOL,
+        timeframe: str = "D",
+        full: bool = False,
+        start: datetime | None = None,
+        end: datetime | None = None,
     ) -> dict:
-        """News flow is market-wide: symbol/timeframe arguments are ignored."""
+        """News flow is market-wide: symbol/timeframe arguments are ignored
+        (as are start/end -- accepted only for signature compatibility with
+        the base class; article loading isn't date-ranged, data foundation
+        audit 2026-07-17, historical regeneration item)."""
         articles = await self._load_articles()
         timestamps, series = compute_news_features(
             articles, self._settings.feature_normalization_window
@@ -283,7 +291,9 @@ class NewsFeatureEngine(BaseFeatureEngine):
             MARKET_SYMBOL, NEWS_TIMEFRAME, timestamps, series, full=full
         )
 
-    async def run_all(self) -> list[dict]:
+    async def run_all(
+        self, full: bool = False, start: datetime | None = None, end: datetime | None = None,
+    ) -> list[dict]:
         try:
             return [await self.run()]
         except Exception as exc:
